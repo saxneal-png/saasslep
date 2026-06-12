@@ -78,6 +78,7 @@ export default function EscuelaDashboard() {
   const [customCargoFondo, setCustomCargoFondo] = useState<OrigenFondo>('SEP');
 
   const [itineranciaAlerta, setItineranciaAlerta] = useState<string | null>(null);
+  const [reemplazoRunMap, setReemplazoRunMap] = useState<{[key: string]: string}>({});
 
   // Sync role parameters from localStorage
   useEffect(() => {
@@ -312,6 +313,17 @@ export default function EscuelaDashboard() {
   const handleToggleLicencia = async (contratoId: string, enLicencia: boolean) => {
     const nuevoEstado = enLicencia ? 'Licencia Médica' : 'Activo';
     await api.updateContratoEstado(contratoId, nuevoEstado);
+    
+    // Si se desmarca la licencia, buscar y eliminar contratos de reemplazo asociados a este contrato titular
+    if (!enLicencia) {
+      const allContratos = await api.getContratos(selectedRbd);
+      const replacements = allContratos.filter(c => c.vinculo_titular_id === contratoId);
+      for (const r of replacements) {
+        if (api.deleteContrato) {
+          await api.deleteContrato(r.id);
+        }
+      }
+    }
     await loadAllSchoolData();
   };
 
@@ -527,16 +539,88 @@ export default function EscuelaDashboard() {
                             <td className="p-3 pl-4 font-bold text-slate-800">{f.nombre}</td>
                             <td className="p-3 font-mono text-slate-500">{f.run}</td>
                             <td className="p-3 text-slate-700">{f.cargo || 'Docente'}</td>
-                            <td className="p-3 text-center font-semibold text-slep-blue">
-                              {hasCont ? `${hasCont.horas_totales} hrs (${hasCont.estado})` : 'Sin Contrato'}
+                            <td className="p-3 text-center">
+                              {hasCont ? (
+                                <div className="space-y-1">
+                                  <div className="font-bold text-slate-700">{hasCont.horas_totales} hrs</div>
+                                  <div>
+                                    {hasCont.estado === 'Activo' && (
+                                      <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Activo</span>
+                                    )}
+                                    {hasCont.estado === 'Licencia Médica' && (
+                                      <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Licencia Médica 🩺</span>
+                                    )}
+                                    {hasCont.estado === 'Reemplazo' && (
+                                      <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Reemplazo</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">Sin Contrato</span>
+                              )}
                             </td>
                             <td className="p-3 text-center">
-                              <button
-                                onClick={() => handleDeleteFuncionario(f.run)}
-                                className="text-red-500 hover:text-red-700 font-bold"
-                              >
-                                Desvincular
-                              </button>
+                              <div className="flex flex-col items-center justify-center gap-2">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleDeleteFuncionario(f.run)}
+                                    className="bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded font-bold border border-red-200"
+                                  >
+                                    Desvincular
+                                  </button>
+                                  {hasCont && hasCont.estado === 'Activo' && (
+                                    <button
+                                      onClick={() => handleToggleLicencia(hasCont.id, true)}
+                                      className="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded font-bold border border-amber-200"
+                                    >
+                                      🩺 Reg. Licencia
+                                    </button>
+                                  )}
+                                  {hasCont && hasCont.estado === 'Licencia Médica' && (
+                                    <button
+                                      onClick={() => handleToggleLicencia(hasCont.id, false)}
+                                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-bold border border-emerald-200"
+                                    >
+                                      ✔️ Desmarcar Licencia
+                                    </button>
+                                  )}
+                                </div>
+
+                                {hasCont && hasCont.estado === 'Licencia Médica' && (
+                                  <div className="mt-2 bg-slate-50 p-2 rounded border border-slate-200 inline-block text-left w-full max-w-xs">
+                                    {contratos.some(c => c.vinculo_titular_id === hasCont.id) ? (
+                                      (() => {
+                                        const rpl = contratos.find(c => c.vinculo_titular_id === hasCont.id);
+                                        const rplFunc = rpl ? funcionarios.find(func => func.run === rpl.funcionario_run) : null;
+                                        return (
+                                          <div className="text-slate-600 font-medium text-[10px] text-center">
+                                            👤 Reemplazo: <strong>{rplFunc ? rplFunc.nombre : rpl?.funcionario_run}</strong> ({rpl?.funcionario_run})
+                                          </div>
+                                        );
+                                      })()
+                                    ) : (
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <input 
+                                          type="text" 
+                                          placeholder="RUT Reemplazo (Ej: 11.222.333-4)"
+                                          className="p-1 border rounded bg-white w-2/3 text-[10px]"
+                                          value={reemplazoRunMap[hasCont.id] || ''}
+                                          onChange={(e) => setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: e.target.value})}
+                                        />
+                                        <button 
+                                          onClick={() => {
+                                            handleAddReemplazo(hasCont, reemplazoRunMap[hasCont.id] || '');
+                                            setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: ''});
+                                          }}
+                                          className="bg-slep-blue text-white px-2 py-1 rounded font-bold hover:bg-slep-blue-hover text-[10px]"
+                                        >
+                                          Asignar
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -571,16 +655,88 @@ export default function EscuelaDashboard() {
                             <td className="p-3 pl-4 font-bold text-slate-800">{f.nombre}</td>
                             <td className="p-3 font-mono text-slate-500">{f.run}</td>
                             <td className="p-3 text-slate-700">{f.cargo || 'Asistente'}</td>
-                            <td className="p-3 text-center font-semibold text-slep-blue">
-                              {hasCont ? `${hasCont.horas_totales} hrs` : 'Sin Contrato'}
+                            <td className="p-3 text-center">
+                              {hasCont ? (
+                                <div className="space-y-1">
+                                  <div className="font-bold text-slate-700">{hasCont.horas_totales} hrs</div>
+                                  <div>
+                                    {hasCont.estado === 'Activo' && (
+                                      <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Activo</span>
+                                    )}
+                                    {hasCont.estado === 'Licencia Médica' && (
+                                      <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Licencia Médica 🩺</span>
+                                    )}
+                                    {hasCont.estado === 'Reemplazo' && (
+                                      <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Reemplazo</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">Sin Contrato</span>
+                              )}
                             </td>
                             <td className="p-3 text-center">
-                              <button
-                                onClick={() => handleDeleteFuncionario(f.run)}
-                                className="text-red-500 hover:text-red-700 font-bold"
-                              >
-                                Desvincular
-                              </button>
+                              <div className="flex flex-col items-center justify-center gap-2">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleDeleteFuncionario(f.run)}
+                                    className="bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded font-bold border border-red-200"
+                                  >
+                                    Desvincular
+                                  </button>
+                                  {hasCont && hasCont.estado === 'Activo' && (
+                                    <button
+                                      onClick={() => handleToggleLicencia(hasCont.id, true)}
+                                      className="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded font-bold border border-amber-200"
+                                    >
+                                      🩺 Reg. Licencia
+                                    </button>
+                                  )}
+                                  {hasCont && hasCont.estado === 'Licencia Médica' && (
+                                    <button
+                                      onClick={() => handleToggleLicencia(hasCont.id, false)}
+                                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-bold border border-emerald-200"
+                                    >
+                                      ✔️ Desmarcar Licencia
+                                    </button>
+                                  )}
+                                </div>
+
+                                {hasCont && hasCont.estado === 'Licencia Médica' && (
+                                  <div className="mt-2 bg-slate-50 p-2 rounded border border-slate-200 inline-block text-left w-full max-w-xs">
+                                    {contratos.some(c => c.vinculo_titular_id === hasCont.id) ? (
+                                      (() => {
+                                        const rpl = contratos.find(c => c.vinculo_titular_id === hasCont.id);
+                                        const rplFunc = rpl ? funcionarios.find(func => func.run === rpl.funcionario_run) : null;
+                                        return (
+                                          <div className="text-slate-600 font-medium text-[10px] text-center">
+                                            👤 Reemplazo: <strong>{rplFunc ? rplFunc.nombre : rpl?.funcionario_run}</strong> ({rpl?.funcionario_run})
+                                          </div>
+                                        );
+                                      })()
+                                    ) : (
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <input 
+                                          type="text" 
+                                          placeholder="RUT Reemplazo (Ej: 11.222.333-4)"
+                                          className="p-1 border rounded bg-white w-2/3 text-[10px]"
+                                          value={reemplazoRunMap[hasCont.id] || ''}
+                                          onChange={(e) => setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: e.target.value})}
+                                        />
+                                        <button 
+                                          onClick={() => {
+                                            handleAddReemplazo(hasCont, reemplazoRunMap[hasCont.id] || '');
+                                            setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: ''});
+                                          }}
+                                          className="bg-slep-blue text-white px-2 py-1 rounded font-bold hover:bg-slep-blue-hover text-[10px]"
+                                        >
+                                          Asignar
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );

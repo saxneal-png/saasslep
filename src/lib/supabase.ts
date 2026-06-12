@@ -417,6 +417,12 @@ export const api = {
     }
   },
 
+  deleteContrato: async (contratoId: string): Promise<void> => {
+    dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== contratoId);
+    dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== contratoId);
+    dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.contrato_id !== contratoId);
+  },
+
   saveAsignacion: async (asignacion: AsignacionAula): Promise<void> => {
     const asignaciones = dbLocal.asignacionesAula;
     const idx = asignaciones.findIndex(a => a.id === asignacion.id);
