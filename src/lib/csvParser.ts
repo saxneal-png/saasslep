@@ -55,7 +55,8 @@ export interface ParseResult {
 export function parsearNominaCsv(
   csvContent: string, 
   rbdContext: string,
-  controlPrevioJson?: Array<{ run: string; funcion?: string; horas?: number }>
+  controlPrevioJson?: Array<{ run: string; funcion?: string; horas?: number }>,
+  forceEstamento?: 'Docente' | 'Asistente de la Educación'
 ): ParseResult {
   let rows: CsvRow[] = [];
 
@@ -108,7 +109,7 @@ export function parsearNominaCsv(
     const rbd = String(row.RBD || row.rbd || rbdContext).trim();
     const calidad_juridica = ((row.CalidadJuridica || row.calidad_juridica || row.CALIDAD_JURIDICA) === 'Titular' ? 'Titular' : 'Contrata');
     const funcion_principal = (row.Funcion || row.funcion || row.FUNCION_PRINCIPAL || row.funcion_principal || 'Docente de Aula').trim();
-    const estamento = (row.Estamento || row.estamento || (funcion_principal.toLowerCase().includes('docente') || funcion_principal.toLowerCase().includes('profesor') ? 'Docente' : 'Asistente de la Educación'));
+    const estamento = forceEstamento || (row.Estamento || row.estamento || (funcion_principal.toLowerCase().includes('docente') || funcion_principal.toLowerCase().includes('profesor') ? 'Docente' : 'Asistente de la Educación'));
     
     const horas_totales = parseDecimalHours(row.HorasTotales || row.horas_totales || row.HORAS_CONTRATO || row.horas_contrato);
 

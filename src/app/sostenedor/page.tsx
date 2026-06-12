@@ -48,6 +48,11 @@ export default function SostenedorDashboard() {
   const [importLogs, setImportLogs] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Asistentes drag-and-drop & file states
+  const [dragActiveAsis, setDragActiveAsis] = useState(false);
+  const [importLogsAsis, setImportLogsAsis] = useState('');
+  const fileInputRefAsis = useRef<HTMLInputElement>(null);
+
   // JSON Mineduc plan drag-and-drop
   const [dragActivePlan, setDragActivePlan] = useState(false);
   const [planImportLogs, setPlanImportLogs] = useState('');
@@ -206,7 +211,8 @@ export default function SostenedorDashboard() {
         const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts } = parsearNominaCsv(
           text,
           '10201',
-          controlPrevioMock
+          controlPrevioMock,
+          'Docente'
         );
 
         for (const f of newFuncs) {
@@ -221,9 +227,68 @@ export default function SostenedorDashboard() {
         }
 
         await loadAllData();
-        setImportLogs(`✅ Éxito: Se procesaron ${newConts.length} contratos y se generaron ${newAlts.length} alertas.`);
+        setImportLogs(`✅ Éxito: Se procesaron ${newConts.length} docentes y se generaron ${newAlts.length} alertas.`);
       } catch (err: any) {
         setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  const handleDragAsis = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActiveAsis(true);
+    } else if (e.type === "dragleave") {
+      setDragActiveAsis(false);
+    }
+  };
+
+  const handleDropAsis = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActiveAsis(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processAsistenteFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileChangeAsis = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    if (e.target.files && e.target.files[0]) {
+      processAsistenteFile(e.target.files[0]);
+    }
+  };
+
+  const processAsistenteFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      try {
+        const controlPrevioMock: any[] = [];
+        const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts } = parsearNominaCsv(
+          text,
+          '10201',
+          controlPrevioMock,
+          'Asistente de la Educación'
+        );
+
+        for (const f of newFuncs) {
+          await api.upsertFuncionario(f);
+        }
+        for (const c of newConts) {
+          const cFins = newFins.filter(f => f.contrato_id === c.id);
+          await api.upsertContratoCompleto(c, cFins);
+        }
+        for (const a of newAlts) {
+          await api.crearAlerta(a);
+        }
+
+        await loadAllData();
+        setImportLogsAsis(`✅ Éxito: Se procesaron ${newConts.length} asistentes y se generaron ${newAlts.length} alertas.`);
+      } catch (err: any) {
+        setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
       }
     };
     reader.readAsText(file, 'UTF-8');
@@ -686,12 +751,12 @@ export default function SostenedorDashboard() {
         {/* Right Column: Files drag and drop and central statistics */}
         <div className="space-y-6">
           
-          {/* Drag-and-Drop Uploader for CSV/JSON Nomina */}
+          {/* Drag-and-Drop Uploader for CSV/JSON Docentes */}
           <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
             <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <span>📥</span> Cargar Nómina Masiva (Drag & Drop)
+              <span>📥</span> Cargar Nómina Docentes (Profesores)
             </h2>
-            <p className="text-xs text-slate-500 mt-1">Sube el archivo físico `.csv` o `.json`. Prohibido copiar y pegar en texto.</p>
+            <p className="text-xs text-slate-500 mt-1">Sube el archivo físico `.csv` o `.json` con la nómina de docentes.</p>
 
             <div 
               onDragEnter={handleDrag} 
@@ -710,14 +775,50 @@ export default function SostenedorDashboard() {
                 className="hidden" 
                 onChange={handleFileChange}
               />
-              <span className="text-2xl block mb-2">📄</span>
-              <p className="text-xs font-bold text-slate-700">Arrastra tu archivo aquí o haz clic para seleccionarlo</p>
+              <span className="text-2xl block mb-2">👨‍🏫</span>
+              <p className="text-xs font-bold text-slate-700">Arrastra nómina de Docentes o haz clic</p>
               <p className="text-[10px] text-slate-500 mt-1">Soporta formatos .CSV y .JSON únicamente</p>
             </div>
 
             {importLogs && (
               <pre className="mt-3 p-2.5 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
                 {importLogs}
+              </pre>
+            )}
+          </div>
+
+          {/* Drag-and-Drop Uploader for CSV/JSON Asistentes */}
+          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+              <span>📥</span> Cargar Nómina Asistentes de la Educación
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">Sube el archivo físico `.csv` o `.json` con asistentes, psicólogos, administrativos, etc.</p>
+
+            <div 
+              onDragEnter={handleDragAsis} 
+              onDragOver={handleDragAsis} 
+              onDragLeave={handleDragAsis} 
+              onDrop={handleDropAsis}
+              className={`mt-4 border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                dragActiveAsis ? 'border-slep-blue bg-blue-50/50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
+              }`}
+              onClick={() => fileInputRefAsis.current?.click()}
+            >
+              <input 
+                ref={fileInputRefAsis}
+                type="file" 
+                accept=".csv,.json"
+                className="hidden" 
+                onChange={handleFileChangeAsis}
+              />
+              <span className="text-2xl block mb-2">🤝</span>
+              <p className="text-xs font-bold text-slate-700">Arrastra nómina de Asistentes o haz clic</p>
+              <p className="text-[10px] text-slate-500 mt-1">Soporta formatos .CSV and .JSON únicamente</p>
+            </div>
+
+            {importLogsAsis && (
+              <pre className="mt-3 p-2.5 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
+                {importLogsAsis}
               </pre>
             )}
           </div>

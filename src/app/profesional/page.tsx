@@ -27,6 +27,11 @@ export default function ProfesionalDashboard() {
   const [importLogs, setImportLogs] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Asistentes Drag-and-drop
+  const [dragActiveAsis, setDragActiveAsis] = useState(false);
+  const [importLogsAsis, setImportLogsAsis] = useState('');
+  const fileInputRefAsis = useRef<HTMLInputElement>(null);
+
   // Local filters
   const [searchEst, setSearchEst] = useState('');
 
@@ -114,7 +119,7 @@ export default function ProfesionalDashboard() {
           { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
         ];
 
-        const parsed = parsearNominaCsv(text, escuelasAsignadasRbd[0] || '10202', controlPrevioMock);
+        const parsed = parsearNominaCsv(text, escuelasAsignadasRbd[0] || '10202', controlPrevioMock, 'Docente');
 
         const invalidRows = parsed.contratos.filter(c => !escuelasAsignadasRbd.includes(c.rbd));
         if (invalidRows.length > 0) {
@@ -142,9 +147,77 @@ export default function ProfesionalDashboard() {
         const filteredAlts = allAlts.filter(a => escuelasAsignadasRbd.includes(a.rbd));
         setAlertas(filteredAlts);
 
-        setImportLogs(`✅ Éxito: Se procesaron ${parsed.contratos.length} contratos para tus escuelas supervisadas.`);
+        setImportLogs(`✅ Éxito: Se procesaron ${parsed.contratos.length} docentes para tus escuelas supervisadas.`);
       } catch (err: any) {
         setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  const handleDragAsis = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActiveAsis(true);
+    } else if (e.type === "dragleave") {
+      setDragActiveAsis(false);
+    }
+  };
+
+  const handleDropAsis = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActiveAsis(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processAsistenteFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileChangeAsis = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    if (e.target.files && e.target.files[0]) {
+      processAsistenteFile(e.target.files[0]);
+    }
+  };
+
+  const processAsistenteFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      try {
+        const controlPrevioMock: any[] = [];
+        const parsed = parsearNominaCsv(text, escuelasAsignadasRbd[0] || '10202', controlPrevioMock, 'Asistente de la Educación');
+
+        const invalidRows = parsed.contratos.filter(c => !escuelasAsignadasRbd.includes(c.rbd));
+        if (invalidRows.length > 0) {
+          const badRbds = Array.from(new Set(invalidRows.map(c => c.rbd)));
+          alert(`❌ Error de Permiso: No tiene autorización para subir nóminas de los establecimientos con RBD: ${badRbds.join(', ')}.`);
+          return;
+        }
+
+        for (const f of parsed.funcionarios) {
+          await api.upsertFuncionario(f);
+        }
+        for (const c of parsed.contratos) {
+          const cFins = parsed.financiamientos.filter(f => f.contrato_id === c.id);
+          await api.upsertContratoCompleto(c, cFins);
+        }
+        for (const a of parsed.alertas) {
+          await api.crearAlerta(a);
+        }
+
+        const allConts = await api.getContratos();
+        const filteredConts = allConts.filter(c => escuelasAsignadasRbd.includes(c.rbd));
+        setContratos(filteredConts);
+
+        const allAlts = await api.getAlertas();
+        const filteredAlts = allAlts.filter(a => escuelasAsignadasRbd.includes(a.rbd));
+        setAlertas(filteredAlts);
+
+        setImportLogsAsis(`✅ Éxito: Se procesaron ${parsed.contratos.length} asistentes para tus escuelas supervisadas.`);
+      } catch (err: any) {
+        setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
       }
     };
     reader.readAsText(file, 'UTF-8');
@@ -262,12 +335,12 @@ export default function ProfesionalDashboard() {
         {/* Right Column: restricted drag and drop file uploads and financial details */}
         <div className="space-y-6">
           
-          {/* Restricted Drag-and-drop file upload */}
+          {/* Restricted Drag-and-drop file upload for Docentes */}
           <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
             <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <span>📥</span> Ingesta Autorizada (Drag & Drop)
+              <span>📥</span> Cargar Nómina Docentes (Drag & Drop)
             </h2>
-            <p className="text-xs text-slate-500 mt-1">Cargue el archivo de personal físico (.csv o .json) de sus escuelas asignadas.</p>
+            <p className="text-xs text-slate-500 mt-1">Cargue el archivo de personal docente (.csv o .json) de sus escuelas asignadas.</p>
 
             <div 
               onDragEnter={handleDrag} 
@@ -286,13 +359,48 @@ export default function ProfesionalDashboard() {
                 className="hidden" 
                 onChange={handleFileChange}
               />
-              <span className="text-2xl block mb-2">📄</span>
-              <p className="text-xs font-bold text-slate-700">Arrastra tu archivo aquí o haz clic</p>
+              <span className="text-2xl block mb-2">👨‍🏫</span>
+              <p className="text-xs font-bold text-slate-700">Arrastra nómina de Docentes o haz clic</p>
             </div>
 
             {importLogs && (
               <pre className="mt-3 p-2 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
                 {importLogs}
+              </pre>
+            )}
+          </div>
+
+          {/* Restricted Drag-and-drop file upload for Asistentes */}
+          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+              <span>📥</span> Cargar Nómina Asistentes (Drag & Drop)
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">Cargue el archivo de asistentes (.csv o .json) de sus escuelas asignadas.</p>
+
+            <div 
+              onDragEnter={handleDragAsis} 
+              onDragOver={handleDragAsis} 
+              onDragLeave={handleDragAsis} 
+              onDrop={handleDropAsis}
+              className={`mt-4 border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                dragActiveAsis ? 'border-slep-blue bg-blue-50/50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
+              }`}
+              onClick={() => fileInputRefAsis.current?.click()}
+            >
+              <input 
+                ref={fileInputRefAsis}
+                type="file" 
+                accept=".csv,.json"
+                className="hidden" 
+                onChange={handleFileChangeAsis}
+              />
+              <span className="text-2xl block mb-2">🤝</span>
+              <p className="text-xs font-bold text-slate-700">Arrastra nómina de Asistentes o haz clic</p>
+            </div>
+
+            {importLogsAsis && (
+              <pre className="mt-3 p-2 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
+                {importLogsAsis}
               </pre>
             )}
           </div>
