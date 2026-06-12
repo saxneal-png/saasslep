@@ -17,7 +17,8 @@ import {
   CargoPersonalizado,
   OrigenFondo,
   EstamentoType,
-  PlanEstudioNorm
+  PlanEstudioNorm,
+  FinanciamientoContrato
 } from '@/lib/types';
 
 import { normalizarRun } from '@/lib/csvParser';
@@ -80,6 +81,19 @@ export default function EscuelaDashboard() {
 
   const [itineranciaAlerta, setItineranciaAlerta] = useState<string | null>(null);
   const [reemplazoRunMap, setReemplazoRunMap] = useState<{[key: string]: string}>({});
+
+  // View/Edit Modal States
+  const [editingFuncionario, setEditingFuncionario] = useState<Funcionario | null>(null);
+  const [editFuncNombre, setEditFuncNombre] = useState('');
+  const [editFuncCargo, setEditFuncCargo] = useState('');
+  const [editFuncEmail, setEditFuncEmail] = useState('');
+  const [editFuncTitulo, setEditFuncTitulo] = useState('');
+  const [editContHoras, setEditContHoras] = useState(44);
+  const [editContFins, setEditContFins] = useState<{ origen: OrigenFondo; horas: number }[]>([]);
+
+  const [editingCurso, setEditingCurso] = useState<CursoDinamico | null>(null);
+  const [editCursoAsignaturas, setEditCursoAsignaturas] = useState<AsignaturaDinamica[]>([]);
+  const [editCursoAsignaciones, setEditCursoAsignaciones] = useState<AsignacionAula[]>([]);
 
   // Sync role parameters from localStorage
   useEffect(() => {
@@ -428,6 +442,96 @@ export default function EscuelaDashboard() {
     alert('✅ Reemplazo creado con éxito.');
   };
 
+  // Modal handlers
+  const handleOpenEditFuncionario = async (f: Funcionario) => {
+    setEditingFuncionario(f);
+    setEditFuncNombre(f.nombre);
+    setEditFuncCargo(f.cargo || '');
+    setEditFuncEmail(f.email || '');
+    setEditFuncTitulo(f.titulo || '');
+    
+    const relatedCont = contratos.find(c => c.funcionario_run === f.run);
+    if (relatedCont) {
+      setEditContHoras(relatedCont.horas_totales);
+      const fins = await api.getFinanciamientosPorContrato(relatedCont.id);
+      setEditContFins(fins.map(fi => ({ origen: fi.origen_fondo, horas: fi.horas })));
+    } else {
+      setEditContHoras(0);
+      setEditContFins([]);
+    }
+  };
+
+  const handleSaveFuncionario = async () => {
+    if (!editingFuncionario) return;
+    
+    // 1. Update funcionario info
+    await api.upsertFuncionario({
+      ...editingFuncionario,
+      nombre: editFuncNombre,
+      cargo: editFuncCargo,
+      email: editFuncEmail,
+      titulo: editFuncTitulo
+    });
+
+    // 2. Update contract and finance sources
+    const relatedCont = contratos.find(c => c.funcionario_run === editingFuncionario.run);
+    if (relatedCont) {
+      const updatedCont = {
+        ...relatedCont,
+        horas_totales: editContHoras,
+        funcion_principal: editFuncCargo
+      };
+
+      // Recalculate financing list
+      const cleanFins: FinanciamientoContrato[] = editContFins.map((f, index) => ({
+        id: `f-${relatedCont.id}-${f.origen}-${index}`,
+        contrato_id: relatedCont.id,
+        origen_fondo: f.origen,
+        horas: f.horas
+      }));
+
+      await api.upsertContratoCompleto(updatedCont, cleanFins);
+    }
+
+    setEditingFuncionario(null);
+    await loadAllSchoolData();
+    alert('✅ Funcionario y contrato actualizados exitosamente.');
+  };
+
+  const handleOpenEditCurso = async (c: CursoDinamico) => {
+    setEditingCurso(c);
+    const list = await api.getAsignaturasDinamicas(selectedRbd, c.nombre);
+    setEditCursoAsignaturas(list);
+    
+    // Get assignments for this course
+    const allAsigs = await api.getAsignacionesPorEstablecimiento(selectedRbd);
+    const courseAsigs = allAsigs.filter(a => a.curso === c.nombre);
+    setEditCursoAsignaciones(courseAsigs);
+  };
+
+  const handleSaveCursoAsignaturas = async () => {
+    if (!editingCurso) return;
+    
+    // 1. Save updated subjects
+    for (const asig of editCursoAsignaturas) {
+      await api.crearAsignaturaDinamica(asig);
+    }
+    
+    // 2. Save assignments: replace all assignments for editingCurso.nombre with editCursoAsignaciones
+    const otherCoursesAsigs = dbLocal.asignacionesAula.filter(a => {
+      // Find contract of this assignment
+      const cont = dbLocal.contratos.find(c => c.id === a.contrato_id);
+      // If it belongs to this school and is for this course, remove it
+      return !(cont && cont.rbd === selectedRbd && a.curso === editingCurso.nombre);
+    });
+    
+    dbLocal.asignacionesAula = [...otherCoursesAsigs, ...editCursoAsignaciones];
+    
+    setEditingCurso(null);
+    await loadAllSchoolData();
+    alert('✅ Curso, asignaturas y docentes asignados actualizados exitosamente.');
+  };
+
   // Exit supervisor delegated mode
   const handleExitSupervisorMode = () => {
     if (typeof window !== 'undefined') {
@@ -464,6 +568,276 @@ export default function EscuelaDashboard() {
 
   const schoolDocentes = funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run));
   const schoolAsistentes = funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run));
+
+  const printFuncionarioDetail = (funcionario: Funcionario, contrato: Contrato | undefined, financiamientos: { origen: OrigenFondo; horas: number }[], leyCalculo: any) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Ficha de Funcionario - ${funcionario.nombre}</title>
+          <style>
+            body { font-family: 'Outfit', 'Inter', sans-serif; color: #1e293b; padding: 40px; }
+            .header { border-bottom: 3px solid #003366; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+            .logo { font-size: 24px; font-weight: 800; color: #003366; }
+            .title { font-size: 28px; font-weight: bold; margin: 10px 0 5px 0; }
+            .meta { font-size: 14px; color: #64748b; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+            .card { border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; background: #f8fafc; }
+            .card h3 { margin-top: 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; color: #0f172a; }
+            .field { margin-bottom: 12px; }
+            .label { font-size: 11px; text-transform: uppercase; font-weight: bold; color: #64748b; }
+            .value { font-size: 15px; font-weight: 600; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #e2e8f0; padding: 12px; text-align: left; }
+            th { background: #f1f5f9; font-weight: bold; }
+            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="logo">Servicio Local de Educación Pública</div>
+              <div class="title">Ficha Oficial del Funcionario</div>
+              <div class="meta">Sistema de Simulación y Dotaciones Docentes</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="value">RBD: ${contrato?.rbd || 'N/A'}</div>
+              <div class="meta">Fecha de Emisión: ${new Date().toLocaleDateString()}</div>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <h3>Datos Personales</h3>
+              <div class="field">
+                <div class="label">Nombre Completo</div>
+                <div class="value">${funcionario.nombre}</div>
+              </div>
+              <div class="field">
+                <div class="label">RUN (Cédula de Identidad)</div>
+                <div class="value">${funcionario.run}</div>
+              </div>
+              <div class="field">
+                <div class="label">Correo Electrónico</div>
+                <div class="value">${funcionario.email || 'No registrado'}</div>
+              </div>
+              <div class="field">
+                <div class="label">Título Profesional / Grado</div>
+                <div class="value">${funcionario.titulo || 'No especificado'}</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Detalle del Contrato</h3>
+              <div class="field">
+                <div class="label">Estamento</div>
+                <div class="value">${funcionario.estamento || 'Docente'}</div>
+              </div>
+              <div class="field">
+                <div class="label">Función / Cargo Activo</div>
+                <div class="value">${funcionario.cargo || 'Docente de Aula'}</div>
+              </div>
+              <div class="field">
+                <div class="label">Calidad Jurídica</div>
+                <div class="value">${contrato?.calidad_juridica || 'Contrata'}</div>
+              </div>
+              <div class="field">
+                <div class="label">Estado de Licencia / Reemplazo</div>
+                <div class="value">${contrato?.estado || 'Activo'}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom: 30px;">
+            <h3>Distribución del Financiamiento (Subvenciones)</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Origen de Fondos</th>
+                  <th>Horas Contratadas por Subvención</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${financiamientos.map(f => `
+                  <tr>
+                    <td><strong>${f.origen}</strong></td>
+                    <td>${f.horas} hrs</td>
+                  </tr>
+                `).join('')}
+                <tr style="background: #f8fafc; font-weight: bold;">
+                  <td>Total Horas Contrato</td>
+                  <td>${contrato?.horas_totales || 0} hrs</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          ${funcionario.estamento === 'Docente' && leyCalculo ? `
+          <div class="card">
+            <h3>Cálculo de Proporción Horaria (Ley 20.903)</h3>
+            <div class="field" style="margin-bottom: 20px;">
+              <div class="label">Régimen Legal Aplicado</div>
+              <div class="value">
+                Proporción ${leyCalculo.proporcionLectiva}/${leyCalculo.proporcionNoLectiva} 
+                ${leyCalculo.leyEspecialAplicada ? '<span style="color:#d97706; font-weight:bold;">(Ley Especial Concentración Prioritaria > 80%)</span>' : '(Proporción Estándar)'}
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; text-align: center;">
+              <div style="border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px;">
+                <div class="label">Max. Lectivas (Aula)</div>
+                <div class="value" style="color: #b91c1c;">${leyCalculo.horasLectivasMaximas} hrs</div>
+              </div>
+              <div style="border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px;">
+                <div class="label">Min. No Lectivas</div>
+                <div class="value" style="color: #047857;">${leyCalculo.horasNoLectivasMinimas} hrs</div>
+              </div>
+              <div style="border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px;">
+                <div class="label">Lectivas Asignadas</div>
+                <div class="value" style="color: #1e3a8a;">${leyCalculo.horasLectivasAsignadas} hrs</div>
+              </div>
+            </div>
+            <div style="margin-top: 15px; padding: 10px; border-radius: 6px; background: ${leyCalculo.cumpleLey20903 ? '#ecfdf5' : '#fef2f2'}; border: 1px solid ${leyCalculo.cumpleLey20903 ? '#a7f3d0' : '#fca5a5'}; text-align: center; font-weight: bold; font-size: 13px;">
+              Cumplimiento Ley 20.903: ${leyCalculo.cumpleLey20903 ? 'CUMPLE CON LA REGLAMENTACIÓN VIGENTE' : 'SOBREPASADO: EXCESO DE HORAS LECTIVAS'}
+            </div>
+          </div>
+          ` : ''}
+
+          <div class="footer">
+            <p>Servicio Local de Educación Pública - SLEP Valle Diguillín</p>
+            <p>Documento de uso interno del sistema de dotaciones. Los datos reflejados en esta ficha forman parte de las simulaciones y planificaciones escolares del RBD ${contrato?.rbd || ''}.</p>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const printCursoDetail = (
+    curso: CursoDinamico, 
+    asignaturas: AsignaturaDinamica[], 
+    asignacionesList: AsignacionAula[], 
+    funcs: Funcionario[], 
+    conts: Contrato[]
+  ) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const basePlan = planesEstudio.find(p => p.nivel === curso.nivel && p.regimen === curso.regimen);
+    const totalHorasMineduc = basePlan?.horasObligatorias || 38;
+    const totalHorasAsignadas = asignacionesList.reduce((sum, a) => sum + a.horas, 0);
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Plan de Estudio y Carga Horaria - ${curso.nombre}</title>
+          <style>
+            body { font-family: 'Outfit', 'Inter', sans-serif; color: #1e293b; padding: 40px; }
+            .header { border-bottom: 3px solid #003366; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+            .logo { font-size: 24px; font-weight: 800; color: #003366; }
+            .title { font-size: 28px; font-weight: bold; margin: 10px 0 5px 0; }
+            .meta { font-size: 14px; color: #64748b; }
+            .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 30px; }
+            .card { border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; background: #f8fafc; }
+            .card h3 { margin-top: 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; color: #0f172a; }
+            .field { margin-bottom: 12px; }
+            .label { font-size: 11px; text-transform: uppercase; font-weight: bold; color: #64748b; }
+            .value { font-size: 15px; font-weight: 600; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { border: 1px solid #e2e8f0; padding: 12px; text-align: left; }
+            th { background: #f1f5f9; font-weight: bold; }
+            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="logo">Servicio Local de Educación Pública</div>
+              <div class="title">Planificación del Curso: ${curso.nombre}</div>
+              <div class="meta">Matriz de Distribución Horaria de Asignaturas y Docentes</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="value">RBD: ${curso.rbd}</div>
+              <div class="meta">Fecha de Emisión: ${new Date().toLocaleDateString()}</div>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <h3>Plan de Estudio del Curso</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Asignatura</th>
+                    <th>Horas Sugeridas</th>
+                    <th>Docente que la Imparte</th>
+                    <th>Horas Asignadas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${asignaturas.map(asig => {
+                    const asigAssign = asignacionesList.find(a => a.asignatura === asig.nombre);
+                    const docenteCont = asigAssign ? conts.find(c => c.id === asigAssign.contrato_id) : null;
+                    const docente = docenteCont ? funcs.find(f => f.run === docenteCont.funcionario_run) : null;
+                    return `
+                      <tr>
+                        <td><strong>${asig.nombre}</strong></td>
+                        <td>${asig.horasSugeridas} hrs</td>
+                        <td>${docente ? docente.nombre : '<em style="color:#ef4444;">Sin Asignar</em>'}</td>
+                        <td>${asigAssign ? `<strong>${asigAssign.horas} hrs</strong>` : '--'}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+
+            <div>
+              <div class="card" style="margin-bottom: 20px;">
+                <h3>Resumen General</h3>
+                <div class="field">
+                  <div class="label">Nivel de Enseñanza</div>
+                  <div class="value">${curso.nivel}</div>
+                </div>
+                <div class="field">
+                  <div class="label">Régimen Horario</div>
+                  <div class="value">${curso.regimen}</div>
+                </div>
+                <div class="field">
+                  <div class="label">Horas Exigidas Plan MINEDUC</div>
+                  <div class="value">${totalHorasMineduc} hrs</div>
+                </div>
+                <div class="field">
+                  <div class="label">Total Horas Asignadas Aula</div>
+                  <div class="value" style="font-size: 20px; color: ${totalHorasAsignadas > totalHorasMineduc ? '#ef4444' : '#1e3a8a'};">
+                    ${totalHorasAsignadas} / ${totalHorasMineduc} hrs
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>Servicio Local de Educación Pública - SLEP Valle Diguillín</p>
+            <p>Este reporte resume la asignación de la dotación y horas de docencia aula correspondientes al curso simulado.</p>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
@@ -643,7 +1017,14 @@ export default function EscuelaDashboard() {
                                 }}
                               />
                             </td>
-                            <td className="p-3 pl-4 font-bold text-slate-800">{f.nombre}</td>
+                            <td className="p-3 pl-4 font-bold text-slate-800">
+                              <button 
+                                onClick={() => handleOpenEditFuncionario(f)}
+                                className="text-slep-blue hover:underline text-left font-bold"
+                              >
+                                👤 {f.nombre}
+                              </button>
+                            </td>
                             <td className="p-3 font-mono text-slate-500">{f.run}</td>
                             <td className="p-3 text-slate-700">{f.cargo || 'Docente'}</td>
                             <td className="p-3 text-center">
@@ -797,7 +1178,14 @@ export default function EscuelaDashboard() {
                                 }}
                               />
                             </td>
-                            <td className="p-3 pl-2 font-bold text-slate-800">{f.nombre}</td>
+                            <td className="p-3 pl-2 font-bold text-slate-800">
+                               <button 
+                                 onClick={() => handleOpenEditFuncionario(f)}
+                                 className="text-slep-blue hover:underline text-left font-bold"
+                               >
+                                 👥 {f.nombre}
+                               </button>
+                             </td>
                             <td className="p-3 font-mono text-slate-500">{f.run}</td>
                             <td className="p-3 text-slate-700">{f.cargo || 'Asistente'}</td>
                             <td className="p-3 text-center">
@@ -897,8 +1285,30 @@ export default function EscuelaDashboard() {
                 
                 {/* Course list, custom cargo loader, PIE Checker, and assignment matrix */}
                 <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-                  <h3 className="text-base font-bold text-slate-800">Planificador de Carga Horaria y Cursos</h3>
+                  <h3 className="text-base font-bold text-slate-800 mb-4">Planificador de Carga Horaria y Cursos</h3>
                   
+                  {/* Cursos Registrados */}
+                  <div className="mb-6 pb-6 border-b border-slate-100">
+                    <p className="text-xs font-bold text-slate-500 uppercase mb-3">Cursos Registrados (Haz clic para ver, editar e imprimir asignaturas y docentes)</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                      {cursosDinamicos.map(c => (
+                        <button
+                          key={c.nombre}
+                          type="button"
+                          onClick={() => handleOpenEditCurso(c)}
+                          className="p-3.5 bg-slate-50 hover:bg-slep-blue hover:text-white border border-slate-200 hover:border-slep-blue rounded-xl text-xs font-bold text-center transition-all shadow-sm flex flex-col items-center justify-center gap-1 group cursor-pointer"
+                        >
+                          <span className="text-xl group-hover:scale-110 transition-transform">🏫</span>
+                          <span className="text-slate-800 group-hover:text-white transition-colors">{c.nombre}</span>
+                          <span className="text-[9px] text-slate-400 group-hover:text-white/80 font-normal">{c.nivel}</span>
+                        </button>
+                      ))}
+                      {cursosDinamicos.length === 0 && (
+                        <p className="col-span-full py-4 text-center text-slate-400 italic">No hay cursos creados aún.</p>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Select normalized course names and study plan */}
                   <form onSubmit={handleCreateCurso} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border text-xs">
                     <div>
@@ -1332,7 +1742,12 @@ export default function EscuelaDashboard() {
                       return (
                         <div key={c.nombre} className="border p-3 rounded-lg text-xs">
                           <div className="flex justify-between font-bold text-slate-800 mb-1">
-                            <span>{c.nombre}</span>
+                            <button 
+                              onClick={() => handleOpenEditCurso(c)}
+                              className="text-slep-blue hover:underline font-bold text-left"
+                            >
+                              🏫 {c.nombre}
+                            </button>
                             <span>{assignedHrs} / {baseOblig} hrs</span>
                           </div>
                           <div className="w-full bg-slate-100 rounded-full h-1.5 mb-2">
@@ -1487,6 +1902,433 @@ export default function EscuelaDashboard() {
           </div>
 
         </div>
+
+        {/* Modal: View / Edit / Print Funcionario */}
+        {editingFuncionario && (() => {
+          const relatedCont = contratos.find(c => c.funcionario_run === editingFuncionario.run);
+          const teacherAsigs = asignaciones.filter(a => a.contrato_id === relatedCont?.id);
+          const leyCalculo = colegio && relatedCont ? validarCargaDocente(relatedCont, colegio, teacherAsigs) : null;
+
+          return (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[90vh] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                {/* Modal Header */}
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Expediente de Personal</p>
+                    <h3 className="text-lg font-bold text-slate-800">{editFuncNombre || editingFuncionario.nombre}</h3>
+                    <p className="text-xs font-mono text-slate-500 mt-0.5">RUN: {editingFuncionario.run}</p>
+                  </div>
+                  <button 
+                    onClick={() => setEditingFuncionario(null)}
+                    className="text-slate-400 hover:text-slate-600 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-all cursor-pointer font-bold w-8 h-8 flex items-center justify-center"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Modal Content */}
+                <div className="p-6 space-y-6 flex-1 text-xs">
+                  
+                  {/* Form fields */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1">Nombre Completo</label>
+                      <input 
+                        type="text" 
+                        className="w-full p-2 border rounded font-semibold text-slate-800 focus:outline-slep-blue"
+                        value={editFuncNombre}
+                        onChange={(e) => setEditFuncNombre(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1">Correo Electrónico</label>
+                      <input 
+                        type="email" 
+                        className="w-full p-2 border rounded font-semibold text-slate-800 focus:outline-slep-blue"
+                        value={editFuncEmail}
+                        onChange={(e) => setEditFuncEmail(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1">Título Profesional / Grado</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: Profesor de Educación General Básica"
+                        className="w-full p-2 border rounded font-semibold text-slate-800 focus:outline-slep-blue"
+                        value={editFuncTitulo}
+                        onChange={(e) => setEditFuncTitulo(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1">Cargo / Función</label>
+                      <input 
+                        type="text" 
+                        className="w-full p-2 border rounded font-semibold text-slate-800 focus:outline-slep-blue"
+                        value={editFuncCargo}
+                        onChange={(e) => setEditFuncCargo(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Financing detail and edit sources */}
+                  <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                    <div className="flex justify-between items-center border-b pb-2">
+                      <span className="font-bold text-slate-800">Financiamiento por Subvenciones (Horas Contrato)</span>
+                      <span className="bg-slep-blue text-white font-mono font-bold px-2 py-0.5 rounded text-[10px]">
+                        Total Contrato: {editContHoras} hrs
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-2.5 max-h-[160px] overflow-y-auto pr-1">
+                      {editContFins.map((f, idx) => (
+                        <div key={idx} className="flex gap-2 items-center">
+                          <select 
+                            className="flex-1 p-2 bg-white border rounded font-bold text-slate-700"
+                            value={f.origen}
+                            onChange={(e) => {
+                              const newFins = [...editContFins];
+                              newFins[idx].origen = e.target.value as OrigenFondo;
+                              setEditContFins(newFins);
+                            }}
+                          >
+                            <option value="Subvención Regular">Subvención Regular</option>
+                            <option value="SEP">SEP (Ley SEP)</option>
+                            <option value="PIE">PIE (Integración)</option>
+                            <option value="Reforzamiento">Reforzamiento</option>
+                            <option value="Pro-retención">Pro-retención</option>
+                            <option value="Otro">Otro</option>
+                          </select>
+                          <input 
+                            type="number"
+                            className="w-24 p-2 bg-white border rounded text-center font-bold text-slate-800"
+                            value={f.horas}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              const newFins = [...editContFins];
+                              newFins[idx].horas = val;
+                              setEditContFins(newFins);
+                              const sum = newFins.reduce((s, fn) => s + fn.horas, 0);
+                              setEditContHoras(sum);
+                            }}
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              const newFins = editContFins.filter((_, i) => i !== idx);
+                              setEditContFins(newFins);
+                              const sum = newFins.reduce((s, fn) => s + fn.horas, 0);
+                              setEditContHoras(sum);
+                            }}
+                            className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 px-2 py-2 rounded-lg font-bold cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      {editContFins.length === 0 && (
+                        <p className="text-center py-2 text-slate-400 italic text-[11px]">No registra financiamientos asociados.</p>
+                      )}
+                    </div>
+
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const newFins = [...editContFins, { origen: 'Subvención Regular' as OrigenFondo, horas: 10 }];
+                        setEditContFins(newFins);
+                        const sum = newFins.reduce((s, fn) => s + fn.horas, 0);
+                        setEditContHoras(sum);
+                      }}
+                      className="bg-white hover:bg-slate-50 text-slep-blue font-bold px-3 py-1.5 rounded-lg border border-slate-200 flex items-center justify-center gap-1 w-full text-[10px] transition-colors cursor-pointer"
+                    >
+                      ➕ Agregar Nueva Fuente de Financiamiento
+                    </button>
+                  </div>
+
+                  {/* Ley 20.903 indicators */}
+                  {editingFuncionario.estamento === 'Docente' && leyCalculo && (
+                    <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-800">Proporcionalidad Horaria Aula / Ley 20.903</span>
+                        {leyCalculo.leyEspecialAplicada ? (
+                          <span className="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-[9px] uppercase tracking-wider border border-amber-200">
+                            Concentración {'>'} 80% (60/40 Ratio) 🌟
+                          </span>
+                        ) : (
+                          <span className="bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded text-[9px]">
+                            Estándar (65/35 Ratio)
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2.5 text-center">
+                        <div className="bg-slate-50 border p-2 rounded-lg">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Lectivas Aula Max.</p>
+                          <p className="text-sm font-black text-slate-800 mt-0.5">{leyCalculo.horasLectivasMaximas} hrs</p>
+                        </div>
+                        <div className="bg-slate-50 border p-2 rounded-lg">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">No Lectivas Min.</p>
+                          <p className="text-sm font-black text-slate-800 mt-0.5">{leyCalculo.horasNoLectivasMinimas} hrs</p>
+                        </div>
+                        <div className="bg-slate-50 border p-2 rounded-lg">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Lectivas Aula Asig.</p>
+                          <p className="text-sm font-black text-slate-800 mt-0.5">{leyCalculo.horasLectivasAsignadas} hrs</p>
+                        </div>
+                      </div>
+                      <div className={`p-3 rounded-lg border text-[11px] font-semibold flex items-center justify-between ${
+                        leyCalculo.cumpleLey20903 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900'
+                      }`}>
+                        <span>
+                          {leyCalculo.cumpleLey20903 
+                            ? '✓ Cumple con la reglamentación legal de docencia de aula.' 
+                            : `⚠️ Exceso detectado: Se asignan ${leyCalculo.horasLectivasAsignadas} hrs de aula frente al máximo legal de ${leyCalculo.horasLectivasMaximas} hrs.`}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          leyCalculo.cumpleLey20903 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {leyCalculo.cumpleLey20903 ? 'CUMPLE' : 'EXCEDIDO'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between gap-2 rounded-b-2xl">
+                  <button 
+                    onClick={() => printFuncionarioDetail(editingFuncionario, relatedCont, editContFins, leyCalculo)}
+                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer"
+                  >
+                    🖨️ Imprimir Ficha
+                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setEditingFuncionario(null)}
+                      className="bg-white hover:bg-slate-100 text-slate-600 font-bold px-4 py-2.5 rounded-xl border transition-all cursor-pointer"
+                    >
+                      Cerrar
+                    </button>
+                    <button 
+                      onClick={handleSaveFuncionario}
+                      className="bg-slep-blue hover:bg-slep-blue-hover text-white font-bold px-6 py-2.5 rounded-xl shadow transition-all cursor-pointer"
+                    >
+                      Guardar Cambios
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Modal: View / Edit / Print Curso */}
+        {editingCurso && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[90vh] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-200">
+              {/* Modal Header */}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-slate-400">Plan de Estudio y Carga de Docentes</p>
+                  <h3 className="text-lg font-bold text-slate-800">Planificador del Curso: {editingCurso.nombre}</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">{editingCurso.nivel} ({editingCurso.regimen})</p>
+                </div>
+                <button 
+                  onClick={() => setEditingCurso(null)}
+                  className="text-slate-400 hover:text-slate-600 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-all cursor-pointer font-bold w-8 h-8 flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 space-y-6 flex-1 text-xs">
+                
+                {/* Table of Subjects */}
+                <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 font-bold text-slate-600 border-b border-slate-100">
+                      <tr>
+                        <th className="p-3 pl-4">Asignatura</th>
+                        <th className="p-3 w-32 text-center">Horas Plan Mineduc</th>
+                        <th className="p-3">Docente que la Imparte</th>
+                        <th className="p-3 w-32 text-center">Horas Aula Asignadas</th>
+                        <th className="p-3 w-16 text-center">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {editCursoAsignaturas.map((asig, index) => {
+                        const asigAssignIndex = editCursoAsignaciones.findIndex(a => a.asignatura === asig.nombre);
+                        const currentAssign = asigAssignIndex >= 0 ? editCursoAsignaciones[asigAssignIndex] : null;
+
+                        return (
+                          <tr key={index} className="hover:bg-slate-50/50">
+                            <td className="p-3 pl-4 font-semibold text-slate-800">
+                              <input 
+                                type="text" 
+                                className="bg-transparent hover:bg-slate-100 focus:bg-white p-1 border border-transparent hover:border-slate-200 rounded font-semibold w-full"
+                                value={asig.nombre}
+                                onChange={(e) => {
+                                  const newAsigs = [...editCursoAsignaturas];
+                                  const oldName = newAsigs[index].nombre;
+                                  newAsigs[index].nombre = e.target.value;
+                                  setEditCursoAsignaturas(newAsigs);
+
+                                  if (currentAssign) {
+                                    const newAsignaciones = [...editCursoAsignaciones];
+                                    const aIdx = newAsignaciones.findIndex(a => a.asignatura === oldName);
+                                    if (aIdx >= 0) {
+                                      newAsignaciones[aIdx].asignatura = e.target.value;
+                                      setEditCursoAsignaciones(newAsignaciones);
+                                    }
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td className="p-3 text-center">
+                              <input 
+                                type="number" 
+                                className="w-16 p-1 border rounded text-center bg-slate-50/50 font-bold"
+                                value={asig.horasSugeridas}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  const newAsigs = [...editCursoAsignaturas];
+                                  newAsigs[index].horasSugeridas = val;
+                                  setEditCursoAsignaturas(newAsigs);
+                                }}
+                              />
+                            </td>
+                            <td className="p-3">
+                              <select 
+                                className="w-full p-1 border rounded bg-white font-semibold text-slate-700 focus:outline-slep-blue"
+                                value={currentAssign ? currentAssign.contrato_id : ''}
+                                onChange={(e) => {
+                                  const cId = e.target.value;
+                                  if (cId === '') {
+                                    const newAsignaciones = editCursoAsignaciones.filter(a => a.asignatura !== asig.nombre);
+                                    setEditCursoAsignaciones(newAsignaciones);
+                                  } else {
+                                    const newAsignaciones = [...editCursoAsignaciones];
+                                    if (currentAssign) {
+                                      const aIdx = newAsignaciones.findIndex(a => a.asignatura === asig.nombre);
+                                      if (aIdx >= 0) {
+                                        newAsignaciones[aIdx].contrato_id = cId;
+                                      }
+                                    } else {
+                                      newAsignaciones.push({
+                                        id: `asig-edit-${Date.now()}-${Math.random()}`,
+                                        contrato_id: cId,
+                                        curso: editingCurso.nombre,
+                                        asignatura: asig.nombre,
+                                        horas: asig.horasSugeridas
+                                      });
+                                    }
+                                    setEditCursoAsignaciones(newAsignaciones);
+                                  }
+                                }}
+                              >
+                                <option value="">-- Sin Asignar / Vacante --</option>
+                                {contratos.map(c => {
+                                  const f = funcionarios.find(func => func.run === c.funcionario_run);
+                                  return (
+                                    <option key={c.id} value={c.id}>
+                                      {f ? f.nombre : c.funcionario_run} ({c.horas_totales} hrs - {c.funcion_principal})
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </td>
+                            <td className="p-3 text-center">
+                              <input 
+                                type="number"
+                                disabled={!currentAssign}
+                                className="w-16 p-1 border rounded text-center font-bold bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                                value={currentAssign ? currentAssign.horas : ''}
+                                placeholder={asig.horasSugeridas.toString()}
+                                onChange={(e) => {
+                                  if (!currentAssign) return;
+                                  const val = parseFloat(e.target.value) || 0;
+                                  const newAsignaciones = [...editCursoAsignaciones];
+                                  const aIdx = newAsignaciones.findIndex(a => a.asignatura === asig.nombre);
+                                  if (aIdx >= 0) {
+                                    newAsignaciones[aIdx].horas = val;
+                                    setEditCursoAsignaciones(newAsignaciones);
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td className="p-3 text-center">
+                              <button 
+                                onClick={() => {
+                                  const newAsigs = editCursoAsignaturas.filter((_, i) => i !== index);
+                                  setEditCursoAsignaturas(newAsigs);
+                                  const newAsignaciones = editCursoAsignaciones.filter(a => a.asignatura !== asig.nombre);
+                                  setEditCursoAsignaciones(newAsignaciones);
+                                }}
+                                className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex gap-2 justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const newAsig: AsignaturaDinamica = {
+                        rbd: selectedRbd,
+                        cursoNombre: editingCurso.nombre,
+                        nombre: 'Nueva Asignatura / Taller',
+                        horasSugeridas: 4
+                      };
+                      setEditCursoAsignaturas([...editCursoAsignaturas, newAsig]);
+                    }}
+                    className="bg-white hover:bg-slate-100 text-slep-blue font-bold px-4 py-2 border rounded-lg transition-all cursor-pointer"
+                  >
+                    ➕ Agregar Asignatura o Taller
+                  </button>
+                  
+                  <div className="text-right">
+                    <span className="text-slate-400 font-bold block uppercase text-[10px]">Total Horas Asignadas</span>
+                    <span className="text-lg font-black text-slep-blue">
+                      {editCursoAsignaciones.reduce((sum, a) => sum + a.horas, 0)} hrs
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between gap-2 rounded-b-2xl">
+                <button 
+                  onClick={() => printCursoDetail(editingCurso, editCursoAsignaturas, editCursoAsignaciones, funcionarios, contratos)}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer"
+                >
+                  🖨️ Imprimir Plan de Curso
+                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setEditingCurso(null)}
+                    className="bg-white hover:bg-slate-100 text-slate-600 font-bold px-4 py-2.5 rounded-xl border transition-all cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                  <button 
+                    onClick={handleSaveCursoAsignaturas}
+                    className="bg-slep-blue hover:bg-slep-blue-hover text-white font-bold px-6 py-2.5 rounded-xl shadow transition-all cursor-pointer"
+                  >
+                    Guardar Cambios
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </main>
     </div>

@@ -17,6 +17,7 @@ export interface Funcionario {
   telefono?: string;
   estamento?: EstamentoType; // Docente or Asistente
   cargo?: string; // Specific role, e.g. Docente Aula, Auxiliar, Psicopedagogo
+  titulo?: string; // Professional title or degree
 }
 
 export interface Contrato {
