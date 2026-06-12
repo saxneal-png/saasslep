@@ -1,3 +1,4 @@
+// @ts-ignore
 import Papa from 'papaparse';
 import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion } from './types';
 
@@ -66,7 +67,7 @@ export function parsearNominaCsv(
   const financiamientos: FinanciamientoContrato[] = [];
   const alertas: AlertaConciliacion[] = [];
 
-  parsed.data.forEach((row, index) => {
+  parsed.data.forEach((row: any, index: number) => {
     const runRaw = row.RUN || '';
     if (!runRaw) return;
 

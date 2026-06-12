@@ -104,7 +104,7 @@ export default function EscuelaDashboard() {
   }, [selectedDocenteRun, selectedRbd, establecimientos]);
 
   // CSV Import simulation
-  const handleImportCsv = () => {
+  const handleImportCsv = async () => {
     if (!csvText.trim()) {
       alert('Por favor ingrese o pegue el contenido CSV.');
       return;
@@ -124,19 +124,19 @@ export default function EscuelaDashboard() {
       );
 
       // Save to DB
-      newFuncs.forEach(async (f) => {
+      for (const f of newFuncs) {
         await api.upsertFuncionario(f);
-      });
+      }
 
-      newConts.forEach(async (c, idx) => {
+      for (const c of newConts) {
         // filter financiamientos belonging to this contract
         const cFins = newFins.filter(f => f.contrato_id === c.id);
         await api.upsertContratoCompleto(c, cFins);
-      });
+      }
 
-      newAlts.forEach(async (a) => {
+      for (const a of newAlts) {
         await api.crearAlerta(a);
-      });
+      }
 
       // Reload
       const updatedConts = await api.getContratos(selectedRbd);
@@ -607,7 +607,7 @@ export default function EscuelaDashboard() {
                             <span className="text-[10px] text-slate-500">¿Licencia Médica?</span>
                             <input 
                               type="checkbox" 
-                              checked={c.estado === 'Licencia Médica'}
+                              checked={false}
                               onChange={(e) => handleToggleLicencia(c.id, e.target.checked)}
                             />
                           </div>

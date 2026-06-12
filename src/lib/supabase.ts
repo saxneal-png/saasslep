@@ -4,7 +4,8 @@ import {
   Contrato, 
   FinanciamientoContrato, 
   AsignacionAula, 
-  AlertaConciliacion 
+  AlertaConciliacion,
+  EstadoContrato
 } from './types';
 
 // Comunas in Diguillín/Valle Diguillín area: Bulnes, Chillán Viejo, El Carmen, Pemuco, San Ignacio, Yungay, Quillón
