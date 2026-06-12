@@ -84,27 +84,47 @@ export function parsearNominaCsv(
   const alertas: AlertaConciliacion[] = [];
 
   rows.forEach((row: any, index: number) => {
-    const runRaw = row.RUN || row.run || '';
+    let runRaw = row.RUN || row.run || '';
+    if (!runRaw && (row.DOC_RUN || row.doc_run)) {
+      const docRun = row.DOC_RUN || row.doc_run;
+      const docDv = row.DOC_DV || row.doc_dv || '';
+      runRaw = `${docRun}-${docDv}`;
+    }
+
     if (!runRaw) return;
 
     const run = normalizarRun(runRaw);
-    const nombre = (row.Nombre || row.nombre || 'Funcionario Sin Nombre').trim();
+    
+    let nombre = 'Funcionario Sin Nombre';
+    if (row.Nombre || row.nombre) {
+      nombre = (row.Nombre || row.nombre).trim();
+    } else if (row.DOC_NOMBRE || row.doc_nombre) {
+      const nom = (row.DOC_NOMBRE || row.doc_nombre || '').trim();
+      const pat = (row.DOC_PATERNO || row.doc_paterno || '').trim();
+      const mat = (row.DOC_MATERNO || row.doc_materno || '').trim();
+      nombre = `${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim();
+    }
+
     const rbd = String(row.RBD || row.rbd || rbdContext).trim();
-    const calidad_juridica = ((row.CalidadJuridica || row.calidad_juridica) === 'Titular' ? 'Titular' : 'Contrata');
-    const funcion_principal = (row.Funcion || row.funcion || 'Docente de Aula').trim();
+    const calidad_juridica = ((row.CalidadJuridica || row.calidad_juridica || row.CALIDAD_JURIDICA) === 'Titular' ? 'Titular' : 'Contrata');
+    const funcion_principal = (row.Funcion || row.funcion || row.FUNCION_PRINCIPAL || row.funcion_principal || 'Docente de Aula').trim();
     const estamento = (row.Estamento || row.estamento || (funcion_principal.toLowerCase().includes('docente') || funcion_principal.toLowerCase().includes('profesor') ? 'Docente' : 'Asistente de la Educación'));
     
-    const horas_totales = parseDecimalHours(row.HorasTotales || row.horas_totales);
+    const horas_totales = parseDecimalHours(row.HorasTotales || row.horas_totales || row.HORAS_CONTRATO || row.horas_contrato);
 
     // Sum subvenciones using float (parseFloat representation)
-    const regular = parseDecimalHours(row.SubvencionRegular || row.subvencion_regular || row.Regular || row.regular);
+    let regular = parseDecimalHours(row.SubvencionRegular || row.subvencion_regular || row.Regular || row.regular);
     const sep = parseDecimalHours(row.SEP || row.sep);
     const pie = parseDecimalHours(row.PIE || row.pie);
     const reforzamiento = parseDecimalHours(row.Reforzamiento || row.reforzamiento);
     const proRetencion = parseDecimalHours(row.ProRetencion || row.pro_retencion || row.ProRetencion || row.pro_retencion);
     const otro = parseDecimalHours(row.Otro || row.otro);
 
-    const sumaSubvenciones = regular + sep + pie + reforzamiento + proRetencion + otro;
+    let sumaSubvenciones = regular + sep + pie + reforzamiento + proRetencion + otro;
+    if (sumaSubvenciones === 0 && horas_totales > 0) {
+      regular = horas_totales;
+      sumaSubvenciones = horas_totales;
+    }
 
     // Create unique ID for contract
     const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
