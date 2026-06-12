@@ -7,72 +7,238 @@ export interface PlanEstudioNivel {
   asignaturasBase: { nombre: string; horasSugeridas: number }[];
 }
 
-export const PLANES_MINEDUC: PlanEstudioNivel[] = [
-  {
-    nivel: '1° a 4° Básico',
-    regimen: 'JEC',
-    horasObligatorias: 38,
-    asignaturasBase: [
-      { nombre: 'Lenguaje y Comunicación', horasSugeridas: 8 },
-      { nombre: 'Matemática', horasSugeridas: 8 },
-      { nombre: 'Ciencias Naturales', horasSugeridas: 3 },
-      { nombre: 'Historia, Geografía y Ciencias Sociales', horasSugeridas: 3 },
-      { nombre: 'Artes Visuales', horasSugeridas: 2 },
-      { nombre: 'Música', horasSugeridas: 2 },
-      { nombre: 'Educación Física y Salud', horasSugeridas: 4 },
-      { nombre: 'Tecnología', horasSugeridas: 1 },
-      { nombre: 'Orientación', horasSugeridas: 1 },
-      { nombre: 'Religión', horasSugeridas: 2 },
-      { nombre: 'Taller JEC (Reforzamiento)', horasSugeridas: 4 }
+export const DATA_PLANES_ESTUDIO_MINEDUC = {
+  "1_4_basico": {
+    "nombre": "1° a 4° año de Educación Básica",
+    "regimen": {
+      "JEC": { "total": 38, "libre": 6.5 },
+      "No_JEC": { "total": 30, "libre": 0 }
+    },
+    "asignaturas": [
+      { "nombre": "Lenguaje y Comunicación", "JEC": 8, "No_JEC": 8 },
+      { "nombre": "Matemática", "JEC": 6, "No_JEC": 6 },
+      { "nombre": "Historia, Geografía y Ciencias Sociales", "JEC": 3, "No_JEC": 3 },
+      { "nombre": "Artes Visuales", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Música", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Educación Física y Salud", "JEC": 4, "No_JEC": 3 },
+      { "nombre": "Orientación", "JEC": 0.5, "No_JEC": 0.5 },
+      { "nombre": "Tecnología", "JEC": 1, "No_JEC": 0.5 },
+      { "nombre": "Religión", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Ciencias Naturales", "JEC": 3, "No_JEC": 3 }
     ]
   },
-  {
-    nivel: '1° a 4° Básico',
-    regimen: 'No JEC',
-    horasObligatorias: 33,
-    asignaturasBase: [
-      { nombre: 'Lenguaje y Comunicación', horasSugeridas: 8 },
-      { nombre: 'Matemática', horasSugeridas: 8 },
-      { nombre: 'Ciencias Naturales', horasSugeridas: 3 },
-      { nombre: 'Historia, Geografía y Ciencias Sociales', horasSugeridas: 3 },
-      { nombre: 'Artes Visuales', horasSugeridas: 2 },
-      { nombre: 'Música', horasSugeridas: 2 },
-      { nombre: 'Educación Física y Salud', horasSugeridas: 3 },
-      { nombre: 'Tecnología', horasSugeridas: 1 },
-      { nombre: 'Orientación', horasSugeridas: 1 },
-      { nombre: 'Religión', horasSugeridas: 2 }
+  "5_6_basico": {
+    "nombre": "5° a 6° año de Educación Básica",
+    "regimen": {
+      "JEC": { "total": 38, "libre": 6 },
+      "No_JEC": { "total": 30, "libre": 0 }
+    },
+    "asignaturas": [
+      { "nombre": "Lenguaje y Comunicación", "JEC": 6, "No_JEC": 6 },
+      { "nombre": "Matemática", "JEC": 6, "No_JEC": 6 },
+      { "nombre": "Historia, Geografía y Ciencias Sociales", "JEC": 4, "No_JEC": 4 },
+      { "nombre": "Artes Visuales", "JEC": 1.5, "No_JEC": 1 },
+      { "nombre": "Música", "JEC": 1.5, "No_JEC": 1 },
+      { "nombre": "Educación Física y Salud", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Orientación", "JEC": 1, "No_JEC": 1 },
+      { "nombre": "Tecnología", "JEC": 1, "No_JEC": 1 },
+      { "nombre": "Religión", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Ciencias Naturales", "JEC": 4, "No_JEC": 3 },
+      { "nombre": "Idioma Extranjero: Inglés", "JEC": 3, "No_JEC": 3 }
     ]
   },
-  {
-    nivel: '5° a 8° Básico',
-    regimen: 'JEC',
-    horasObligatorias: 38,
-    asignaturasBase: [
-      { nombre: 'Lenguaje y Comunicación', horasSugeridas: 6 },
-      { nombre: 'Matemática', horasSugeridas: 6 },
-      { nombre: 'Ciencias Naturales', horasSugeridas: 4 },
-      { nombre: 'Historia, Geografía y Ciencias Sociales', horasSugeridas: 4 },
-      { nombre: 'Idioma Extranjero: Inglés', horasSugeridas: 3 },
-      { nombre: 'Artes Visuales', horasSugeridas: 2 },
-      { nombre: 'Música', horasSugeridas: 2 },
-      { nombre: 'Educación Física y Salud', horasSugeridas: 4 },
-      { nombre: 'Tecnología', horasSugeridas: 1 },
-      { nombre: 'Orientación', horasSugeridas: 1 },
-      { nombre: 'Religión', horasSugeridas: 2 },
-      { nombre: 'Taller JEC', horasSugeridas: 3 }
+  "7_8_basico": {
+    "nombre": "7° a 8° año de Educación Básica (Estándar)",
+    "regimen": {
+      "JEC": { "total": 38, "libre": 6 },
+      "No_JEC": { "total": 33, "libre": 2 }
+    },
+    "asignaturas": [
+      { "nombre": "Lengua y Literatura", "JEC": 6, "No_JEC": 6 },
+      { "nombre": "Matemática", "JEC": 6, "No_JEC": 6 },
+      { "nombre": "Historia, Geografía y Ciencias Sociales", "JEC": 4, "No_JEC": 4 },
+      { "nombre": "Artes Visuales y Música", "JEC": 3, "No_JEC": 2 },
+      { "nombre": "Educación Física y Salud", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Orientación", "JEC": 1, "No_JEC": 1 },
+      { "nombre": "Tecnología", "JEC": 1, "No_JEC": 1 },
+      { "nombre": "Religión", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Ciencias Naturales", "JEC": 4, "No_JEC": 4 },
+      { "nombre": "Idioma Extranjero: Inglés", "JEC": 3, "No_JEC": 3 }
     ]
   },
-  {
-    nivel: 'Educación Parvularia (Pre-Kínder y Kínder)',
-    regimen: 'JEC',
-    horasObligatorias: 30,
-    asignaturasBase: [
-      { nombre: 'Ámbito Desarrollo Personal y Social', horasSugeridas: 10 },
-      { nombre: 'Ámbito Comunicación Integral', horasSugeridas: 10 },
-      { nombre: 'Ámbito Relación con el Medio Natural y Cultural', horasSugeridas: 10 }
+  "7_8_basico_indigena": {
+    "nombre": "7° a 8° año de Educación Básica - Con Sector Lengua Indígena",
+    "regimen": {
+      "JEC": { "total": 38, "libre": 6 },
+      "No_JEC": { "total": 33, "libre": 2 }
+    },
+    "asignaturas": [
+      { "nombre": "Lengua y Literatura", "JEC": 5, "No_JEC": 4 },
+      { "nombre": "Lengua Indígena", "JEC": 4, "No_JEC": 4 },
+      { "nombre": "Idioma Extranjero: Inglés", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Matemática", "JEC": 6, "No_JEC": 6 },
+      { "nombre": "Historia, Geografía y Ciencias Sociales", "JEC": 3, "No_JEC": 3 },
+      { "nombre": "Artes Visuales y Música", "JEC": 3, "No_JEC": 2 },
+      { "nombre": "Educación Física y Salud", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Orientación", "JEC": 1, "No_JEC": 1 },
+      { "nombre": "Tecnología", "JEC": 1, "No_JEC": 1 },
+      { "nombre": "Religión", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Ciencias Naturales", "JEC": 3, "No_JEC": 4 }
     ]
+  },
+  "1_2_medio": {
+    "nombre": "1° y 2° año de Educación Media",
+    "regimen": {
+      "JEC": { "total": 42, "libre": 6 },
+      "No_JEC": { "total": 33, "libre": 0 }
+    },
+    "asignaturas": [
+      { "nombre": "Lengua y Literatura", "JEC": 6, "No_JEC": 6 },
+      { "nombre": "Matemática", "JEC": 7, "No_JEC": 6 },
+      { "nombre": "Historia, Geografía y Ciencias Sociales", "JEC": 4, "No_JEC": 4 },
+      { "nombre": "Artes Visuales o Música", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Educación Física y Salud", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Orientación", "JEC": 1, "No_JEC": 1 },
+      { "nombre": "Tecnología", "JEC": 2, "No_JEC": 1 },
+      { "nombre": "Religión", "JEC": 2, "No_JEC": 2 },
+      { "nombre": "Ciencias Naturales", "JEC": 6, "No_JEC": 6 },
+      { "nombre": "Idioma Extranjero: Inglés", "JEC": 4, "No_JEC": 3 }
+    ]
+  },
+  "3_4_medio": {
+    "nombre": "3° y 4° año de Educación Media",
+    "plan_comun_general": [
+      { "nombre": "Lengua y Literatura", "horas": 3 },
+      { "nombre": "Matemática", "horas": 3 },
+      { "nombre": "Educación Ciudadana", "horas": 2 },
+      { "nombre": "Filosofía", "horas": 2 },
+      { "nombre": "Inglés", "horas": 2 },
+      { "nombre": "Ciencias para la Ciudadanía", "horas": 2 }
+    ],
+    "plan_comun_electivo": [
+      { "nombre": "Electivo Común (Religión/Historia/Artes/Ed.Física)", "horas": 2 }
+    ],
+    "modalidades": {
+      "humanistico_cientifico": { "nombre": "Humanístico-Científico", "diferenciada": 18, "JEC": { "total": 42, "libre": 8 }, "No_JEC": { "total": 36, "libre": 2 } },
+      "tecnico_profesional": { "nombre": "Técnico-Profesional", "diferenciada": 22, "JEC": { "total": 42, "libre": 6 }, "No_JEC": { "total": 38, "libre": 2 } },
+      "artistico": { "nombre": "Artístico", "diferenciada": 21, "JEC": { "total": 42, "libre": 5 }, "No_JEC": { "total": 0, "libre": 0 } }
+    }
   }
-];
+};
+
+export function getPlanesMineducConvertidos(): PlanEstudioNivel[] {
+  const result: PlanEstudioNivel[] = [];
+
+  // 1. 1_4_basico
+  const p14 = DATA_PLANES_ESTUDIO_MINEDUC["1_4_basico"];
+  result.push({
+    nivel: "1° a 4° Básico",
+    regimen: "JEC",
+    horasObligatorias: p14.regimen.JEC.total,
+    asignaturasBase: p14.asignaturas.map(a => ({ nombre: a.nombre, horasSugeridas: a.JEC }))
+  });
+  result.push({
+    nivel: "1° a 4° Básico",
+    regimen: "No JEC",
+    horasObligatorias: p14.regimen.No_JEC.total,
+    asignaturasBase: p14.asignaturas.map(a => ({ nombre: a.nombre, horasSugeridas: a.No_JEC }))
+  });
+
+  // 2. 5_6_basico
+  const p56 = DATA_PLANES_ESTUDIO_MINEDUC["5_6_basico"];
+  result.push({
+    nivel: "5° a 6° Básico",
+    regimen: "JEC",
+    horasObligatorias: p56.regimen.JEC.total,
+    asignaturasBase: p56.asignaturas.map(a => ({ nombre: a.nombre, horasSugeridas: a.JEC }))
+  });
+  result.push({
+    nivel: "5° a 6° Básico",
+    regimen: "No JEC",
+    horasObligatorias: p56.regimen.No_JEC.total,
+    asignaturasBase: p56.asignaturas.map(a => ({ nombre: a.nombre, horasSugeridas: a.No_JEC }))
+  });
+
+  // 3. 7_8_basico
+  const p78 = DATA_PLANES_ESTUDIO_MINEDUC["7_8_basico"];
+  result.push({
+    nivel: "7° a 8° Básico",
+    regimen: "JEC",
+    horasObligatorias: p78.regimen.JEC.total,
+    asignaturasBase: p78.asignaturas.map(a => ({ nombre: a.nombre, horasSugeridas: a.JEC }))
+  });
+  result.push({
+    nivel: "7° a 8° Básico",
+    regimen: "No JEC",
+    horasObligatorias: p78.regimen.No_JEC.total,
+    asignaturasBase: p78.asignaturas.map(a => ({ nombre: a.nombre, horasSugeridas: a.No_JEC }))
+  });
+
+  // 4. 7_8_basico_indigena
+  const p78i = DATA_PLANES_ESTUDIO_MINEDUC["7_8_basico_indigena"];
+  result.push({
+    nivel: "7° a 8° Básico (Indígena)",
+    regimen: "JEC",
+    horasObligatorias: p78i.regimen.JEC.total,
+    asignaturasBase: p78i.asignaturas.map(a => ({ nombre: a.nombre, horasSugeridas: a.JEC }))
+  });
+  result.push({
+    nivel: "7° a 8° Básico (Indígena)",
+    regimen: "No JEC",
+    horasObligatorias: p78i.regimen.No_JEC.total,
+    asignaturasBase: p78i.asignaturas.map(a => ({ nombre: a.nombre, horasSugeridas: a.No_JEC }))
+  });
+
+  // 5. 1_2_medio
+  const p12m = DATA_PLANES_ESTUDIO_MINEDUC["1_2_medio"];
+  result.push({
+    nivel: "1° y 2° Medio",
+    regimen: "JEC",
+    horasObligatorias: p12m.regimen.JEC.total,
+    asignaturasBase: p12m.asignaturas.map(a => ({ nombre: a.nombre, horasSugeridas: a.JEC }))
+  });
+  result.push({
+    nivel: "1° y 2° Medio",
+    regimen: "No JEC",
+    horasObligatorias: p12m.regimen.No_JEC.total,
+    asignaturasBase: p12m.asignaturas.map(a => ({ nombre: a.nombre, horasSugeridas: a.No_JEC }))
+  });
+
+  // 6. 3_4_medio
+  const p34 = DATA_PLANES_ESTUDIO_MINEDUC["3_4_medio"];
+  const general = p34.plan_comun_general;
+  const electivo = p34.plan_comun_electivo;
+  
+  for (const [key, mod] of Object.entries(p34.modalidades)) {
+    const listBase = [
+      ...general.map(g => ({ nombre: g.nombre, horasSugeridas: g.horas })),
+      ...electivo.map(e => ({ nombre: e.nombre, horasSugeridas: e.horas })),
+      { nombre: `Formación Diferenciada (${mod.nombre})`, horasSugeridas: mod.diferenciada }
+    ];
+
+    if (mod.JEC.total > 0) {
+      result.push({
+        nivel: `3° y 4° Medio (${mod.nombre.toUpperCase()})`,
+        regimen: "JEC",
+        horasObligatorias: mod.JEC.total,
+        asignaturasBase: listBase
+      });
+    }
+
+    if (mod.No_JEC.total > 0) {
+      result.push({
+        nivel: `3° y 4° Medio (${mod.nombre.toUpperCase()})`,
+        regimen: "No JEC",
+        horasObligatorias: mod.No_JEC.total,
+        asignaturasBase: listBase
+      });
+    }
+  }
+
+  return result;
+}
+
+export const PLANES_MINEDUC: PlanEstudioNivel[] = getPlanesMineducConvertidos();
 
 export interface ResultadoProporcionHoraria {
   horasContrato: number;
