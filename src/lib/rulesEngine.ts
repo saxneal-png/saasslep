@@ -1,4 +1,4 @@
-import { Establecimiento, Contrato, AsignacionAula } from './types';
+import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado } from './types';
 
 export interface PlanEstudioNivel {
   nivel: string;
@@ -290,7 +290,8 @@ export function calcularLey20903(
 export function validarCargaDocente(
   contrato: Contrato,
   establecimiento: Establecimiento,
-  asignaciones: AsignacionAula[]
+  asignaciones: AsignacionAula[],
+  cargos: CargoPersonalizado[] = []
 ): ResultadoProporcionHoraria {
   // If replacement, it inherits the same, but let's check its own capacity.
   // If Licencia Médica, the contract's teaching workload is logically frozen (does not count towards this teacher).
@@ -300,11 +301,22 @@ export function validarCargaDocente(
     a.curso.includes('1°') || a.curso.includes('2°') || a.curso.includes('3°') || a.curso.includes('4°')
   );
 
+  // Calculate non-pedagogical hours from custom cargos assigned to this teacher
+  const horasCargo = cargos
+    .filter(c => c.funcionario_run === contrato.funcionario_run)
+    .reduce((sum, c) => sum + c.horas, 0);
+
+  // The contract hours that can be split under Ley 20.903 are the total minus the non-pedagogical cargo hours
+  const horasEfectivasContrato = Math.max(0, contrato.horas_totales - horasCargo);
+
   const calculo = calcularLey20903(
-    contrato.horas_totales,
+    horasEfectivasContrato,
     establecimiento.ivm,
     tieneCursosIvmEspecial
   );
+
+  // Set the total contract hours back on the calculation
+  calculo.horasContrato = contrato.horas_totales;
 
   // If Licence, active teaching load is 0
   const horasLectivasAsignadas = contrato.estado === 'Licencia Médica' 
@@ -315,8 +327,10 @@ export function validarCargaDocente(
   // Available hours to assign in classrooms
   calculo.horasDisponibles = parseFloat((calculo.horasLectivasMaximas - horasLectivasAsignadas).toFixed(2));
   
-  // Validation check: cannot exceed max teaching hours
-  calculo.cumpleLey20903 = calculo.horasLectivasAsignadas <= calculo.horasLectivasMaximas + 0.01;
+  // Validation check: cannot exceed max teaching hours and total assigned cannot exceed contract hours
+  const cumpleProporcion = calculo.horasLectivasAsignadas <= calculo.horasLectivasMaximas + 0.01;
+  const cumpleTotalContrato = (calculo.horasLectivasAsignadas + horasCargo) <= contrato.horas_totales + 0.01;
+  calculo.cumpleLey20903 = cumpleProporcion && cumpleTotalContrato;
 
   return calculo;
 }

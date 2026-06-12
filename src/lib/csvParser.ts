@@ -133,12 +133,14 @@ export function parsearNominaCsv(
     const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
 
     // Add unique Funcionario with estamento
+    const titulo = String(row.Titulo || row.titulo || row.TITULO || row.DOC_TITULO || row.doc_titulo || row.TituloProfesional || row.titulo_profesional || '').trim();
     if (!funcionarios.some(f => f.run === run)) {
       funcionarios.push({ 
         run, 
         nombre, 
         estamento: estamento === 'Docente' ? 'Docente' : 'Asistente de la Educación',
-        cargo: funcion_principal
+        cargo: funcion_principal,
+        titulo: titulo || undefined
       });
     }
 

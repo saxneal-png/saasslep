@@ -318,6 +318,14 @@ class DatabaseLocal {
   set planesEstudio(val: PlanEstudioNorm[]) {
     this.setStorageItem('planes_estudio_json', val);
   }
+
+  get comunas(): string[] {
+    return this.getStorageItem('comunas', ['Bulnes', 'Chillán Viejo', 'El Carmen', 'Pemuco', 'San Ignacio', 'Yungay', 'Quillón']);
+  }
+
+  set comunas(val: string[]) {
+    this.setStorageItem('comunas', val);
+  }
 }
 
 export const dbLocal = new DatabaseLocal();
@@ -564,5 +572,18 @@ export const api = {
 
   guardarPlanesEstudio: async (planes: PlanEstudioNorm[]): Promise<void> => {
     dbLocal.planesEstudio = planes;
+  },
+
+  // Comunas CRUD
+  getComunas: async (): Promise<string[]> => {
+    return dbLocal.comunas;
+  },
+
+  addComuna: async (comuna: string): Promise<void> => {
+    const list = [...dbLocal.comunas];
+    if (!list.includes(comuna)) {
+      list.push(comuna);
+      dbLocal.comunas = list;
+    }
   }
 };

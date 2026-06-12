@@ -4,13 +4,15 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/supabase';
+import { api, dbLocal } from '@/lib/supabase';
 import { parsearNominaCsv } from '@/lib/csvParser';
 import { 
   Establecimiento, 
   Contrato, 
   FinanciamientoContrato, 
-  AlertaConciliacion
+  AlertaConciliacion,
+  AsignacionAula,
+  Funcionario
 } from '@/lib/types';
 
 export default function ProfesionalDashboard() {
@@ -21,6 +23,7 @@ export default function ProfesionalDashboard() {
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [financiamientos, setFinanciamientos] = useState<FinanciamientoContrato[]>([]);
   const [alertas, setAlertas] = useState<AlertaConciliacion[]>([]);
+  const [asignaciones, setAsignaciones] = useState<AsignacionAula[]>([]);
 
   // Drag-and-drop
   const [dragActive, setDragActive] = useState(false);
@@ -73,6 +76,9 @@ export default function ProfesionalDashboard() {
         fins.push(...f);
       }
       setFinanciamientos(fins);
+
+      const allAsigs = dbLocal.asignacionesAula;
+      setAsignaciones(allAsigs);
     }
     loadData();
   }, [profesionalRun]);
@@ -334,6 +340,8 @@ export default function ProfesionalDashboard() {
                     <th className="p-3 text-center">Docentes</th>
                     <th className="p-3 text-center">Asistentes</th>
                     <th className="p-3 text-center">Horas Contrato</th>
+                    <th className="p-3 text-center text-slep-blue">Pedagógicas</th>
+                    <th className="p-3 text-center text-slate-500">No Pedagógicas</th>
                     <th className="p-3 text-center">Regular</th>
                     <th className="p-3 text-center">SEP</th>
                     <th className="p-3 text-center">PIE</th>
@@ -357,6 +365,10 @@ export default function ProfesionalDashboard() {
                     })).size;
 
                     const totalHrs = escConts.reduce((sum, c) => sum + c.horas_totales, 0);
+                    const escAsigs = asignaciones.filter(a => escContsIds.includes(a.contrato_id));
+                    const pedagogicasHrs = escAsigs.reduce((sum, a) => sum + a.horas, 0);
+                    const noPedagogicasHrs = Math.max(0, totalHrs - pedagogicasHrs);
+
                     const regularHrs = escFins.filter(f => f.origen_fondo === 'Subvención Regular').reduce((sum, f) => sum + f.horas, 0);
                     const sepHrs = escFins.filter(f => f.origen_fondo === 'SEP').reduce((sum, f) => sum + f.horas, 0);
                     const pieHrs = escFins.filter(f => f.origen_fondo === 'PIE').reduce((sum, f) => sum + f.horas, 0);
@@ -370,6 +382,8 @@ export default function ProfesionalDashboard() {
                         <td className="p-3 text-center font-semibold text-slep-blue">{docenteCount}</td>
                         <td className="p-3 text-center font-semibold text-slate-600">{asistenteCount}</td>
                         <td className="p-3 text-center font-bold text-slate-700">{totalHrs} hrs</td>
+                        <td className="p-3 text-center font-semibold text-slep-blue">{pedagogicasHrs} hrs</td>
+                        <td className="p-3 text-center font-semibold text-slate-500">{noPedagogicasHrs} hrs</td>
                         <td className="p-3 text-center text-slate-600">{regularHrs} hrs</td>
                         <td className="p-3 text-center text-slate-600">{sepHrs} hrs</td>
                         <td className="p-3 text-center text-slate-600">{pieHrs} hrs</td>

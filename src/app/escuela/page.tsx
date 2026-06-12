@@ -1358,7 +1358,7 @@ export default function EscuelaDashboard() {
                   </form>
 
                   {/* Create Custom Roles (SEP/PIE etc. bound) */}
-                  <form onSubmit={handleCreateCargoPersonalizado} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border text-xs">
+                  <form onSubmit={handleCreateCargoPersonalizado} className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3 bg-slate-50 p-4 rounded-xl border text-xs">
                     <div>
                       <label className="block font-bold text-slate-500 mb-1">Cargo Personalizado Escuela</label>
                       <input 
@@ -1397,6 +1397,16 @@ export default function EscuelaDashboard() {
                           return <option key={c.id} value={c.funcionario_run}>{f ? f.nombre : c.funcionario_run}</option>;
                         })}
                       </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Horas Cargo</label>
+                      <input 
+                        type="number"
+                        placeholder="10"
+                        className="w-full p-2 border rounded font-bold"
+                        value={customCargoHoras}
+                        onChange={(e) => setCustomCargoHoras(parseFloat(e.target.value) || 0)}
+                      />
                     </div>
                     <div className="flex items-end">
                       <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2 rounded text-xs shadow">
@@ -1699,6 +1709,44 @@ export default function EscuelaDashboard() {
                           {contratos.reduce((sum, c) => sum + c.horas_totales, 0)} hrs
                         </td>
                       </tr>
+                      {(() => {
+                        const docConts = contratos.filter(c => {
+                          const f = funcionarios.find(func => func.run === c.funcionario_run);
+                          return f?.estamento === 'Docente';
+                        });
+                        const docContsIds = docConts.map(c => c.id);
+                        const docPedagogicas = asignaciones.filter(a => docContsIds.includes(a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
+                        const docTotalHrs = docConts.reduce((sum, c) => sum + c.horas_totales, 0);
+                        const docNoPedagogicas = Math.max(0, docTotalHrs - docPedagogicas);
+
+                        const asisConts = contratos.filter(c => {
+                          const f = funcionarios.find(func => func.run === c.funcionario_run);
+                          return f?.estamento === 'Asistente de la Educación';
+                        });
+                        const asisTotalHrs = asisConts.reduce((sum, c) => sum + c.horas_totales, 0);
+                        const asisPedagogicas = 0;
+                        const asisNoPedagogicas = asisTotalHrs;
+
+                        const totalPedagogicas = docPedagogicas;
+                        const totalNoPedagogicas = docNoPedagogicas + asisNoPedagogicas;
+
+                        return (
+                          <>
+                            <tr className="bg-slate-50/40">
+                              <td className="p-3 pl-4 font-semibold text-slate-900">Horas Pedagógicas (Aula)</td>
+                              <td className="p-3 text-center text-slate-600 font-semibold">{docPedagogicas} hrs</td>
+                              <td className="p-3 text-center text-slate-600 font-semibold">{asisPedagogicas} hrs</td>
+                              <td className="p-3 text-center font-bold text-slep-blue">{totalPedagogicas} hrs</td>
+                            </tr>
+                            <tr className="bg-slate-50/40">
+                              <td className="p-3 pl-4 font-semibold text-slate-900">Horas No Pedagógicas (Planif./Cargos)</td>
+                              <td className="p-3 text-center text-slate-600 font-semibold">{docNoPedagogicas.toFixed(1)} hrs</td>
+                              <td className="p-3 text-center text-slate-600 font-semibold">{asisNoPedagogicas} hrs</td>
+                              <td className="p-3 text-center font-bold text-slate-800">{totalNoPedagogicas.toFixed(1)} hrs</td>
+                            </tr>
+                          </>
+                        );
+                      })()}
                       <tr>
                         <td className="p-3 pl-4 font-semibold text-slate-900">Financiamiento Regular (Subv. Común)</td>
                         <td className="p-3 text-center">
@@ -1875,7 +1923,7 @@ export default function EscuelaDashboard() {
                 {contratos.map(c => {
                   const f = funcionarios.find(func => func.run === c.funcionario_run);
                   const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
-                  const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs) : null;
+                  const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs, cargosPersonalizados) : null;
                   
                   if (!metrics) return null;
                   const isOk = metrics.cumpleLey20903;
@@ -1907,7 +1955,7 @@ export default function EscuelaDashboard() {
         {editingFuncionario && (() => {
           const relatedCont = contratos.find(c => c.funcionario_run === editingFuncionario.run);
           const teacherAsigs = asignaciones.filter(a => a.contrato_id === relatedCont?.id);
-          const leyCalculo = colegio && relatedCont ? validarCargaDocente(relatedCont, colegio, teacherAsigs) : null;
+          const leyCalculo = colegio && relatedCont ? validarCargaDocente(relatedCont, colegio, teacherAsigs, cargosPersonalizados) : null;
 
           return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
