@@ -147,7 +147,7 @@ export default function ProfesionalDashboard() {
         setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
       }
     };
-    reader.readAsText(file);
+    reader.readAsText(file, 'UTF-8');
   };
 
   const filteredEsts = establecimientos.filter(e => 

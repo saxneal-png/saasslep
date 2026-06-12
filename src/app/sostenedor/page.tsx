@@ -226,7 +226,7 @@ export default function SostenedorDashboard() {
         setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
       }
     };
-    reader.readAsText(file);
+    reader.readAsText(file, 'UTF-8');
   };
 
   // Drag-and-drop Plan Estudio JSON
@@ -261,19 +261,107 @@ export default function SostenedorDashboard() {
     reader.onload = async (event) => {
       const text = event.target?.result as string;
       try {
-        const parsed: PlanEstudioNorm[] = JSON.parse(text);
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].nivel) {
-          await api.guardarPlanesEstudio(parsed);
+        const rawJson = JSON.parse(text);
+        
+        const mapPlanes = (input: any): PlanEstudioNorm[] => {
+          const result: PlanEstudioNorm[] = [];
+          const list = Array.isArray(input) ? input : (input.planes_de_estudio || input.planes || []);
+          
+          for (const item of list) {
+            const rawNivel: string = item.nivel || '';
+            const nivel = rawNivel
+              .replace(/básico/gi, 'Básico')
+              .replace(/medio/gi, 'Medio');
+            
+            if (!nivel) continue;
+
+            if (item.plan_comun_formacion_general) {
+              const branches: ('humanistico_cientifico' | 'tecnico_profesional' | 'artistico')[] = ['humanistico_cientifico', 'tecnico_profesional', 'artistico'];
+              for (const branch of branches) {
+                const branchData = item.planes_diferenciados?.[branch];
+                if (!branchData) continue;
+
+                const diffHrs = branchData.horas_formacion_diferenciada || 18;
+                const asignaturasBase: { nombre: string; horasSugeridas: number }[] = [];
+
+                if (Array.isArray(item.plan_comun_formacion_general)) {
+                  item.plan_comun_formacion_general.forEach((a: any) => {
+                    asignaturasBase.push({ nombre: a.nombre, horasSugeridas: a.horas_semanales || 2 });
+                  });
+                }
+                if (Array.isArray(item.plan_comun_electivo)) {
+                  item.plan_comun_electivo.forEach((a: any) => {
+                    asignaturasBase.push({ nombre: a.nombre, horasSugeridas: a.horas_semanales || 2 });
+                  });
+                }
+                asignaturasBase.push({ nombre: `Formación Diferenciada (${branch.replace('_', ' ').toUpperCase()})`, horasSugeridas: diffHrs });
+
+                result.push({
+                  nivel: `${nivel} (${branch.replace('_', ' ').toUpperCase()})`,
+                  regimen: 'JEC',
+                  horasObligatorias: branchData.tiempo_minimo_total?.con_jec || 42,
+                  horasPIEReglamentarias: 10,
+                  asignaturasBase
+                });
+
+                result.push({
+                  nivel: `${nivel} (${branch.replace('_', ' ').toUpperCase()})`,
+                  regimen: 'No JEC',
+                  horasObligatorias: branchData.tiempo_minimo_total?.sin_jec || 38,
+                  horasPIEReglamentarias: 8,
+                  asignaturasBase
+                });
+              }
+            } else {
+              const asignaturasJec: { nombre: string; horasSugeridas: number }[] = [];
+              const asignaturasNoJec: { nombre: string; horasSugeridas: number }[] = [];
+
+              if (Array.isArray(item.asignaturas)) {
+                item.asignaturas.forEach((asig: any) => {
+                  const hrsJec = asig.horas_semanales_con_jec !== undefined ? asig.horas_semanales_con_jec : asig.horas_semanales || 0;
+                  const hrsNoJec = asig.horas_semanales_sin_jec !== undefined ? asig.horas_semanales_sin_jec : asig.horas_semanales || 0;
+                  if (hrsJec > 0) asignaturasJec.push({ nombre: asig.nombre, horasSugeridas: hrsJec });
+                  if (hrsNoJec > 0) asignaturasNoJec.push({ nombre: asig.nombre, horasSugeridas: hrsNoJec });
+                });
+              }
+
+              const totalJec = item.tiempo_minimo_total?.con_jec !== undefined 
+                ? item.tiempo_minimo_total.con_jec 
+                : (item.tiempo_minimo_total?.con_jec || 38);
+              result.push({
+                nivel,
+                regimen: 'JEC',
+                horasObligatorias: totalJec,
+                horasPIEReglamentarias: 10,
+                asignaturasBase: asignaturasJec
+              });
+
+              const totalNoJec = item.tiempo_minimo_total?.sin_jec !== undefined ? item.tiempo_minimo_total.sin_jec : 33;
+              result.push({
+                nivel,
+                regimen: 'No JEC',
+                horasObligatorias: totalNoJec,
+                horasPIEReglamentarias: 8,
+                asignaturasBase: asignaturasNoJec
+              });
+            }
+          }
+          return result;
+        };
+
+        const planesMapeados = mapPlanes(rawJson);
+        if (planesMapeados.length > 0) {
+          await api.guardarPlanesEstudio(planesMapeados);
           await loadAllData();
-          setPlanImportLogs(`✅ Planes de estudio cargados: ${parsed.length} decretos activos.`);
+          setPlanImportLogs(`✅ Planes de estudio cargados: Se crearon ${planesMapeados.length} variantes de decretos.`);
         } else {
-          setPlanImportLogs('❌ Error: Formato de JSON inválido. Debe ser una lista de Decretos/Planes.');
+          setPlanImportLogs('❌ Error: Formato de JSON inválido o lista vacía.');
         }
       } catch (err: any) {
         setPlanImportLogs(`❌ Error al procesar JSON: ${err.message}`);
       }
     };
-    reader.readAsText(file);
+    reader.readAsText(file, 'UTF-8');
   };
 
   const handleSearchRun = () => {
