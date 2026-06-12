@@ -73,6 +73,7 @@ export interface CursoDinamico {
   nombre: string; // e.g. '3° Básico A'
   nivel: string; // e.g. '1° a 4° Básico'
   regimen: 'JEC' | 'No JEC';
+  horasPIE?: number;
 }
 
 export interface AsignaturaDinamica {

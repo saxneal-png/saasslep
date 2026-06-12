@@ -95,6 +95,7 @@ export default function EscuelaDashboard() {
   const [editingCurso, setEditingCurso] = useState<CursoDinamico | null>(null);
   const [editCursoAsignaturas, setEditCursoAsignaturas] = useState<AsignaturaDinamica[]>([]);
   const [editCursoAsignaciones, setEditCursoAsignaciones] = useState<AsignacionAula[]>([]);
+  const [editCursoPIE, setEditCursoPIE] = useState<number>(10);
 
   // Sync role parameters from localStorage
   useEffect(() => {
@@ -504,6 +505,7 @@ export default function EscuelaDashboard() {
 
   const handleOpenEditCurso = async (c: CursoDinamico) => {
     setEditingCurso(c);
+    setEditCursoPIE(c.horasPIE !== undefined ? c.horasPIE : 10);
     const list = await api.getAsignaturasDinamicas(selectedRbd, c.nombre);
     setEditCursoAsignaturas(list);
     
@@ -530,6 +532,15 @@ export default function EscuelaDashboard() {
     });
     
     dbLocal.asignacionesAula = [...otherCoursesAsigs, ...editCursoAsignaciones];
+
+    // 3. Save updated course PIE hours
+    const updatedCursos = dbLocal.cursosDinamicos.map(cur => {
+      if (cur.rbd === selectedRbd && cur.nombre === editingCurso.nombre) {
+        return { ...cur, horasPIE: editCursoPIE };
+      }
+      return cur;
+    });
+    dbLocal.cursosDinamicos = updatedCursos;
     
     setEditingCurso(null);
     await loadAllSchoolData();
@@ -2294,6 +2305,23 @@ export default function EscuelaDashboard() {
               {/* Modal Content */}
               <div className="p-6 space-y-6 flex-1 text-xs">
                 
+                {/* Configurable PIE Hours */}
+                <div className="bg-slate-50 p-4 rounded-xl border flex justify-between items-center gap-4 text-xs">
+                  <div>
+                    <span className="font-bold text-slate-700">Horas de Apoyo / Co-docencia PIE Asociadas al Curso:</span>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Defina la carga horaria semanal reglamentaria de horas SEP/PIE para este curso.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={editCursoPIE}
+                      onChange={(e) => setEditCursoPIE(parseFloat(e.target.value) || 0)}
+                      className="w-20 p-2 bg-white border rounded text-center font-bold text-slate-800 focus:outline-slep-blue"
+                    />
+                    <span className="font-semibold text-slate-600">hrs/semana</span>
+                  </div>
+                </div>
+
                 {/* Table of Subjects */}
                 <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
                   <table className="w-full text-left">

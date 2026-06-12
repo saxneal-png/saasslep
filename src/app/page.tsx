@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { api } from '@/lib/supabase';
+import { Establecimiento } from '@/lib/types';
+import Image from 'next/image';
 
 export default function Home() {
   const router = useRouter();
@@ -10,6 +13,18 @@ export default function Home() {
   const [selectedRole, setSelectedRole] = useState<'sostenedor_maestro' | 'profesional_slep' | 'director_escuela'>('sostenedor_maestro');
   const [profesionalRun, setProfesionalRun] = useState('11.111.111-1');
   const [directorRbd, setDirectorRbd] = useState('10202');
+  const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
+
+  useEffect(() => {
+    async function loadSchools() {
+      const data = await api.getEstablecimientos();
+      setEstablecimientos(data);
+      if (data.length > 0) {
+        setDirectorRbd(data[0].rbd);
+      }
+    }
+    loadSchools();
+  }, []);
 
   const handleLogin = () => {
     // Save simulated session parameters to sessionStorage/localStorage
@@ -34,12 +49,10 @@ export default function Home() {
         <div className="absolute top-0 right-0 w-64 h-64 bg-slep-gold opacity-10 rounded-full translate-x-20 -translate-y-20 pointer-events-none"></div>
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-slep-gold flex items-center justify-center font-bold text-slep-blue text-xl shadow">
-              VD
-            </div>
+            <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain bg-white/5 p-1 rounded-lg" />
             <div>
-              <p className="text-xs uppercase tracking-widest text-slate-300 font-semibold">Servicio Local de Educación Pública</p>
-              <h1 className="text-2xl font-bold tracking-tight">Valle Diguillín</h1>
+              <p className="text-xs uppercase tracking-widest text-slate-300 font-semibold leading-none">Servicio Local de Educación Pública</p>
+              <h1 className="text-xl font-bold tracking-tight mt-1">Valle Diguillín</h1>
             </div>
           </div>
           <div className="bg-slep-blue-dark/50 backdrop-blur-sm border border-white/10 px-4 py-2 rounded-lg text-sm">
@@ -130,9 +143,14 @@ export default function Home() {
                   value={directorRbd}
                   onChange={(e) => setDirectorRbd(e.target.value)}
                 >
-                  <option value="10201">Liceo Polivalente Manuel Bulnes (RBD 10201)</option>
-                  <option value="10202">Escuela E-250 San Ignacio (RBD 10202 - IVM 92%)</option>
-                  <option value="10204">Escuela F-270 El Carmen (RBD 10204 - IVM 65%)</option>
+                  {establecimientos.map(est => (
+                    <option key={est.rbd} value={est.rbd}>
+                      {est.nombre} (RBD {est.rbd} - Prioritarios {est.ivm}%)
+                    </option>
+                  ))}
+                  {establecimientos.length === 0 && (
+                    <option value="10202">Cargando escuelas...</option>
+                  )}
                 </select>
               </div>
             )}
