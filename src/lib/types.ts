@@ -55,3 +55,25 @@ export interface AlertaConciliacion {
   detalle: string;
   resuelta: boolean;
 }
+
+// RBAC 3-roles definitions
+export type UserRole = 'sostenedor_maestro' | 'profesional_slep' | 'director_escuela';
+
+export interface ProfesionalEscuelaAsignada {
+  profesional_run: string;
+  establecimiento_rbd: string;
+}
+
+export interface CursoDinamico {
+  rbd: string;
+  nombre: string; // e.g. '3° Básico A'
+  nivel: string; // e.g. '1° a 4° Básico'
+  regimen: 'JEC' | 'No JEC';
+}
+
+export interface AsignaturaDinamica {
+  rbd: string;
+  cursoNombre: string;
+  nombre: string;
+  horasSugeridas: number;
+}

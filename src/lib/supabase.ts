@@ -5,7 +5,10 @@ import {
   FinanciamientoContrato, 
   AsignacionAula, 
   AlertaConciliacion,
-  EstadoContrato
+  EstadoContrato,
+  ProfesionalEscuelaAsignada,
+  CursoDinamico,
+  AsignaturaDinamica
 } from './types';
 
 // Comunas in Diguillín/Valle Diguillín area: Bulnes, Chillán Viejo, El Carmen, Pemuco, San Ignacio, Yungay, Quillón
@@ -30,7 +33,6 @@ const NOMBRES_ESCUELAS = [
 function generarEstablecimientosMock(): Establecimiento[] {
   const lista: Establecimiento[] = [];
   
-  // First, add the primary ones with distinct characteristics for testing
   const primarias: Establecimiento[] = [
     { rbd: '10201', nombre: 'Liceo Polivalente Manuel Bulnes', ivm: 85.4, comuna: 'Bulnes', regimen: 'JEC' },
     { rbd: '10202', nombre: 'Escuela E-250 San Ignacio (Altamente Vulnerable)', ivm: 92.1, comuna: 'San Ignacio', regimen: 'JEC' },
@@ -42,15 +44,12 @@ function generarEstablecimientosMock(): Establecimiento[] {
   
   lista.push(...primarias);
   
-  // Fill up to 131 establishments
   let currentRbd = 10207;
   for (let i = lista.length; i < 131; i++) {
     const comuna = COMUNAS[i % COMUNAS.length];
     const baseNombre = NOMBRES_ESCUELAS[i % NOMBRES_ESCUELAS.length];
     const rbdStr = String(currentRbd++);
-    
-    // Distribute IVM and regimen dynamically
-    const ivm = Math.round((60 + Math.random() * 38) * 10) / 10; // 60% to 98%
+    const ivm = Math.round((60 + Math.random() * 38) * 10) / 10;
     const regimen = Math.random() > 0.3 ? 'JEC' : 'No JEC';
     
     lista.push({
@@ -73,18 +72,17 @@ const FUNCIONARIOS_MOCK_INICIAL: Funcionario[] = [
   { run: '18.901.234-5', nombre: 'Daniela Paz Contreras Sepúlveda', email: 'dcontreras@slepvallediguillin.cl' },
   { run: '10.876.543-2', nombre: 'Héctor Manuel Olivares Pinto', email: 'holivares@slepvallediguillin.cl' },
   { run: '17.654.321-0', nombre: 'Verónica Andrea Torres Castro', email: 'vtorres@slepvallediguillin.cl' },
+  // Profesionales SLEP
+  { run: '11.111.111-1', nombre: 'Supervisor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl' },
+  { run: '22.222.222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl' },
 ];
 
 const CONTRATOS_MOCK_INICIAL: Contrato[] = [
   { id: 'c1', funcionario_run: '12.345.678-9', rbd: '10201', calidad_juridica: 'Titular', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 44 },
   { id: 'c2', funcionario_run: '15.432.987-K', rbd: '10202', calidad_juridica: 'Contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 38 },
-  // Ana Parra is "Licencia Médica" in school 10202, allowing replacement assignments
   { id: 'c3', funcionario_run: '16.789.012-3', rbd: '10202', calidad_juridica: 'Titular', funcion_principal: 'Docente de Aula', estado: 'Licencia Médica', horas_totales: 44 },
-  // Héctor Olivares is a replacement for Ana Parra (linked via vinculo_titular_id)
   { id: 'c4', funcionario_run: '10.876.543-2', rbd: '10202', calidad_juridica: 'Contrata', funcion_principal: 'Docente de Aula', estado: 'Reemplazo', horas_totales: 44, vinculo_titular_id: 'c3' },
-  // Itinerancia: Carlos Muñoz also teaches in 10201 (10 hours, totals 38 in 10202 and 10 in 10201)
   { id: 'c5', funcionario_run: '15.432.987-K', rbd: '10201', calidad_juridica: 'Contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 10 },
-  // Verónica Torres is Active in 10204 (Baja Vulnerabilidad)
   { id: 'c6', funcionario_run: '17.654.321-0', rbd: '10204', calidad_juridica: 'Titular', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 44 }
 ];
 
@@ -98,12 +96,10 @@ const FINANCIAMIENTOS_MOCK_INICIAL: FinanciamientoContrato[] = [
   { id: 'f7', contrato_id: 'c6', origen_fondo: 'Subvención Regular', horas: 44 }
 ];
 
-// Classroom assignments for courses
 const ASIGNACIONES_MOCK_INICIAL: AsignacionAula[] = [
   { id: 'a1', contrato_id: 'c1', curso: '7° Básico A', asignatura: 'Lenguaje y Comunicación', horas: 6 },
   { id: 'a2', contrato_id: 'c1', curso: '8° Básico A', asignatura: 'Lenguaje y Comunicación', horas: 6 },
   { id: 'a3', contrato_id: 'c1', curso: '1° Medio A', asignatura: 'Lenguaje y Comunicación', horas: 5 },
-  // c2 teaches in 10202 (38 hours contract, JEC, IVM 92.1% so if elementary 60/40, but c2 is teaching 3° Básico A math: special ley 20903 applies)
   { id: 'a4', contrato_id: 'c2', curso: '3° Básico A', asignatura: 'Matemática', horas: 8 },
   { id: 'a5', contrato_id: 'c2', curso: '4° Básico A', asignatura: 'Matemática', horas: 8 },
 ];
@@ -120,6 +116,12 @@ const ALERTAS_MOCK_INICIAL: AlertaConciliacion[] = [
     detalle: 'El contrato estipula 10 horas totales, pero la suma de subvenciones asignadas es 0. Requiere conciliación.',
     resuelta: false
   }
+];
+
+// Initial assignments: Professional 11.111.111-1 is in charge of 10202 and 10204
+const ASIGNACIONES_TUTELA_INICIAL: ProfesionalEscuelaAsignada[] = [
+  { profesional_run: '11.111.111-1', establecimiento_rbd: '10202' },
+  { profesional_run: '11.111.111-1', establecimiento_rbd: '10204' },
 ];
 
 class DatabaseLocal {
@@ -177,11 +179,37 @@ class DatabaseLocal {
   set alertas(val: AlertaConciliacion[]) {
     this.setStorageItem('alertas', val);
   }
+
+  // Tutelas
+  get tutelas(): ProfesionalEscuelaAsignada[] {
+    return this.getStorageItem('tutelas', ASIGNACIONES_TUTELA_INICIAL);
+  }
+
+  set tutelas(val: ProfesionalEscuelaAsignada[]) {
+    this.setStorageItem('tutelas', val);
+  }
+
+  // Cursos Dinámicos
+  get cursosDinamicos(): CursoDinamico[] {
+    return this.getStorageItem('cursos_dinamicos', []);
+  }
+
+  set cursosDinamicos(val: CursoDinamico[]) {
+    this.setStorageItem('cursos_dinamicos', val);
+  }
+
+  // Asignaturas Dinámicas
+  get asignaturasDinamicas(): AsignaturaDinamica[] {
+    return this.getStorageItem('asignaturas_dinamicas', []);
+  }
+
+  set asignaturasDinamicas(val: AsignaturaDinamica[]) {
+    this.setStorageItem('asignaturas_dinamicas', val);
+  }
 }
 
 export const dbLocal = new DatabaseLocal();
 
-// API interfaces to query local DB or Supabase in the future
 export const api = {
   getEstablecimientos: async (): Promise<Establecimiento[]> => {
     return dbLocal.establecimientos;
@@ -230,7 +258,6 @@ export const api = {
     contrato: Contrato, 
     financiamientos: FinanciamientoContrato[]
   ): Promise<void> => {
-    // Save Contract
     const contratos = dbLocal.contratos;
     const cIndex = contratos.findIndex(c => c.id === contrato.id);
     if (cIndex >= 0) {
@@ -240,7 +267,6 @@ export const api = {
     }
     dbLocal.contratos = contratos;
 
-    // Save Financiamientos
     let finList = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== contrato.id);
     finList.push(...financiamientos);
     dbLocal.financiamientoContratos = finList;
@@ -257,11 +283,6 @@ export const api = {
       contratos[idx].estado = estado;
       contratos[idx].vinculo_titular_id = vinculoTitularId;
       dbLocal.contratos = contratos;
-
-      // Rule: If Licence, freeze academic load (we will manage this dynamically in rulesEngine but we can save changes)
-      if (estado === 'Licencia Médica') {
-        // Logically freeze classroom hours (we keep asignaciones but rule engine tags them)
-      }
     }
   },
 
@@ -299,5 +320,57 @@ export const api = {
 
   limpiarAlertasPorRbd: async (rbd: string): Promise<void> => {
     dbLocal.alertas = dbLocal.alertas.filter(a => a.rbd !== rbd || a.resuelta);
+  },
+
+  // Tutelas/Asignaciones de Escuelas a Profesionales SLEP
+  getTutelasPorProfesional: async (profesionalRun: string): Promise<string[]> => {
+    const list = dbLocal.tutelas;
+    return list
+      .filter(t => t.profesional_run === profesionalRun)
+      .map(t => t.establecimiento_rbd);
+  },
+
+  getTodasLasTutelas: async (): Promise<ProfesionalEscuelaAsignada[]> => {
+    return dbLocal.tutelas;
+  },
+
+  asignarEscuelaAProfesional: async (profesionalRun: string, rbd: string): Promise<void> => {
+    const list = dbLocal.tutelas;
+    if (!list.some(t => t.profesional_run === profesionalRun && t.establecimiento_rbd === rbd)) {
+      list.push({ profesional_run: profesionalRun, establecimiento_rbd: rbd });
+      dbLocal.tutelas = list;
+    }
+  },
+
+  removerEscuelaDeProfesional: async (profesionalRun: string, rbd: string): Promise<void> => {
+    let list = dbLocal.tutelas;
+    list = list.filter(t => !(t.profesional_run === profesionalRun && t.establecimiento_rbd === rbd));
+    dbLocal.tutelas = list;
+  },
+
+  // Cursos Dinámicos por Escuela (Director)
+  getCursosDinamicos: async (rbd: string): Promise<CursoDinamico[]> => {
+    return dbLocal.cursosDinamicos.filter(c => c.rbd === rbd);
+  },
+
+  crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
+    const list = dbLocal.cursosDinamicos;
+    if (!list.some(c => c.rbd === curso.rbd && c.nombre === curso.nombre)) {
+      list.push(curso);
+      dbLocal.cursosDinamicos = list;
+    }
+  },
+
+  // Asignaturas Dinámicas por Escuela/Curso
+  getAsignaturasDinamicas: async (rbd: string, cursoNombre: string): Promise<AsignaturaDinamica[]> => {
+    return dbLocal.asignaturasDinamicas.filter(a => a.rbd === rbd && a.cursoNombre === cursoNombre);
+  },
+
+  crearAsignaturaDinamica: async (asignatura: AsignaturaDinamica): Promise<void> => {
+    const list = dbLocal.asignaturasDinamicas;
+    if (!list.some(a => a.rbd === asignatura.rbd && a.cursoNombre === asignatura.cursoNombre && a.nombre === asignatura.nombre)) {
+      list.push(asignatura);
+      dbLocal.asignaturasDinamicas = list;
+    }
   }
 };
