@@ -5,7 +5,6 @@ import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConci
 // Normalization function for RUN
 export function normalizarRun(runRaw: string): string {
   if (!runRaw) return '';
-  // Remove points, spaces, and hyphens
   let clean = runRaw.replace(/[\.\-\s]/g, '').trim();
   if (clean.length < 2) return clean.toUpperCase();
   
@@ -43,6 +42,7 @@ export interface CsvRow {
   Reforzamiento?: string;
   ProRetencion?: string;
   Otro?: string;
+  Estamento?: string; // Optional stamento: Docente or Asistente
 }
 
 export interface ParseResult {
@@ -57,44 +57,66 @@ export function parsearNominaCsv(
   rbdContext: string,
   controlPrevioJson?: Array<{ run: string; funcion?: string; horas?: number }>
 ): ParseResult {
-  const parsed = Papa.parse<CsvRow>(csvContent, {
-    header: true,
-    skipEmptyLines: true,
-  });
+  let rows: CsvRow[] = [];
+
+  // Check if JSON
+  const trimmed = csvContent.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsedJson = JSON.parse(trimmed);
+      rows = Array.isArray(parsedJson) ? parsedJson : [parsedJson];
+    } catch (e) {
+      // Fallback to csv parse if JSON fails
+    }
+  }
+
+  if (rows.length === 0) {
+    const parsed = Papa.parse<CsvRow>(csvContent, {
+      header: true,
+      skipEmptyLines: true,
+    });
+    rows = parsed.data;
+  }
 
   const funcionarios: Funcionario[] = [];
   const contratos: Contrato[] = [];
   const financiamientos: FinanciamientoContrato[] = [];
   const alertas: AlertaConciliacion[] = [];
 
-  parsed.data.forEach((row: any, index: number) => {
-    const runRaw = row.RUN || '';
+  rows.forEach((row: any, index: number) => {
+    const runRaw = row.RUN || row.run || '';
     if (!runRaw) return;
 
     const run = normalizarRun(runRaw);
-    const nombre = (row.Nombre || 'Funcionario Sin Nombre').trim();
-    const rbd = (row.RBD || rbdContext).trim();
-    const calidad_juridica = (row.CalidadJuridica === 'Titular' ? 'Titular' : 'Contrata');
-    const funcion_principal = (row.Funcion || 'Docente de Aula').trim();
+    const nombre = (row.Nombre || row.nombre || 'Funcionario Sin Nombre').trim();
+    const rbd = String(row.RBD || row.rbd || rbdContext).trim();
+    const calidad_juridica = ((row.CalidadJuridica || row.calidad_juridica) === 'Titular' ? 'Titular' : 'Contrata');
+    const funcion_principal = (row.Funcion || row.funcion || 'Docente de Aula').trim();
+    const estamento = (row.Estamento || row.estamento || (funcion_principal.toLowerCase().includes('docente') || funcion_principal.toLowerCase().includes('profesor') ? 'Docente' : 'Asistente de la Educación'));
     
-    const horas_totales = parseDecimalHours(row.HorasTotales);
+    const horas_totales = parseDecimalHours(row.HorasTotales || row.horas_totales);
 
     // Sum subvenciones using float (parseFloat representation)
-    const regular = parseDecimalHours(row.SubvencionRegular);
-    const sep = parseDecimalHours(row.SEP);
-    const pie = parseDecimalHours(row.PIE);
-    const reforzamiento = parseDecimalHours(row.Reforzamiento);
-    const proRetencion = parseDecimalHours(row.ProRetencion);
-    const otro = parseDecimalHours(row.Otro);
+    const regular = parseDecimalHours(row.SubvencionRegular || row.subvencion_regular || row.Regular || row.regular);
+    const sep = parseDecimalHours(row.SEP || row.sep);
+    const pie = parseDecimalHours(row.PIE || row.pie);
+    const reforzamiento = parseDecimalHours(row.Reforzamiento || row.reforzamiento);
+    const proRetencion = parseDecimalHours(row.ProRetencion || row.pro_retencion || row.ProRetencion || row.pro_retencion);
+    const otro = parseDecimalHours(row.Otro || row.otro);
 
     const sumaSubvenciones = regular + sep + pie + reforzamiento + proRetencion + otro;
 
     // Create unique ID for contract
     const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
 
-    // Add unique Funcionario
+    // Add unique Funcionario with estamento
     if (!funcionarios.some(f => f.run === run)) {
-      funcionarios.push({ run, nombre });
+      funcionarios.push({ 
+        run, 
+        nombre, 
+        estamento: estamento === 'Docente' ? 'Docente' : 'Asistente de la Educación',
+        cargo: funcion_principal
+      });
     }
 
     // Add Contrato
@@ -129,7 +151,6 @@ export function parsearNominaCsv(
     agregarFondo('Otro', otro);
 
     // 1. Alerta de Descalce Horario (Suma de subvenciones no coincide con horas del contrato)
-    // We compare with a small tolerance for floating point representations (0.01)
     if (Math.abs(sumaSubvenciones - horas_totales) > 0.01) {
       alertas.push({
         id: `al-descalce-${contrato_id}`,
@@ -144,7 +165,7 @@ export function parsearNominaCsv(
       });
     }
 
-    // 2. Control Previo Discrepancies (Compare SIGE data with internal controls if provided)
+    // 2. Control Previo Discrepancies
     if (controlPrevioJson) {
       const match = controlPrevioJson.find(c => normalizarRun(c.run) === run);
       if (match) {

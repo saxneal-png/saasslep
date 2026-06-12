@@ -8,12 +8,15 @@ export interface Establecimiento {
 
 export type CalidadJuridica = 'Titular' | 'Contrata';
 export type EstadoContrato = 'Activo' | 'Licencia Médica' | 'Reemplazo';
+export type EstamentoType = 'Docente' | 'Asistente de la Educación';
 
 export interface Funcionario {
   run: string; // Unique primary key (normalized)
   nombre: string;
   email?: string;
   telefono?: string;
+  estamento?: EstamentoType; // Docente or Asistente
+  cargo?: string; // Specific role, e.g. Docente Aula, Auxiliar, Psicopedagogo
 }
 
 export interface Contrato {
@@ -49,7 +52,7 @@ export interface AlertaConciliacion {
   run: string;
   nombre_funcionario: string;
   rbd: string;
-  tipo: 'descalce_horas' | 'discrepancia_funcion' | 'infraccion_ley_20903' | 'sobrecarga_horas';
+  tipo: 'descalce_horas' | 'discrepancia_funcion' | 'infraccion_ley_20903' | 'sobrecarga_horas' | 'descalce_pie';
   nivel_alerta: 'critica' | 'advertencia';
   mensaje: string;
   detalle: string;
@@ -76,4 +79,29 @@ export interface AsignaturaDinamica {
   cursoNombre: string;
   nombre: string;
   horasSugeridas: number;
+}
+
+// Advanced custom roles
+export interface CargoPersonalizado {
+  id: string;
+  rbd: string;
+  nombre: string; // e.g. "Encargado de Convivencia Escolar"
+  horas: number;
+  funcionario_run: string;
+  origen_fondo: OrigenFondo; // Must associate to a specific subvention
+}
+
+// Standard Study Plan managed by Sostenedor
+export interface PlanEstudioNorm {
+  nivel: string;
+  regimen: 'JEC' | 'No JEC';
+  horasObligatorias: number;
+  horasPIEReglamentarias: number; // Regulatory co-teaching/support hours required (e.g. 10 hrs per course)
+  asignaturasBase: { nombre: string; horasSugeridas: number }[];
+}
+
+export interface Supervisor {
+  run: string;
+  nombre: string;
+  email: string;
 }

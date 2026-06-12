@@ -8,10 +8,13 @@ import {
   EstadoContrato,
   ProfesionalEscuelaAsignada,
   CursoDinamico,
-  AsignaturaDinamica
+  AsignaturaDinamica,
+  CargoPersonalizado,
+  PlanEstudioNorm,
+  Supervisor
 } from './types';
 
-// Comunas in Diguillín/Valle Diguillín area: Bulnes, Chillán Viejo, El Carmen, Pemuco, San Ignacio, Yungay, Quillón
+// Comunas in Diguillín/Valle Diguillín area
 const COMUNAS = ['Bulnes', 'Chillán Viejo', 'El Carmen', 'Pemuco', 'San Ignacio', 'Yungay', 'Quillón'];
 
 const NOMBRES_ESCUELAS = [
@@ -29,11 +32,80 @@ const NOMBRES_ESCUELAS = [
   'Escuela Básica Tres Esquinas',
 ];
 
-// Generates 131 realistic establishments for the territorial heatmap
+// Default MINEDUC decrees
+export const DECRETOS_MINEDUC_INICIAL: PlanEstudioNorm[] = [
+  {
+    nivel: '1° a 4° Básico',
+    regimen: 'JEC',
+    horasObligatorias: 38,
+    horasPIEReglamentarias: 10,
+    asignaturasBase: [
+      { nombre: 'Lenguaje y Comunicación', horasSugeridas: 8 },
+      { nombre: 'Matemática', horasSugeridas: 8 },
+      { nombre: 'Ciencias Naturales', horasSugeridas: 3 },
+      { nombre: 'Historia, Geografía y Ciencias Sociales', horasSugeridas: 3 },
+      { nombre: 'Artes Visuales', horasSugeridas: 2 },
+      { nombre: 'Música', horasSugeridas: 2 },
+      { nombre: 'Educación Física y Salud', horasSugeridas: 4 },
+      { nombre: 'Tecnología', horasSugeridas: 1 },
+      { nombre: 'Orientación', horasSugeridas: 1 },
+      { nombre: 'Religión', horasSugeridas: 2 },
+      { nombre: 'Taller JEC (Reforzamiento)', horasSugeridas: 4 }
+    ]
+  },
+  {
+    nivel: '1° a 4° Básico',
+    regimen: 'No JEC',
+    horasObligatorias: 33,
+    horasPIEReglamentarias: 8,
+    asignaturasBase: [
+      { nombre: 'Lenguaje y Comunicación', horasSugeridas: 8 },
+      { nombre: 'Matemática', horasSugeridas: 8 },
+      { nombre: 'Ciencias Naturales', horasSugeridas: 3 },
+      { nombre: 'Historia, Geografía y Ciencias Sociales', horasSugeridas: 3 },
+      { nombre: 'Artes Visuales', horasSugeridas: 2 },
+      { nombre: 'Música', horasSugeridas: 2 },
+      { nombre: 'Educación Física y Salud', horasSugeridas: 3 },
+      { nombre: 'Tecnología', horasSugeridas: 1 },
+      { nombre: 'Orientación', horasSugeridas: 1 },
+      { nombre: 'Religión', horasSugeridas: 2 }
+    ]
+  },
+  {
+    nivel: '5° a 8° Básico',
+    regimen: 'JEC',
+    horasObligatorias: 38,
+    horasPIEReglamentarias: 10,
+    asignaturasBase: [
+      { nombre: 'Lenguaje y Comunicación', horasSugeridas: 6 },
+      { nombre: 'Matemática', horasSugeridas: 6 },
+      { nombre: 'Ciencias Naturales', horasSugeridas: 4 },
+      { nombre: 'Historia, Geografía y Ciencias Sociales', horasSugeridas: 4 },
+      { nombre: 'Idioma Extranjero: Inglés', horasSugeridas: 3 },
+      { nombre: 'Artes Visuales', horasSugeridas: 2 },
+      { nombre: 'Música', horasSugeridas: 2 },
+      { nombre: 'Educación Física y Salud', horasSugeridas: 4 },
+      { nombre: 'Tecnología', horasSugeridas: 1 },
+      { nombre: 'Orientación', horasSugeridas: 1 },
+      { nombre: 'Religión', horasSugeridas: 2 },
+      { nombre: 'Taller JEC', horasSugeridas: 3 }
+    ]
+  },
+  {
+    nivel: 'Educación Parvularia (Pre-Kínder y Kínder)',
+    regimen: 'JEC',
+    horasObligatorias: 30,
+    horasPIEReglamentarias: 6,
+    asignaturasBase: [
+      { nombre: 'Ámbito Desarrollo Personal y Social', horasSugeridas: 10 },
+      { nombre: 'Ámbito Comunicación Integral', horasSugeridas: 10 },
+      { nombre: 'Ámbito Relación con el Medio Natural y Cultural', horasSugeridas: 10 }
+    ]
+  }
+];
+
 function generarEstablecimientosMock(): Establecimiento[] {
-  const lista: Establecimiento[] = [];
-  
-  const primarias: Establecimiento[] = [
+  const lista: Establecimiento[] = [
     { rbd: '10201', nombre: 'Liceo Polivalente Manuel Bulnes', ivm: 85.4, comuna: 'Bulnes', regimen: 'JEC' },
     { rbd: '10202', nombre: 'Escuela E-250 San Ignacio (Altamente Vulnerable)', ivm: 92.1, comuna: 'San Ignacio', regimen: 'JEC' },
     { rbd: '10203', nombre: 'Liceo Arturo Prat Chacón (No JEC)', ivm: 78.5, comuna: 'Quillón', regimen: 'No JEC' },
@@ -42,8 +114,6 @@ function generarEstablecimientosMock(): Establecimiento[] {
     { rbd: '10206', nombre: 'Escuela D-120 Pemuco', ivm: 74.3, comuna: 'Pemuco', regimen: 'No JEC' },
   ];
   
-  lista.push(...primarias);
-  
   let currentRbd = 10207;
   for (let i = lista.length; i < 131; i++) {
     const comuna = COMUNAS[i % COMUNAS.length];
@@ -51,7 +121,6 @@ function generarEstablecimientosMock(): Establecimiento[] {
     const rbdStr = String(currentRbd++);
     const ivm = Math.round((60 + Math.random() * 38) * 10) / 10;
     const regimen = Math.random() > 0.3 ? 'JEC' : 'No JEC';
-    
     lista.push({
       rbd: rbdStr,
       nombre: `${baseNombre} N° ${i - 5}`,
@@ -60,38 +129,42 @@ function generarEstablecimientosMock(): Establecimiento[] {
       regimen
     });
   }
-  
   return lista;
 }
 
 const FUNCIONARIOS_MOCK_INICIAL: Funcionario[] = [
-  { run: '12.345.678-9', nombre: 'María Loreto González Soto', email: 'mgonzalez@slepvallediguillin.cl' },
-  { run: '15.432.987-K', nombre: 'Carlos Andrés Muñoz Riquelme', email: 'cmunoz@slepvallediguillin.cl' },
-  { run: '16.789.012-3', nombre: 'Ana Luisa Parra Valenzuela', email: 'aparra@slepvallediguillin.cl' },
-  { run: '14.567.890-1', nombre: 'José Pedro Valdés Letelier', email: 'jvaldes@slepvallediguillin.cl' },
-  { run: '18.901.234-5', nombre: 'Daniela Paz Contreras Sepúlveda', email: 'dcontreras@slepvallediguillin.cl' },
-  { run: '10.876.543-2', nombre: 'Héctor Manuel Olivares Pinto', email: 'holivares@slepvallediguillin.cl' },
-  { run: '17.654.321-0', nombre: 'Verónica Andrea Torres Castro', email: 'vtorres@slepvallediguillin.cl' },
-  // Profesionales SLEP
+  { run: '12.345.678-9', nombre: 'María Loreto González Soto', email: 'mgonzalez@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
+  { run: '15.432.987-K', nombre: 'Carlos Andrés Muñoz Riquelme', email: 'cmunoz@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
+  { run: '16.789.012-3', nombre: 'Ana Luisa Parra Valenzuela', email: 'aparra@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente PIE' },
+  { run: '14.567.890-1', nombre: 'José Pedro Valdés Letelier', email: 'jvaldes@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Coordinador UTP' },
+  { run: '18.901.234-5', nombre: 'Daniela Paz Contreras Sepúlveda', email: 'dcontreras@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Psicóloga' },
+  { run: '10.876.543-2', nombre: 'Héctor Manuel Olivares Pinto', email: 'holivares@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
+  { run: '17.654.321-0', nombre: 'Verónica Andrea Torres Castro', email: 'vtorres@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Auxiliar de Servicios' },
+  // Supervisores
+  { run: '11.111.111-1', nombre: 'Supervisor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Supervisor UATP' },
+  { run: '22.222.222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Supervisor UATP' },
+];
+
+const SUPERVISORES_INICIAL: Supervisor[] = [
   { run: '11.111.111-1', nombre: 'Supervisor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl' },
-  { run: '22.222.222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl' },
+  { run: '22.222.222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl' }
 ];
 
 const CONTRATOS_MOCK_INICIAL: Contrato[] = [
   { id: 'c1', funcionario_run: '12.345.678-9', rbd: '10201', calidad_juridica: 'Titular', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 44 },
   { id: 'c2', funcionario_run: '15.432.987-K', rbd: '10202', calidad_juridica: 'Contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 38 },
-  { id: 'c3', funcionario_run: '16.789.012-3', rbd: '10202', calidad_juridica: 'Titular', funcion_principal: 'Docente de Aula', estado: 'Licencia Médica', horas_totales: 44 },
+  { id: 'c3', funcionario_run: '16.789.012-3', rbd: '10202', calidad_juridica: 'Titular', funcion_principal: 'Docente PIE', estado: 'Licencia Médica', horas_totales: 44 },
   { id: 'c4', funcionario_run: '10.876.543-2', rbd: '10202', calidad_juridica: 'Contrata', funcion_principal: 'Docente de Aula', estado: 'Reemplazo', horas_totales: 44, vinculo_titular_id: 'c3' },
   { id: 'c5', funcionario_run: '15.432.987-K', rbd: '10201', calidad_juridica: 'Contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 10 },
-  { id: 'c6', funcionario_run: '17.654.321-0', rbd: '10204', calidad_juridica: 'Titular', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 44 }
+  { id: 'c6', funcionario_run: '17.654.321-0', rbd: '10204', calidad_juridica: 'Titular', funcion_principal: 'Auxiliar de Servicios', estado: 'Activo', horas_totales: 44 }
 ];
 
 const FINANCIAMIENTOS_MOCK_INICIAL: FinanciamientoContrato[] = [
   { id: 'f1', contrato_id: 'c1', origen_fondo: 'Subvención Regular', horas: 30 },
   { id: 'f2', contrato_id: 'c1', origen_fondo: 'SEP', horas: 14 },
   { id: 'f3', contrato_id: 'c2', origen_fondo: 'PIE', horas: 38 },
-  { id: 'f4', contrato_id: 'c3', origen_fondo: 'Subvención Regular', horas: 44 },
-  { id: 'f5', contrato_id: 'c4', origen_fondo: 'Subvención Regular', horas: 44 },
+  { id: 'f4', contrato_id: 'c3', origen_fondo: 'PIE', horas: 44 },
+  { id: 'f5', contrato_id: 'c4', origen_fondo: 'PIE', horas: 44 },
   { id: 'f6', contrato_id: 'c5', origen_fondo: 'SEP', horas: 10 },
   { id: 'f7', contrato_id: 'c6', origen_fondo: 'Subvención Regular', horas: 44 }
 ];
@@ -104,22 +177,7 @@ const ASIGNACIONES_MOCK_INICIAL: AsignacionAula[] = [
   { id: 'a5', contrato_id: 'c2', curso: '4° Básico A', asignatura: 'Matemática', horas: 8 },
 ];
 
-const ALERTAS_MOCK_INICIAL: AlertaConciliacion[] = [
-  {
-    id: 'al1',
-    run: '15.432.987-K',
-    nombre_funcionario: 'Carlos Andrés Muñoz Riquelme',
-    rbd: '10201',
-    tipo: 'descalce_horas',
-    nivel_alerta: 'critica',
-    mensaje: 'Descalce financiero en contrato',
-    detalle: 'El contrato estipula 10 horas totales, pero la suma de subvenciones asignadas es 0. Requiere conciliación.',
-    resuelta: false
-  }
-];
-
-// Initial assignments: Professional 11.111.111-1 is in charge of 10202 and 10204
-const ASIGNACIONES_TUTELA_INICIAL: ProfesionalEscuelaAsignada[] = [
+const TUTELAS_INICIAL: ProfesionalEscuelaAsignada[] = [
   { profesional_run: '11.111.111-1', establecimiento_rbd: '10202' },
   { profesional_run: '11.111.111-1', establecimiento_rbd: '10204' },
 ];
@@ -138,6 +196,10 @@ class DatabaseLocal {
 
   get establecimientos(): Establecimiento[] {
     return this.getStorageItem('establecimientos', generarEstablecimientosMock());
+  }
+
+  set establecimientos(val: Establecimiento[]) {
+    this.setStorageItem('establecimientos', val);
   }
 
   get funcionarios(): Funcionario[] {
@@ -180,31 +242,55 @@ class DatabaseLocal {
     this.setStorageItem('alertas', val);
   }
 
-  // Tutelas
   get tutelas(): ProfesionalEscuelaAsignada[] {
-    return this.getStorageItem('tutelas', ASIGNACIONES_TUTELA_INICIAL);
+    return this.getStorageItem('tutelas', TUTELAS_INICIAL);
   }
 
   set tutelas(val: ProfesionalEscuelaAsignada[]) {
     this.setStorageItem('tutelas', val);
   }
 
-  // Cursos Dinámicos
   get cursosDinamicos(): CursoDinamico[] {
-    return this.getStorageItem('cursos_dinamicos', []);
+    return this.getStorageItem('cursos_dinamicos', [
+      { rbd: '10202', nombre: '3° Básico A', nivel: '1° a 4° Básico', regimen: 'JEC' },
+      { rbd: '10202', nombre: '4° Básico A', nivel: '1° a 4° Básico', regimen: 'JEC' },
+    ]);
   }
 
   set cursosDinamicos(val: CursoDinamico[]) {
     this.setStorageItem('cursos_dinamicos', val);
   }
 
-  // Asignaturas Dinámicas
   get asignaturasDinamicas(): AsignaturaDinamica[] {
     return this.getStorageItem('asignaturas_dinamicas', []);
   }
 
   set asignaturasDinamicas(val: AsignaturaDinamica[]) {
     this.setStorageItem('asignaturas_dinamicas', val);
+  }
+
+  get supervisores(): Supervisor[] {
+    return this.getStorageItem('supervisores', SUPERVISORES_INICIAL);
+  }
+
+  set supervisores(val: Supervisor[]) {
+    this.setStorageItem('supervisores', val);
+  }
+
+  get cargosPersonalizados(): CargoPersonalizado[] {
+    return this.getStorageItem('cargos_personalizados', []);
+  }
+
+  set cargosPersonalizados(val: CargoPersonalizado[]) {
+    this.setStorageItem('cargos_personalizados', val);
+  }
+
+  get planesEstudio(): PlanEstudioNorm[] {
+    return this.getStorageItem('planes_estudio_json', DECRETOS_MINEDUC_INICIAL);
+  }
+
+  set planesEstudio(val: PlanEstudioNorm[]) {
+    this.setStorageItem('planes_estudio_json', val);
   }
 }
 
@@ -217,6 +303,21 @@ export const api = {
 
   getEstablecimientoByRbd: async (rbd: string): Promise<Establecimiento | undefined> => {
     return dbLocal.establecimientos.find(e => e.rbd === rbd);
+  },
+
+  upsertEstablecimiento: async (est: Establecimiento): Promise<void> => {
+    const list = dbLocal.establecimientos;
+    const idx = list.findIndex(e => e.rbd === est.rbd);
+    if (idx >= 0) {
+      list[idx] = est;
+    } else {
+      list.push(est);
+    }
+    dbLocal.establecimientos = list;
+  },
+
+  deleteEstablecimiento: async (rbd: string): Promise<void> => {
+    dbLocal.establecimientos = dbLocal.establecimientos.filter(e => e.rbd !== rbd);
   },
 
   getFuncionarios: async (): Promise<Funcionario[]> => {
@@ -247,11 +348,15 @@ export const api = {
     const funcionarios = dbLocal.funcionarios;
     const index = funcionarios.findIndex(f => f.run === funcionario.run);
     if (index >= 0) {
-      funcionarios[index] = funcionario;
+      funcionarios[index] = { ...funcionarios[index], ...funcionario };
     } else {
       funcionarios.push(funcionario);
     }
     dbLocal.funcionarios = funcionarios;
+  },
+
+  deleteFuncionario: async (run: string): Promise<void> => {
+    dbLocal.funcionarios = dbLocal.funcionarios.filter(f => f.run !== run);
   },
 
   upsertContratoCompleto: async (
@@ -372,5 +477,60 @@ export const api = {
       list.push(asignatura);
       dbLocal.asignaturasDinamicas = list;
     }
+  },
+
+  // Supervisors (Profesionales SLEP) CRUD
+  getSupervisores: async (): Promise<Supervisor[]> => {
+    return dbLocal.supervisores;
+  },
+
+  upsertSupervisor: async (sup: Supervisor): Promise<void> => {
+    const list = dbLocal.supervisores;
+    const idx = list.findIndex(s => s.run === sup.run);
+    if (idx >= 0) {
+      list[idx] = sup;
+    } else {
+      list.push(sup);
+    }
+    dbLocal.supervisores = list;
+
+    // Sync to master funcionarios as well
+    await api.upsertFuncionario({
+      run: sup.run,
+      nombre: sup.nombre,
+      email: sup.email,
+      estamento: 'Docente',
+      cargo: 'Supervisor UATP'
+    });
+  },
+
+  deleteSupervisor: async (run: string): Promise<void> => {
+    dbLocal.supervisores = dbLocal.supervisores.filter(s => s.run !== run);
+    dbLocal.tutelas = dbLocal.tutelas.filter(t => t.profesional_run !== run);
+    await api.deleteFuncionario(run);
+  },
+
+  // Cargos Personalizados CRUD
+  getCargosPorEstablecimiento: async (rbd: string): Promise<CargoPersonalizado[]> => {
+    return dbLocal.cargosPersonalizados.filter(c => c.rbd === rbd);
+  },
+
+  crearCargoPersonalizado: async (cargo: CargoPersonalizado): Promise<void> => {
+    const list = dbLocal.cargosPersonalizados;
+    list.push(cargo);
+    dbLocal.cargosPersonalizados = list;
+  },
+
+  removerCargoPersonalizado: async (id: string): Promise<void> => {
+    dbLocal.cargosPersonalizados = dbLocal.cargosPersonalizados.filter(c => c.id !== id);
+  },
+
+  // Planes de estudio JSON (Gobernanza del Sostenedor)
+  getPlanesEstudio: async (): Promise<PlanEstudioNorm[]> => {
+    return dbLocal.planesEstudio;
+  },
+
+  guardarPlanesEstudio: async (planes: PlanEstudioNorm[]): Promise<void> => {
+    dbLocal.planesEstudio = planes;
   }
 };

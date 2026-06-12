@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { api } from '@/lib/supabase';
-import { PLANES_MINEDUC, validarCargaDocente } from '@/lib/rulesEngine';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { api, dbLocal } from '@/lib/supabase';
+import { validarCargaDocente } from '@/lib/rulesEngine';
 import { 
   Establecimiento, 
   Contrato, 
@@ -11,11 +13,16 @@ import {
   AlertaConciliacion, 
   Funcionario,
   CursoDinamico,
-  AsignaturaDinamica
+  AsignaturaDinamica,
+  CargoPersonalizado,
+  OrigenFondo,
+  EstamentoType,
+  PlanEstudioNorm
 } from '@/lib/types';
 
 export default function EscuelaDashboard() {
-  const [selectedRbd, setSelectedRbd] = useState<string>('10202'); // Mock default
+  const router = useRouter();
+  const [selectedRbd, setSelectedRbd] = useState<string>('10202');
   const [colegio, setColegio] = useState<Establecimiento | null>(null);
 
   // Active School State
@@ -23,25 +30,51 @@ export default function EscuelaDashboard() {
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [asignaciones, setAsignaciones] = useState<AsignacionAula[]>([]);
   const [alertas, setAlertas] = useState<AlertaConciliacion[]>([]);
+  const [cargosPersonalizados, setCargosPersonalizados] = useState<CargoPersonalizado[]>([]);
+  const [planesEstudio, setPlanesEstudio] = useState<PlanEstudioNorm[]>([]);
 
-  // Dynamic Courses & Subjects
+  // Navigation tab state: 'docentes' | 'asistentes' | 'cursos'
+  const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos'>('docentes');
+
+  // Supervisor delegated mode
+  const [isSupervisorMode, setIsSupervisorMode] = useState(false);
+
+  // Individual Funcionario CRUD state
+  const [newRun, setNewRun] = useState('');
+  const [newNombre, setNewNombre] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newCargo, setNewCargo] = useState('Docente de Aula');
+  const [newEstamento, setNewEstamento] = useState<EstamentoType>('Docente');
+
+  // Courses and matrix
   const [cursosDinamicos, setCursosDinamicos] = useState<CursoDinamico[]>([]);
-  const [customCursoNombre, setCustomCursoNombre] = useState('');
-  const [customCursoNivel, setCustomCursoNivel] = useState('1° a 4° Básico');
-  const [customCursoRegimen, setCustomCursoRegimen] = useState<'JEC' | 'No JEC'>('JEC');
-
-  // Custom Extra-curricular Workshops (SEP) or subjects
-  const [customAsigNombre, setCustomAsigNombre] = useState('');
-  const [customAsigHoras, setCustomAsigHoras] = useState(4);
-  const [selectedCursoForAsig, setSelectedCursoForAsig] = useState('');
-
-  // Course & Hours planner state
   const [selectedCursoPlan, setSelectedCursoPlan] = useState('');
   const [selectedAsignatura, setSelectedAsignatura] = useState('');
   const [selectedDocenteRun, setSelectedDocenteRun] = useState('');
   const [asignacionHoras, setAsignacionHoras] = useState(6);
-  
-  // Itinerancy warning state
+  const [customAsigNombre, setCustomAsigNombre] = useState('');
+  const [customAsigHoras, setCustomAsigHoras] = useState(4);
+  const [selectedCursoForAsig, setSelectedCursoForAsig] = useState('');
+
+  // Normalized Courses database to choose from
+  const NOMENCLATURA_CURSOS = [
+    "1° Básico A", "1° Básico B", "2° Básico A", "2° Básico B",
+    "3° Básico A", "3° Básico B", "4° Básico A", "4° Básico B",
+    "5° Básico A", "5° Básico B", "6° Básico A", "6° Básico B",
+    "7° Básico A", "7° Básico B", "8° Básico A", "8° Básico B",
+    "1° Medio A", "1° Medio B", "2° Medio A", "2° Medio B",
+    "3° Medio A", "3° Medio B", "4° Medio A", "4° Medio B"
+  ];
+  const [selectedCursoNorm, setSelectedCursoNorm] = useState(NOMENCLATURA_CURSOS[0]);
+  const [selectedCursoNivel, setSelectedCursoNivel] = useState('1° a 4° Básico');
+  const [selectedCursoRegimen, setSelectedCursoRegimen] = useState<'JEC' | 'No JEC'>('JEC');
+
+  // Custom Local Roles
+  const [customCargoNombre, setCustomCargoNombre] = useState('');
+  const [customCargoHoras, setCustomCargoHoras] = useState(10);
+  const [customCargoDocente, setCustomCargoDocente] = useState('');
+  const [customCargoFondo, setCustomCargoFondo] = useState<OrigenFondo>('SEP');
+
   const [itineranciaAlerta, setItineranciaAlerta] = useState<string | null>(null);
 
   // Sync role parameters from localStorage
@@ -49,38 +82,44 @@ export default function EscuelaDashboard() {
     if (typeof window !== 'undefined') {
       const rbd = localStorage.getItem('slep_sim_rbd') || '10202';
       setSelectedRbd(rbd);
+      
+      const supMode = localStorage.getItem('slep_supervisor_mode') === 'true';
+      setIsSupervisorMode(supMode);
     }
   }, []);
 
   // Sync school details when selectedRbd changes
   useEffect(() => {
     if (!selectedRbd) return;
-    
-    async function loadSchoolData() {
-      const est = await api.getEstablecimientoByRbd(selectedRbd);
-      setColegio(est || null);
-
-      const conts = await api.getContratos(selectedRbd);
-      const funcs = await api.getFuncionarios();
-      const asigs = await api.getAsignacionesPorEstablecimiento(selectedRbd);
-      const alts = await api.getAlertas(selectedRbd);
-      const dynCursos = await api.getCursosDinamicos(selectedRbd);
-
-      setContratos(conts);
-      setFuncionarios(funcs);
-      setAsignaciones(asigs);
-      setAlertas(alts);
-      setCursosDinamicos(dynCursos);
-
-      // Default course selection
-      if (dynCursos.length > 0) {
-        setSelectedCursoForAsig(dynCursos[0].nombre);
-        setSelectedCursoPlan(dynCursos[0].nombre);
-      }
-    }
-    loadSchoolData();
+    loadAllSchoolData();
     setItineranciaAlerta(null);
   }, [selectedRbd]);
+
+  async function loadAllSchoolData() {
+    const est = await api.getEstablecimientoByRbd(selectedRbd);
+    setColegio(est || null);
+
+    const conts = await api.getContratos(selectedRbd);
+    const funcs = await api.getFuncionarios();
+    const asigs = await api.getAsignacionesPorEstablecimiento(selectedRbd);
+    const alts = await api.getAlertas(selectedRbd);
+    const dynCursos = await api.getCursosDinamicos(selectedRbd);
+    const customCargs = await api.getCargosPorEstablecimiento(selectedRbd);
+    const plans = await api.getPlanesEstudio();
+
+    setContratos(conts);
+    setFuncionarios(funcs);
+    setAsignaciones(asigs);
+    setAlertas(alts);
+    setCursosDinamicos(dynCursos);
+    setCargosPersonalizados(customCargs);
+    setPlanesEstudio(plans);
+
+    if (dynCursos.length > 0) {
+      setSelectedCursoForAsig(dynCursos[0].nombre);
+      setSelectedCursoPlan(dynCursos[0].nombre);
+    }
+  }
 
   // Check for multi-school active contracts when selected teacher changes (itinerancy alert)
   useEffect(() => {
@@ -103,7 +142,7 @@ export default function EscuelaDashboard() {
           return `RBD ${c.rbd} (${est ? est.nombre : 'Otra Escuela'}) con ${c.horas_totales} hrs`;
         }).join(', ');
         
-        setItineranciaAlerta(`⚠️ Alerta de Itinerancia: El docente registra contratos activos en otras escuelas: ${details}. Evite sobre-asignar su carga horaria legal.`);
+        setItineranciaAlerta(`⚠️ Alerta de Itinerancia: El funcionario registra contratos activos en otras escuelas: ${details}. Evite sobre-asignar su carga horaria legal.`);
       } else {
         setItineranciaAlerta(null);
       }
@@ -111,35 +150,118 @@ export default function EscuelaDashboard() {
     checkItinerancy();
   }, [selectedDocenteRun, selectedRbd]);
 
-  // Dynamic Course Creation
+  // Create individual Staff member (Docente or Asistente)
+  const handleCreateFuncionario = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRun || !newNombre || !newEmail) {
+      alert('Por favor complete los campos obligatorios.');
+      return;
+    }
+
+    const run = normalizarRun(newRun);
+    
+    // Create Funcionario Profile
+    await api.upsertFuncionario({
+      run,
+      nombre: newNombre,
+      email: newEmail,
+      estamento: newEstamento,
+      cargo: newCargo
+    });
+
+    // Create default contract for them in this school (e.g. 44 hours Contrata)
+    const newContId = `c-${selectedRbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
+    await api.upsertContratoCompleto({
+      id: newContId,
+      funcionario_run: run,
+      rbd: selectedRbd,
+      calidad_juridica: 'Contrata',
+      funcion_principal: newCargo,
+      estado: 'Activo',
+      horas_totales: 44
+    }, [
+      {
+        id: `f-${newContId}-Regular`,
+        contrato_id: newContId,
+        origen_fondo: 'Subvención Regular',
+        horas: 44
+      }
+    ]);
+
+    setNewRun('');
+    setNewNombre('');
+    setNewEmail('');
+    await loadAllSchoolData();
+    alert(`✅ ${newEstamento} creado exitosamente y asignado a esta escuela con contrato de 44 hrs.`);
+  };
+
+  const handleDeleteFuncionario = async (run: string) => {
+    if (confirm('¿Desea desvincular a este funcionario de este establecimiento?')) {
+      const relatedCont = contratos.find(c => c.funcionario_run === run);
+      if (relatedCont) {
+        dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== relatedCont.id);
+        dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== relatedCont.id);
+        dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.contrato_id !== relatedCont.id);
+      }
+      await loadAllSchoolData();
+    }
+  };
+
+  // Create course selecting from strict normalized list
   const handleCreateCurso = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customCursoNombre.trim()) {
-      alert('Ingrese un nombre de curso.');
+    if (cursosDinamicos.some(c => c.nombre === selectedCursoNorm)) {
+      alert('El curso ya se encuentra creado en este establecimiento.');
       return;
     }
 
     const nuevoCurso: CursoDinamico = {
       rbd: selectedRbd,
-      nombre: customCursoNombre.trim(),
-      nivel: customCursoNivel,
-      regimen: customCursoRegimen
+      nombre: selectedCursoNorm,
+      nivel: selectedCursoNivel,
+      regimen: selectedCursoRegimen
     };
 
     await api.crearCursoDinamico(nuevoCurso);
-    const updated = await api.getCursosDinamicos(selectedRbd);
-    setCursosDinamicos(updated);
-    setCustomCursoNombre('');
+    await loadAllSchoolData();
     setSelectedCursoForAsig(nuevoCurso.nombre);
     setSelectedCursoPlan(nuevoCurso.nombre);
-    alert('✅ Curso creado exitosamente.');
+    alert('✅ Curso normalizado creado con éxito.');
   };
 
-  // Dynamic Subject/Workshop Creation
+  // Create Custom Roles (SEP/PIE etc. bound)
+  const handleCreateCargoPersonalizado = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customCargoNombre.trim() || !customCargoDocente) {
+      alert('Complete los campos para el cargo.');
+      return;
+    }
+
+    const nuevoCargo: CargoPersonalizado = {
+      id: `cargo-${Date.now()}`,
+      rbd: selectedRbd,
+      nombre: customCargoNombre.trim(),
+      horas: parseFloat(customCargoHoras.toString()) || 10,
+      funcionario_run: customCargoDocente,
+      origen_fondo: customCargoFondo
+    };
+
+    await api.crearCargoPersonalizado(nuevoCargo);
+    setCustomCargoNombre('');
+    await loadAllSchoolData();
+    alert('✅ Cargo personalizado asignado.');
+  };
+
+  const handleRemoveCargo = async (id: string) => {
+    await api.removerCargoPersonalizado(id);
+    await loadAllSchoolData();
+  };
+
+  // Create Custom Extra-curricular Workshop
   const handleCreateAsignatura = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCursoForAsig || !customAsigNombre.trim()) {
-      alert('Faltan datos para crear la asignatura o taller.');
+      alert('Faltan datos.');
       return;
     }
 
@@ -152,22 +274,20 @@ export default function EscuelaDashboard() {
 
     await api.crearAsignaturaDinamica(nuevaAsig);
     setCustomAsigNombre('');
-    alert('✅ Asignatura/Taller SEP creado con éxito.');
+    await loadAllSchoolData();
+    alert('✅ Taller SEP creado con éxito.');
   };
 
-  // Assign hours
+  // Assign hours in matrix
   const handleAddAsignacion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDocenteRun || !selectedCursoPlan || !selectedAsignatura) {
-      alert('Debe seleccionar docente, curso y asignatura.');
+      alert('Complete los campos de la asignación.');
       return;
     }
 
     const contratoDocente = contratos.find(c => c.funcionario_run === selectedDocenteRun);
-    if (!contratoDocente) {
-      alert('El docente no tiene un contrato registrado para esta escuela.');
-      return;
-    }
+    if (!contratoDocente) return;
 
     const nuevaAsig: AsignacionAula = {
       id: `asig-${Date.now()}`,
@@ -178,36 +298,34 @@ export default function EscuelaDashboard() {
     };
 
     await api.saveAsignacion(nuevaAsig);
-    const updatedAsigs = await api.getAsignacionesPorEstablecimiento(selectedRbd);
-    setAsignaciones(updatedAsigs);
+    await loadAllSchoolData();
   };
 
   const handleDeleteAsignacion = async (id: string) => {
     await api.deleteAsignacion(id);
-    const updatedAsigs = await api.getAsignacionesPorEstablecimiento(selectedRbd);
-    setAsignaciones(updatedAsigs);
+    await loadAllSchoolData();
   };
 
-  // Toggle Contract status (Licence / Active)
+  // Toggle Licence & Replacement mirrors
   const handleToggleLicencia = async (contratoId: string, enLicencia: boolean) => {
     const nuevoEstado = enLicencia ? 'Licencia Médica' : 'Activo';
     await api.updateContratoEstado(contratoId, nuevoEstado);
-    const updatedConts = await api.getContratos(selectedRbd);
-    setContratos(updatedConts);
+    await loadAllSchoolData();
   };
 
-  // Add replacement contract
   const handleAddReemplazo = async (titularContrato: Contrato, runReemplazante: string) => {
     const cleanRun = runReemplazante.trim();
     if (!cleanRun) return;
 
     await api.upsertFuncionario({
       run: cleanRun,
-      nombre: 'Reemplazante Asignado'
+      nombre: 'Reemplazante Asignado',
+      estamento: 'Docente',
+      cargo: 'Reemplazo'
     });
 
     const replacementId = `reemp-${Date.now()}`;
-    const nuevoContrato: Contrato = {
+    await api.upsertContratoCompleto({
       id: replacementId,
       funcionario_run: cleanRun,
       rbd: selectedRbd,
@@ -216,9 +334,7 @@ export default function EscuelaDashboard() {
       estado: 'Reemplazo',
       horas_totales: titularContrato.horas_totales,
       vinculo_titular_id: titularContrato.id
-    };
-
-    await api.upsertContratoCompleto(nuevoContrato, [
+    }, [
       {
         id: `fin-reemp-${replacementId}`,
         contrato_id: replacementId,
@@ -227,7 +343,6 @@ export default function EscuelaDashboard() {
       }
     ]);
 
-    // Copy classroom load
     const titularAsigs = asignaciones.filter(a => a.contrato_id === titularContrato.id);
     for (const a of titularAsigs) {
       await api.saveAsignacion({
@@ -239,20 +354,27 @@ export default function EscuelaDashboard() {
       });
     }
 
-    const updatedConts = await api.getContratos(selectedRbd);
-    const updatedAsigs = await api.getAsignacionesPorEstablecimiento(selectedRbd);
-    const updatedFuncs = await api.getFuncionarios();
-    
-    setContratos(updatedConts);
-    setAsignaciones(updatedAsigs);
-    setFuncionarios(updatedFuncs);
-
-    alert('✅ Reemplazo espejo creado con éxito.');
+    await loadAllSchoolData();
+    alert('✅ Reemplazo creado con éxito.');
   };
 
-  // Get available subjects for the selected course
+  // Exit supervisor delegated mode
+  const handleExitSupervisorMode = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('slep_sim_role', 'profesional_slep');
+      localStorage.removeItem('slep_supervisor_mode');
+      router.push('/profesional');
+    }
+  };
+
+  // Mock Export files (xlsx / pdf)
+  const handleExportDotacion = (format: 'xlsx' | 'pdf') => {
+    alert(`📥 Descargando Dotación de Personal Completa (${colegio?.nombre}) en formato ${format.toUpperCase()}...`);
+  };
+
+  // Curricular plans for matrix selector
   const activeCourse = cursosDinamicos.find(c => c.nombre === selectedCursoPlan);
-  const planMineduc = activeCourse ? PLANES_MINEDUC.find(p => p.nivel === activeCourse.nivel && p.regimen === activeCourse.regimen) : null;
+  const planMineduc = activeCourse ? planesEstudio.find(p => p.nivel === activeCourse.nivel && p.regimen === activeCourse.regimen) : null;
   const [dynAsigs, setDynAsigs] = useState<AsignaturaDinamica[]>([]);
 
   useEffect(() => {
@@ -261,7 +383,6 @@ export default function EscuelaDashboard() {
       const list = await api.getAsignaturasDinamicas(selectedRbd, selectedCursoPlan);
       setDynAsigs(list);
       
-      // Select first subject by default
       if (planMineduc && planMineduc.asignaturasBase.length > 0) {
         setSelectedAsignatura(planMineduc.asignaturasBase[0].nombre);
       } else if (list.length > 0) {
@@ -273,369 +394,610 @@ export default function EscuelaDashboard() {
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
+      
       {/* Header */}
       <header className="bg-slep-blue text-white shadow-md py-4 px-6 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-2xl hover:opacity-80 transition-opacity">🎒</Link>
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-slate-300 font-semibold leading-none">Director / UTP de Escuela</p>
-              <h1 className="text-lg font-bold tracking-tight mt-1">Gestión Interna del Establecimiento</h1>
+            <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="brightness-0 invert object-contain" />
+            <div className="border-l border-white/20 pl-3">
+              <p className="text-[9px] uppercase tracking-wider text-slate-300 font-semibold leading-none">
+                {isSupervisorMode ? 'Acceso Supervisor Delegado' : 'Director / UTP de Escuela'}
+              </p>
+              <h1 className="text-sm font-bold tracking-tight mt-0.5">{colegio ? colegio.nombre : 'Establecimiento'}</h1>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="bg-white/10 px-3 py-1.5 rounded text-xs font-mono font-bold">
-              RBD: {selectedRbd}
-            </span>
-            <Link href="/" className="bg-white/10 hover:bg-white/20 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors border border-white/10">
-              Cerrar Sesión
-            </Link>
+            <span className="bg-white/10 px-3 py-1.5 rounded text-xs font-mono font-bold">RBD: {selectedRbd}</span>
+            {isSupervisorMode ? (
+              <button 
+                onClick={handleExitSupervisorMode}
+                className="bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold px-4 py-2 rounded-lg text-xs shadow transition-all duration-200"
+              >
+                Volver a Supervisor 🔙
+              </button>
+            ) : (
+              <Link href="/" className="bg-white/10 hover:bg-white/20 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors border border-white/10">
+                Cerrar Sesión
+              </Link>
+            )}
           </div>
         </div>
       </header>
 
       {/* Main Grid */}
-      <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
+      <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full">
         
-        {/* Left Column: School details and Course/Subject creation */}
-        <div className="space-y-6 lg:col-span-1">
-          
-          {colegio && (
-            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-16 h-16 bg-slep-blue/5 rounded-bl-full"></div>
-              <h2 className="text-lg font-bold text-slate-800">{colegio.nombre}</h2>
-              <div className="mt-4 grid grid-cols-2 gap-4 text-xs font-semibold">
-                <div>
-                  <span className="text-slate-400 block uppercase">Comuna</span>
-                  <span className="text-slate-700">{colegio.comuna}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block uppercase">IVM</span>
-                  <span className={`px-1.5 py-0.2 rounded ${colegio.ivm > 80 ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                    {colegio.ivm}%
-                  </span>
-                </div>
-              </div>
+        {/* Upper Dashboard with export buttons */}
+        <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50/50">
+          <div className="flex gap-6 text-center text-xs">
+            <div>
+              <p className="text-slate-400 font-bold uppercase">Docentes activos</p>
+              <p className="text-xl font-bold text-slep-blue">{funcionarios.filter(f => f.estamento === 'Docente').length}</p>
             </div>
-          )}
-
-          {/* Create Dynamic Course Form */}
-          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <span>🏫</span> Crear Curso Escolar
-            </h3>
-            
-            <form onSubmit={handleCreateCurso} className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-500 font-bold mb-1">Nombre del Curso</label>
-                <input 
-                  type="text" 
-                  placeholder="Ej: 3° Básico A, 1° Medio B" 
-                  className="w-full p-2 border border-slate-300 rounded"
-                  value={customCursoNombre}
-                  onChange={(e) => setCustomCursoNombre(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-500 font-bold mb-1">Nivel Educativo</label>
-                <select 
-                  className="w-full p-2 border border-slate-300 rounded bg-white"
-                  value={customCursoNivel}
-                  onChange={(e) => setCustomCursoNivel(e.target.value)}
-                >
-                  <option value="1° a 4° Básico">1° a 4° Básico</option>
-                  <option value="5° a 8° Básico">5° a 8° Básico</option>
-                  <option value="Educación Parvularia (Pre-Kínder y Kínder)">Educación Parvularia</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-500 font-bold mb-1">Régimen JEC</label>
-                <select 
-                  className="w-full p-2 border border-slate-300 rounded bg-white"
-                  value={customCursoRegimen}
-                  onChange={(e) => setCustomCursoRegimen(e.target.value as any)}
-                >
-                  <option value="JEC">JEC (38 hrs)</option>
-                  <option value="No JEC">No JEC (33 hrs)</option>
-                </select>
-              </div>
-
-              <button 
-                type="submit"
-                className="w-full bg-slep-blue text-white py-2 rounded font-bold shadow"
-              >
-                Crear Curso
-              </button>
-            </form>
+            <div className="border-l border-slate-200 pl-6">
+              <p className="text-slate-400 font-bold uppercase">Asistentes activos</p>
+              <p className="text-xl font-bold text-slep-blue">{funcionarios.filter(f => f.estamento === 'Asistente de la Educación').length}</p>
+            </div>
+            <div className="border-l border-slate-200 pl-6">
+              <p className="text-slate-400 font-bold uppercase">Cursos Creados</p>
+              <p className="text-xl font-bold text-slep-blue">{cursosDinamicos.length}</p>
+            </div>
           </div>
 
-          {/* Create Custom Subjects / Extra-curricular workshops (SEP) */}
-          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <span>🎨</span> Talleres SEP o Asignaturas Propias
-            </h3>
-
-            <form onSubmit={handleCreateAsignatura} className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-500 font-bold mb-1">Seleccionar Curso</label>
-                <select 
-                  className="w-full p-2 border border-slate-300 rounded bg-white"
-                  value={selectedCursoForAsig}
-                  onChange={(e) => setSelectedCursoForAsig(e.target.value)}
-                >
-                  {cursosDinamicos.map(c => (
-                    <option key={c.nombre} value={c.nombre}>{c.nombre}</option>
-                  ))}
-                  {cursosDinamicos.length === 0 && (
-                    <option value="">-- Cree un curso primero --</option>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-500 font-bold mb-1">Nombre Taller / Asignatura</label>
-                <input 
-                  type="text" 
-                  placeholder="Ej: Taller de Robótica SEP" 
-                  className="w-full p-2 border border-slate-300 rounded"
-                  value={customAsigNombre}
-                  onChange={(e) => setCustomAsigNombre(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-500 font-bold mb-1">Horas Semanales</label>
-                <input 
-                  type="number" 
-                  className="w-full p-2 border border-slate-300 rounded font-bold"
-                  value={customAsigHoras}
-                  onChange={(e) => setCustomAsigHoras(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-
-              <button 
-                type="submit"
-                className="w-full bg-slep-blue text-white py-2 rounded font-bold shadow"
-              >
-                Crear Taller/Asignatura
-              </button>
-            </form>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => handleExportDotacion('xlsx')}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded text-xs shadow flex items-center gap-1"
+            >
+              📊 Exportar Excel (.xlsx)
+            </button>
+            <button 
+              onClick={() => window.print()}
+              className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded text-xs shadow flex items-center gap-1"
+            >
+              📄 Imprimir PDF
+            </button>
           </div>
-
         </div>
 
-        {/* Center/Right Column: Interactive matrix, Ley 20903, replacement mirroring */}
-        <div className="lg:col-span-2 space-y-6">
+        {/* Tab Buttons Navigation */}
+        <div className="flex border-b border-slate-200 gap-1 bg-white p-1.5 rounded-xl border">
+          <button 
+            onClick={() => setActiveTab('docentes')}
+            className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all ${
+              activeTab === 'docentes' 
+                ? 'bg-slep-blue text-white shadow-sm' 
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            🍎 Nómina Docente
+          </button>
+          <button 
+            onClick={() => setActiveTab('asistentes')}
+            className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all ${
+              activeTab === 'asistentes' 
+                ? 'bg-slep-blue text-white shadow-sm' 
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            👥 Asistentes de la Educación
+          </button>
+          <button 
+            onClick={() => setActiveTab('cursos')}
+            className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all ${
+              activeTab === 'cursos' 
+                ? 'bg-slep-blue text-white shadow-sm' 
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            🏫 Cursos y Carga Horaria
+          </button>
+        </div>
 
-          {/* Asignación Curricular Matrix */}
-          <div className="bg-white rounded-xl shadow-lg border border-slate-200/60 p-6">
-            <h3 className="text-base font-bold text-slate-800">Planificador de Asignaciones Curriculares</h3>
-            <p className="text-xs text-slate-500 mt-1">Arrastra y vincula docentes a los cursos e itinerarios creados.</p>
-
-            <form onSubmit={handleAddAsignacion} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl text-xs border">
-              <div>
-                <label className="block font-bold text-slate-500 mb-1">Curso Destino</label>
-                <select 
-                  className="w-full p-2 bg-white border border-slate-300 rounded"
-                  value={selectedCursoPlan}
-                  onChange={(e) => setSelectedCursoPlan(e.target.value)}
-                >
-                  <option value="">-- Seleccionar --</option>
-                  {cursosDinamicos.map(c => (
-                    <option key={c.nombre} value={c.nombre}>{c.nombre}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-500 mb-1">Asignatura / Taller</label>
-                <select 
-                  className="w-full p-2 bg-white border border-slate-300 rounded"
-                  value={selectedAsignatura}
-                  onChange={(e) => setSelectedAsignatura(e.target.value)}
-                >
-                  {planMineduc?.asignaturasBase.map(a => (
-                    <option key={a.nombre} value={a.nombre}>{a.nombre}</option>
-                  ))}
-                  {dynAsigs.map(a => (
-                    <option key={a.nombre} value={a.nombre}>{a.nombre} (Custom SEP)</option>
-                  ))}
-                  {!planMineduc && dynAsigs.length === 0 && (
-                    <option value="">-- Ninguna --</option>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-500 mb-1">Docente</label>
-                <select 
-                  className="w-full p-2 bg-white border border-slate-300 rounded"
-                  value={selectedDocenteRun}
-                  onChange={(e) => setSelectedDocenteRun(e.target.value)}
-                >
-                  <option value="">-- Seleccionar --</option>
-                  {contratos.map(c => {
-                    const func = funcionarios.find(f => f.run === c.funcionario_run);
-                    return (
-                      <option key={c.id} value={c.funcionario_run}>
-                        {func ? func.nombre : c.funcionario_run} ({c.horas_totales} hrs)
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-500 mb-1">Horas Semanales</label>
-                <input 
-                  type="number" 
-                  step="0.1"
-                  className="w-full p-2 bg-white border border-slate-300 rounded font-bold"
-                  value={asignacionHoras}
-                  onChange={(e) => setAsignacionHoras(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-
-              <div className="md:col-span-4 flex justify-between items-center border-t pt-2 mt-2">
-                <span className="text-[11px] text-slate-500 font-medium italic">
-                  * Las asignaciones SEP se cargan directamente a los fondos de la Ley de Subvención Escolar Preferencial.
-                </span>
-                <button 
-                  type="submit"
-                  className="bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold px-6 py-2 rounded text-xs shadow"
-                >
-                  Asignar Carga
-                </button>
-              </div>
-            </form>
-
-            {itineranciaAlerta && (
-              <div className="mt-3 bg-red-50 border border-red-200 text-red-800 text-xs px-4 py-2.5 rounded font-medium">
-                {itineranciaAlerta}
+        {/* Tab contents */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Main Area based on active tab */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            {activeTab === 'docentes' && (
+              <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+                <h3 className="text-base font-bold text-slate-800">Docentes del Establecimiento</h3>
+                <p className="text-xs text-slate-500 mt-1">Gestión individual e inmediata de la dotación docente.</p>
+                
+                <div className="mt-4 border border-slate-100 rounded-lg overflow-hidden text-xs">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-100 font-bold text-slate-600">
+                      <tr>
+                        <th className="p-3 pl-4">Nombre</th>
+                        <th className="p-3">RUT</th>
+                        <th className="p-3">Cargo</th>
+                        <th className="p-3 text-center">Contrato</th>
+                        <th className="p-3 text-center">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {funcionarios.filter(f => f.estamento === 'Docente').map(f => {
+                        const hasCont = contratos.find(c => c.funcionario_run === f.run);
+                        return (
+                          <tr key={f.run} className="hover:bg-slate-50">
+                            <td className="p-3 pl-4 font-bold text-slate-800">{f.nombre}</td>
+                            <td className="p-3 font-mono text-slate-500">{f.run}</td>
+                            <td className="p-3 text-slate-700">{f.cargo || 'Docente'}</td>
+                            <td className="p-3 text-center font-semibold text-slep-blue">
+                              {hasCont ? `${hasCont.horas_totales} hrs (${hasCont.estado})` : 'Sin Contrato'}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                onClick={() => handleDeleteFuncionario(f.run)}
+                                className="text-red-500 hover:text-red-700 font-bold"
+                              >
+                                Desvincular
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
-            {/* Matrix list */}
-            <div className="mt-6 border border-slate-200 rounded-xl overflow-hidden text-xs">
-              <table className="w-full text-left">
-                <thead className="bg-slate-100 text-slate-600 font-bold">
-                  <tr>
-                    <th className="p-3 pl-4">Curso</th>
-                    <th className="p-3">Asignatura / Taller</th>
-                    <th className="p-3">Docente a Cargo</th>
-                    <th className="p-3 text-center">Horas Asignadas</th>
-                    <th className="p-3 text-center">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {asignaciones.map(a => {
-                    const c = contratos.find(contract => contract.id === a.contrato_id);
-                    const func = c ? funcionarios.find(f => f.run === c.funcionario_run) : null;
-                    return (
-                      <tr key={a.id} className="hover:bg-slate-50">
-                        <td className="p-3 pl-4 font-bold text-slate-800">{a.curso}</td>
-                        <td className="p-3 text-slate-700">{a.asignatura}</td>
-                        <td className="p-3 text-slate-800">
-                          {func ? func.nombre : a.contrato_id} {c?.estado === 'Licencia Médica' && '🛑 (Licencia)'}
-                        </td>
-                        <td className="p-3 text-center font-bold text-slate-700">{a.horas} hrs</td>
-                        <td className="p-3 text-center">
-                          <button 
-                            onClick={() => handleDeleteAsignacion(a.id)}
-                            className="text-red-500 hover:text-red-700 font-bold"
-                          >
-                            Eliminar
-                          </button>
-                        </td>
+            {activeTab === 'asistentes' && (
+              <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+                <h3 className="text-base font-bold text-slate-800">Asistentes de la Educación</h3>
+                <p className="text-xs text-slate-500 mt-1">Gestión individual de profesionales técnicos, psicólogos, administrativos y auxiliares.</p>
+
+                <div className="mt-4 border border-slate-100 rounded-lg overflow-hidden text-xs">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-100 font-bold text-slate-600">
+                      <tr>
+                        <th className="p-3 pl-4">Nombre</th>
+                        <th className="p-3">RUT</th>
+                        <th className="p-3">Función/Cargo</th>
+                        <th className="p-3 text-center">Horas</th>
+                        <th className="p-3 text-center">Acciones</th>
                       </tr>
-                    );
-                  })}
-                  {asignaciones.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="p-6 text-center text-slate-400 italic">
-                        No hay asignaciones cargadas en la matriz. Cree un curso y asigne horas arriba.
-                      </td>
-                    </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {funcionarios.filter(f => f.estamento === 'Asistente de la Educación').map(f => {
+                        const hasCont = contratos.find(c => c.funcionario_run === f.run);
+                        return (
+                          <tr key={f.run} className="hover:bg-slate-50">
+                            <td className="p-3 pl-4 font-bold text-slate-800">{f.nombre}</td>
+                            <td className="p-3 font-mono text-slate-500">{f.run}</td>
+                            <td className="p-3 text-slate-700">{f.cargo || 'Asistente'}</td>
+                            <td className="p-3 text-center font-semibold text-slep-blue">
+                              {hasCont ? `${hasCont.horas_totales} hrs` : 'Sin Contrato'}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                onClick={() => handleDeleteFuncionario(f.run)}
+                                className="text-red-500 hover:text-red-700 font-bold"
+                              >
+                                Desvincular
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'cursos' && (
+              <div className="space-y-6">
+                
+                {/* Course list, custom cargo loader, PIE Checker, and assignment matrix */}
+                <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+                  <h3 className="text-base font-bold text-slate-800">Planificador de Carga Horaria y Cursos</h3>
+                  
+                  {/* Select normalized course names only */}
+                  <form onSubmit={handleCreateCurso} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border text-xs">
+                    <div className="md:col-span-2">
+                      <label className="block font-bold text-slate-500 mb-1">Nombre Normalizado MINEDUC</label>
+                      <select
+                        className="w-full p-2 bg-white border rounded"
+                        value={selectedCursoNorm}
+                        onChange={(e) => setSelectedCursoNorm(e.target.value)}
+                      >
+                        {NOMENCLATURA_CURSOS.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Régimen</label>
+                      <select
+                        className="w-full p-2 bg-white border rounded"
+                        value={selectedCursoRegimen}
+                        onChange={(e) => {
+                          setSelectedCursoRegimen(e.target.value as any);
+                          if (selectedCursoNorm.includes('Medio')) setSelectedCursoNivel('5° a 8° Básico');
+                          else setSelectedCursoNivel('1° a 4° Básico');
+                        }}
+                      >
+                        <option value="JEC">JEC (38 hrs)</option>
+                        <option value="No JEC">No JEC (33 hrs)</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-end">
+                      <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2 rounded text-xs shadow">
+                        Crear Curso
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Create Custom Roles (SEP/PIE etc. bound) */}
+                  <form onSubmit={handleCreateCargoPersonalizado} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Cargo Personalizado Escuela</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: Encargado Convivencia" 
+                        className="w-full p-2 border rounded"
+                        value={customCargoNombre}
+                        onChange={(e) => setCustomCargoNombre(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Asociar Subvención</label>
+                      <select
+                        className="w-full p-2 bg-white border rounded"
+                        value={customCargoFondo}
+                        onChange={(e) => setCustomCargoFondo(e.target.value as any)}
+                      >
+                        <option value="SEP">SEP (Ley SEP)</option>
+                        <option value="PIE">PIE (Programa Integración)</option>
+                        <option value="Subvención Regular">Subvención Regular</option>
+                        <option value="Pro-retención">Pro-retención</option>
+                        <option value="Reforzamiento">Reforzamiento</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Docente Asignado</label>
+                      <select
+                        className="w-full p-2 bg-white border rounded"
+                        value={customCargoDocente}
+                        onChange={(e) => setCustomCargoDocente(e.target.value)}
+                      >
+                        <option value="">-- Seleccionar --</option>
+                        {contratos.map(c => {
+                          const f = funcionarios.find(func => func.run === c.funcionario_run);
+                          return <option key={c.id} value={c.funcionario_run}>{f ? f.nombre : c.funcionario_run}</option>;
+                        })}
+                      </select>
+                    </div>
+                    <div className="flex items-end">
+                      <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2 rounded text-xs shadow">
+                        Asignar Cargo
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Create extra-curricular SEP workshops */}
+                  <form onSubmit={handleCreateAsignatura} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Curso Asignado</label>
+                      <select
+                        className="w-full p-2 bg-white border rounded"
+                        value={selectedCursoForAsig}
+                        onChange={(e) => setSelectedCursoForAsig(e.target.value)}
+                      >
+                        {cursosDinamicos.map(c => (
+                          <option key={c.nombre} value={c.nombre}>{c.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block font-bold text-slate-500 mb-1">Nombre Taller Extra-programático (SEP)</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: Taller de Música SEP" 
+                        className="w-full p-2 border rounded"
+                        value={customAsigNombre}
+                        onChange={(e) => setCustomAsigNombre(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2 rounded text-xs shadow">
+                        Crear Taller SEP
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Intelligent PIE validation Module */}
+                <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+                  <h3 className="text-base font-bold text-slate-800">Módulo PIE Inteligente (Decretos MINEDUC)</h3>
+                  <p className="text-xs text-slate-500 mt-1">Coteja que las horas asignadas a co-docencia PIE por curso cuadren con el decreto oficial.</p>
+                  
+                  <div className="mt-4 space-y-3">
+                    {cursosDinamicos.map(c => {
+                      const dec = planesEstudio.find(p => p.nivel === c.nivel && p.regimen === c.regimen);
+                      const hrsRequeridas = dec ? dec.horasPIEReglamentarias : 10;
+                      
+                      // Calculate actual co-teaching hours assigned in PIE under this course
+                      const activeContractsPie = contratos.filter(cont => {
+                        const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === cont.id);
+                        return fins.some(f => f.origen_fondo === 'PIE');
+                      });
+                      const contractIdsPie = activeContractsPie.map(cont => cont.id);
+                      
+                      const hrsAsignadasPie = asignaciones
+                        .filter(a => a.curso === c.nombre && contractIdsPie.includes(a.contrato_id))
+                        .reduce((sum, a) => sum + a.horas, 0);
+
+                      const delta = hrsAsignadasPie - hrsRequeridas;
+                      const matches = Math.abs(delta) < 0.05;
+
+                      return (
+                        <div key={c.nombre} className={`p-3 rounded-lg border text-xs flex justify-between items-center ${
+                          matches ? 'bg-emerald-50 border-emerald-200 text-emerald-950' : 'bg-red-50 border-red-200 text-red-950'
+                        }`}>
+                          <div>
+                            <span className="font-bold">{c.nombre}</span>
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              Exigido Decreto: {hrsRequeridas} hrs • Asignado Co-docencia: <strong>{hrsAsignadasPie} hrs</strong>
+                            </p>
+                          </div>
+                          <div>
+                            {matches ? (
+                              <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px]">
+                                ✓ PIE Cuadrado
+                              </span>
+                            ) : (
+                              <span className="bg-slep-coral/20 text-red-800 font-bold px-2 py-0.5 rounded text-[10px]">
+                                ⚠️ Descalce PIE: {delta > 0 ? `+${delta}` : delta} hrs
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Matrix Hours */}
+                <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+                  <h3 className="text-base font-bold text-slate-800">Matriz Horaria Interactiva</h3>
+                  <form onSubmit={handleAddAsignacion} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Curso</label>
+                      <select 
+                        className="w-full p-2 bg-white border rounded"
+                        value={selectedCursoPlan}
+                        onChange={(e) => setSelectedCursoPlan(e.target.value)}
+                      >
+                        <option value="">-- Seleccionar --</option>
+                        {cursosDinamicos.map(c => (
+                          <option key={c.nombre} value={c.nombre}>{c.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Asignatura / Taller</label>
+                      <select 
+                        className="w-full p-2 bg-white border rounded"
+                        value={selectedAsignatura}
+                        onChange={(e) => setSelectedAsignatura(e.target.value)}
+                      >
+                        {planMineduc?.asignaturasBase.map(a => (
+                          <option key={a.nombre} value={a.nombre}>{a.nombre}</option>
+                        ))}
+                        {dynAsigs.map(a => (
+                          <option key={a.nombre} value={a.nombre}>{a.nombre} (Custom SEP)</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Docente</label>
+                      <select 
+                        className="w-full p-2 bg-white border rounded"
+                        value={selectedDocenteRun}
+                        onChange={(e) => setSelectedDocenteRun(e.target.value)}
+                      >
+                        <option value="">-- Seleccionar --</option>
+                        {contratos.map(c => {
+                          const f = funcionarios.find(func => func.run === c.funcionario_run);
+                          return <option key={c.id} value={c.funcionario_run}>{f ? f.nombre : c.funcionario_run}</option>;
+                        })}
+                      </select>
+                    </div>
+
+                    <div className="flex items-end">
+                      <button type="submit" className="w-full bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold py-2 rounded text-xs shadow">
+                        Asignar
+                      </button>
+                    </div>
+                  </form>
+
+                  {itineranciaAlerta && (
+                    <div className="mt-3 bg-red-50 border border-red-200 text-red-800 text-xs px-4 py-2.5 rounded font-medium">
+                      {itineranciaAlerta}
+                    </div>
                   )}
-                </tbody>
-              </table>
-            </div>
+
+                  <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden text-xs">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-100 font-bold">
+                        <tr>
+                          <th className="p-3 pl-4">Curso</th>
+                          <th className="p-3">Asignatura</th>
+                          <th className="p-3">Docente</th>
+                          <th className="p-3 text-center">Horas</th>
+                          <th className="p-3 text-center">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {asignaciones.map(a => {
+                          const c = contratos.find(cont => cont.id === a.contract_id || cont.id === a.contrato_id);
+                          const f = c ? funcionarios.find(func => func.run === c.funcionario_run) : null;
+                          return (
+                            <tr key={a.id}>
+                              <td className="p-3 pl-4 font-bold text-slate-800">{a.curso}</td>
+                              <td className="p-3 text-slate-700">{a.asignatura}</td>
+                              <td className="p-3 font-semibold">{f ? f.nombre : 'Sin Asignar'}</td>
+                              <td className="p-3 text-center font-bold">{a.horas} hrs</td>
+                              <td className="p-3 text-center">
+                                <button onClick={() => handleDeleteAsignacion(a.id)} className="text-red-500 hover:text-red-700 font-bold">
+                                  Eliminar
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
           </div>
 
-          {/* Ley 20.903 & Licenses Panel */}
-          <div className="bg-white rounded-xl shadow-lg border border-slate-200/60 p-6">
-            <h3 className="text-base font-bold text-slate-800">Consolidado Docente y Ley 20.903</h3>
-            <p className="text-xs text-slate-500 mt-1">Estatus del cumplimiento lectivo/no lectivo legal.</p>
+          {/* Right Column: Creation forms (Docente/Asistente) & Custom roles list */}
+          <div className="space-y-6">
+            
+            {/* Form to create individual Staff profile (Tab 1 / Tab 2 context) */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <span>➕</span> Agregar Funcionario Individual
+              </h3>
+              
+              <form onSubmit={handleCreateFuncionario} className="mt-4 space-y-3 text-xs">
+                <div>
+                  <label className="block text-slate-500 font-bold mb-1">RUN (Cédula de Identidad)</label>
+                  <input 
+                    type="text" 
+                    placeholder="12.345.678-9" 
+                    className="w-full p-2 border rounded"
+                    value={newRun}
+                    onChange={(e) => setNewRun(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-bold mb-1">Nombre Completo</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ej: María José Riquelme" 
+                    className="w-full p-2 border rounded"
+                    value={newNombre}
+                    onChange={(e) => setNewNombre(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-bold mb-1">Correo Electrónico</label>
+                  <input 
+                    type="email" 
+                    placeholder="correo@slep.cl" 
+                    className="w-full p-2 border rounded"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-bold mb-1">Estamento</label>
+                  <select 
+                    className="w-full p-2 border rounded bg-white"
+                    value={newEstamento}
+                    onChange={(e) => {
+                      setNewEstamento(e.target.value as any);
+                      if (e.target.value === 'Docente') setNewCargo('Docente de Aula');
+                      else setNewCargo('Auxiliar de Servicios');
+                    }}
+                  >
+                    <option value="Docente">Docente / Profesor</option>
+                    <option value="Asistente de la Educación">Asistente de la Educación</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-bold mb-1">Función / Cargo</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ej: Docente de Matemática, Psicóloga, etc." 
+                    className="w-full p-2 border rounded"
+                    value={newCargo}
+                    onChange={(e) => setNewCargo(e.target.value)}
+                  />
+                </div>
 
-            <div className="mt-4 space-y-4">
-              {contratos.map(c => {
-                const func = funcionarios.find(f => f.run === c.funcionario_run);
-                const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
-                const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs) : null;
-
-                if (!metrics) return null;
-
-                let alertColor = 'border-slep-emerald bg-emerald-50 text-emerald-950';
-                let indicatorName = 'Cumplimiento OK';
-
-                if (c.estado === 'Licencia Médica') {
-                  alertColor = 'border-amber-400 bg-amber-50 text-amber-950';
-                  indicatorName = 'Horas Congeladas (Licencia)';
-                } else if (!metrics.cumpleLey20903) {
-                  alertColor = 'border-slep-coral bg-red-50 text-red-950';
-                  indicatorName = 'Horas Lectivas Excedidas';
-                } else if (metrics.horasDisponibles > 0.05) {
-                  alertColor = 'border-slep-warning bg-amber-50 text-amber-950';
-                  indicatorName = `${metrics.horasDisponibles} hrs disponibles`;
-                }
-
-                return (
-                  <div key={c.id} className={`p-4 rounded-xl border-l-4 shadow-sm text-xs relative ${alertColor}`}>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-bold text-sm text-slate-900">
-                          {func ? func.nombre : c.funcionario_run} 
-                          <span className="text-[10px] text-slate-500 font-mono ml-2">({c.calidad_juridica})</span>
-                        </h4>
-                        <p className="mt-1 text-slate-600">
-                          Contrato: {c.horas_totales} hrs • Aula Asignada: <strong>{metrics.horasLectivasAsignadas} hrs</strong> (Máx legal: {metrics.horasLectivasMaximas} hrs).
-                        </p>
-                        <p className="text-[9px] text-slate-500 mt-1 font-bold">
-                          Ley Especial IVM: {metrics.leyEspecialAplicada ? 'SI (Proporción 60/40)' : 'NO (Proporción 65/35)'}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="font-bold block">{indicatorName}</span>
-                        
-                        {c.estado === 'Licencia Médica' ? (
-                          <button 
-                            onClick={() => {
-                              const rRun = prompt('RUN del Reemplazante (ej: 18.901.234-5):');
-                              if (rRun) handleAddReemplazo(c, rRun);
-                            }}
-                            className="mt-2 bg-slep-blue text-white font-bold px-2 py-0.5 rounded text-[10px]"
-                          >
-                            Crear Reemplazo Espejo
-                          </button>
-                        ) : (
-                          <div className="mt-2 flex items-center gap-1 justify-end">
-                            <span className="text-[10px] text-slate-500">¿Licencia?</span>
-                            <input 
-                              type="checkbox" 
-                              checked={false}
-                              onChange={(e) => handleToggleLicencia(c.id, e.target.checked)}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2.5 rounded shadow">
+                  Agregar Funcionario
+                </button>
+              </form>
             </div>
+
+            {/* Custom Roles list */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <h3 className="text-sm font-bold text-slate-800">Cargos Especiales Asignados</h3>
+              <p className="text-xs text-slate-500 mt-1">Lista de roles escolares financiados por subvenciones.</p>
+
+              <div className="mt-4 space-y-2 max-h-[200px] overflow-y-auto pr-1 text-xs">
+                {cargosPersonalizados.map(c => {
+                  const f = funcionarios.find(func => func.run === c.funcionario_run);
+                  return (
+                    <div key={c.id} className="p-3 bg-slate-50 border rounded flex justify-between items-center">
+                      <div>
+                        <p className="font-bold text-slate-800">{c.nombre}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">
+                          {f ? f.nombre : c.funcionario_run} • <strong>{c.horas} hrs ({c.origen_fondo})</strong>
+                        </p>
+                      </div>
+                      <button onClick={() => handleRemoveCargo(c.id)} className="text-red-500 hover:text-red-700 font-bold">
+                        Eliminar
+                      </button>
+                    </div>
+                  );
+                })}
+                {cargosPersonalizados.length === 0 && (
+                  <p className="text-center py-4 text-slate-400 italic">No hay cargos personalizados creados.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Ley 20.903 compliance alerts */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <h3 className="text-sm font-bold text-slate-800">Semáforo de Ley 20.903</h3>
+              
+              <div className="mt-4 space-y-2 text-xs">
+                {contratos.map(c => {
+                  const f = funcionarios.find(func => func.run === c.funcionario_run);
+                  const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
+                  const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs) : null;
+                  
+                  if (!metrics) return null;
+                  const isOk = metrics.cumpleLey20903;
+                  
+                  return (
+                    <div key={c.id} className={`p-2.5 rounded border flex justify-between items-center ${
+                      isOk ? 'bg-emerald-50 border-emerald-200 text-emerald-950' : 'bg-red-50 border-red-200 text-red-950'
+                    }`}>
+                      <div>
+                        <span className="font-bold">{f ? f.nombre : c.funcionario_run}</span>
+                        <p className="text-[10px] text-slate-500">Lectivas: {metrics.horasLectivasAsignadas} / {metrics.horasLectivasMaximas} hrs</p>
+                      </div>
+                      <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                        isOk ? 'bg-emerald-100 text-emerald-800' : 'bg-slep-coral/20 text-red-800'
+                      }`}>
+                        {isOk ? 'OK' : 'Excedido'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
           </div>
 
         </div>
