@@ -20,6 +20,8 @@ import {
   PlanEstudioNorm
 } from '@/lib/types';
 
+import { normalizarRun } from '@/lib/csvParser';
+
 export default function EscuelaDashboard() {
   const router = useRouter();
   const [selectedRbd, setSelectedRbd] = useState<string>('10202');
