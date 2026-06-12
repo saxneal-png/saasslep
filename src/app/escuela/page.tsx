@@ -58,18 +58,19 @@ export default function EscuelaDashboard() {
   const [customAsigHoras, setCustomAsigHoras] = useState(4);
   const [selectedCursoForAsig, setSelectedCursoForAsig] = useState('');
 
-  // Normalized Courses database to choose from
+  // Base Levels database to choose from
   const NOMENCLATURA_CURSOS = [
-    "1° Básico A", "1° Básico B", "2° Básico A", "2° Básico B",
-    "3° Básico A", "3° Básico B", "4° Básico A", "4° Básico B",
-    "5° Básico A", "5° Básico B", "6° Básico A", "6° Básico B",
-    "7° Básico A", "7° Básico B", "8° Básico A", "8° Básico B",
-    "1° Medio A", "1° Medio B", "2° Medio A", "2° Medio B",
-    "3° Medio A", "3° Medio B", "4° Medio A", "4° Medio B"
+    "1° Básico", "2° Básico", "3° Básico", "4° Básico",
+    "5° Básico", "6° Básico", "7° Básico", "8° Básico",
+    "1° Medio", "2° Medio", "3° Medio", "4° Medio"
   ];
   const [selectedCursoNorm, setSelectedCursoNorm] = useState(NOMENCLATURA_CURSOS[0]);
-  const [selectedCursoNivel, setSelectedCursoNivel] = useState('1° a 4° Básico');
-  const [selectedCursoRegimen, setSelectedCursoRegimen] = useState<'JEC' | 'No JEC'>('JEC');
+  const [cursoSufijo, setCursoSufijo] = useState('A');
+  const [selectedPlanIndex, setSelectedPlanIndex] = useState(0);
+
+  // Massive delete selections
+  const [selectedDocentes, setSelectedDocentes] = useState<string[]>([]);
+  const [selectedAsistentes, setSelectedAsistentes] = useState<string[]>([]);
 
   // Custom Local Roles
   const [customCargoNombre, setCustomCargoNombre] = useState('');
@@ -210,26 +211,81 @@ export default function EscuelaDashboard() {
     }
   };
 
+  // Bulk deletion logic
+  const handleBulkDeleteDocentes = async () => {
+    if (selectedDocentes.length === 0) return;
+    if (confirm(`¿Desea desvincular a los ${selectedDocentes.length} docentes seleccionados?`)) {
+      for (const run of selectedDocentes) {
+        const relatedCont = contratos.find(c => c.funcionario_run === run);
+        if (relatedCont) {
+          dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== relatedCont.id);
+          dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== relatedCont.id);
+          dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.contrato_id !== relatedCont.id);
+        }
+      }
+      setSelectedDocentes([]);
+      await loadAllSchoolData();
+      alert('✅ Docentes desvinculados exitosamente.');
+    }
+  };
+
+  const handleBulkDeleteAsistentes = async () => {
+    if (selectedAsistentes.length === 0) return;
+    if (confirm(`¿Desea desvincular a los ${selectedAsistentes.length} asistentes seleccionados?`)) {
+      for (const run of selectedAsistentes) {
+        const relatedCont = contratos.find(c => c.funcionario_run === run);
+        if (relatedCont) {
+          dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== relatedCont.id);
+          dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== relatedCont.id);
+          dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.contrato_id !== relatedCont.id);
+        }
+      }
+      setSelectedAsistentes([]);
+      await loadAllSchoolData();
+      alert('✅ Asistentes desvinculados exitosamente.');
+    }
+  };
+
   // Create course selecting from strict normalized list
   const handleCreateCurso = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (cursosDinamicos.some(c => c.nombre === selectedCursoNorm)) {
+    const fullCursoNombre = `${selectedCursoNorm} ${cursoSufijo}`.trim();
+    if (cursosDinamicos.some(c => c.nombre === fullCursoNombre)) {
       alert('El curso ya se encuentra creado en este establecimiento.');
+      return;
+    }
+
+    const plan = planesEstudio[selectedPlanIndex];
+    if (!plan) {
+      alert('Seleccione un plan de estudio válido.');
       return;
     }
 
     const nuevoCurso: CursoDinamico = {
       rbd: selectedRbd,
-      nombre: selectedCursoNorm,
-      nivel: selectedCursoNivel,
-      regimen: selectedCursoRegimen
+      nombre: fullCursoNombre,
+      nivel: plan.nivel,
+      regimen: plan.regimen
     };
 
     await api.crearCursoDinamico(nuevoCurso);
+    
+    // Auto-populate subjects from selected study plan
+    if (plan.asignaturasBase) {
+      for (const asig of plan.asignaturasBase) {
+        await api.crearAsignaturaDinamica({
+          rbd: selectedRbd,
+          cursoNombre: fullCursoNombre,
+          nombre: asig.nombre,
+          horasSugeridas: asig.horasSugeridas
+        });
+      }
+    }
+
     await loadAllSchoolData();
     setSelectedCursoForAsig(nuevoCurso.nombre);
     setSelectedCursoPlan(nuevoCurso.nombre);
-    alert('✅ Curso normalizado creado con éxito.');
+    alert('✅ Curso y plan de estudio asociado creados con éxito.');
   };
 
   // Create Custom Roles (SEP/PIE etc. bound)
@@ -406,6 +462,9 @@ export default function EscuelaDashboard() {
     loadAsigs();
   }, [selectedCursoPlan, selectedRbd, planMineduc]);
 
+  const schoolDocentes = funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run));
+  const schoolAsistentes = funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run));
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
       
@@ -517,14 +576,39 @@ export default function EscuelaDashboard() {
             
             {activeTab === 'docentes' && (
               <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-                <h3 className="text-base font-bold text-slate-800">Docentes del Establecimiento</h3>
-                <p className="text-xs text-slate-500 mt-1">Gestión individual e inmediata de la dotación docente.</p>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Docentes del Establecimiento</h3>
+                    <p className="text-xs text-slate-500 mt-1">Gestión individual e inmediata de la dotación docente.</p>
+                  </div>
+                  {selectedDocentes.length > 0 && (
+                    <button 
+                      onClick={handleBulkDeleteDocentes}
+                      className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5"
+                    >
+                      🗑️ Desvincular Seleccionados ({selectedDocentes.length})
+                    </button>
+                  )}
+                </div>
                 
                 <div className="mt-4 border border-slate-100 rounded-lg overflow-hidden text-xs">
                   <table className="w-full text-left">
                     <thead className="bg-slate-100 font-bold text-slate-600">
                       <tr>
-                        <th className="p-3 pl-4">Nombre</th>
+                        <th className="p-3 text-center w-12">
+                          <input 
+                            type="checkbox"
+                            checked={schoolDocentes.length > 0 && selectedDocentes.length === schoolDocentes.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedDocentes(schoolDocentes.map(d => d.run));
+                              } else {
+                                setSelectedDocentes([]);
+                              }
+                            }}
+                          />
+                        </th>
+                        <th className="p-3 pl-2">Nombre</th>
                         <th className="p-3">RUT</th>
                         <th className="p-3">Cargo</th>
                         <th className="p-3 text-center">Contrato</th>
@@ -532,10 +616,23 @@ export default function EscuelaDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {funcionarios.filter(f => f.estamento === 'Docente').map(f => {
+                      {schoolDocentes.map(f => {
                         const hasCont = contratos.find(c => c.funcionario_run === f.run);
                         return (
                           <tr key={f.run} className="hover:bg-slate-50">
+                            <td className="p-3 text-center">
+                              <input 
+                                type="checkbox"
+                                checked={selectedDocentes.includes(f.run)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedDocentes([...selectedDocentes, f.run]);
+                                  } else {
+                                    setSelectedDocentes(selectedDocentes.filter(run => run !== f.run));
+                                  }
+                                }}
+                              />
+                            </td>
                             <td className="p-3 pl-4 font-bold text-slate-800">{f.nombre}</td>
                             <td className="p-3 font-mono text-slate-500">{f.run}</td>
                             <td className="p-3 text-slate-700">{f.cargo || 'Docente'}</td>
@@ -633,14 +730,39 @@ export default function EscuelaDashboard() {
 
             {activeTab === 'asistentes' && (
               <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-                <h3 className="text-base font-bold text-slate-800">Asistentes de la Educación</h3>
-                <p className="text-xs text-slate-500 mt-1">Gestión individual de profesionales técnicos, psicólogos, administrativos y auxiliares.</p>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Asistentes de la Educación</h3>
+                    <p className="text-xs text-slate-500 mt-1">Gestión individual de profesionales técnicos, psicólogos, administrativos y auxiliares.</p>
+                  </div>
+                  {selectedAsistentes.length > 0 && (
+                    <button 
+                      onClick={handleBulkDeleteAsistentes}
+                      className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5"
+                    >
+                      🗑️ Desvincular Seleccionados ({selectedAsistentes.length})
+                    </button>
+                  )}
+                </div>
 
                 <div className="mt-4 border border-slate-100 rounded-lg overflow-hidden text-xs">
                   <table className="w-full text-left">
                     <thead className="bg-slate-100 font-bold text-slate-600">
                       <tr>
-                        <th className="p-3 pl-4">Nombre</th>
+                        <th className="p-3 text-center w-12">
+                          <input 
+                            type="checkbox"
+                            checked={schoolAsistentes.length > 0 && selectedAsistentes.length === schoolAsistentes.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedAsistentes(schoolAsistentes.map(d => d.run));
+                              } else {
+                                setSelectedAsistentes([]);
+                              }
+                            }}
+                          />
+                        </th>
+                        <th className="p-3 pl-2">Nombre</th>
                         <th className="p-3">RUT</th>
                         <th className="p-3">Función/Cargo</th>
                         <th className="p-3 text-center">Horas</th>
@@ -648,11 +770,24 @@ export default function EscuelaDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {funcionarios.filter(f => f.estamento === 'Asistente de la Educación').map(f => {
+                      {schoolAsistentes.map(f => {
                         const hasCont = contratos.find(c => c.funcionario_run === f.run);
                         return (
                           <tr key={f.run} className="hover:bg-slate-50">
-                            <td className="p-3 pl-4 font-bold text-slate-800">{f.nombre}</td>
+                            <td className="p-3 text-center">
+                              <input 
+                                type="checkbox"
+                                checked={selectedAsistentes.includes(f.run)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedAsistentes([...selectedAsistentes, f.run]);
+                                  } else {
+                                    setSelectedAsistentes(selectedAsistentes.filter(run => run !== f.run));
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td className="p-3 pl-2 font-bold text-slate-800">{f.nombre}</td>
                             <td className="p-3 font-mono text-slate-500">{f.run}</td>
                             <td className="p-3 text-slate-700">{f.cargo || 'Asistente'}</td>
                             <td className="p-3 text-center">
@@ -754,10 +889,10 @@ export default function EscuelaDashboard() {
                 <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
                   <h3 className="text-base font-bold text-slate-800">Planificador de Carga Horaria y Cursos</h3>
                   
-                  {/* Select normalized course names only */}
+                  {/* Select normalized course names and study plan */}
                   <form onSubmit={handleCreateCurso} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border text-xs">
-                    <div className="md:col-span-2">
-                      <label className="block font-bold text-slate-500 mb-1">Nombre Normalizado MINEDUC</label>
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Curso Base</label>
                       <select
                         className="w-full p-2 bg-white border rounded"
                         value={selectedCursoNorm}
@@ -770,18 +905,28 @@ export default function EscuelaDashboard() {
                     </div>
 
                     <div>
-                      <label className="block font-bold text-slate-500 mb-1">Régimen</label>
+                      <label className="block font-bold text-slate-500 mb-1">Letra / Sufijo (Ej: A, B, HC, TP)</label>
+                      <input 
+                        type="text"
+                        placeholder="Ej: A"
+                        className="w-full p-2 bg-white border rounded font-bold"
+                        value={cursoSufijo}
+                        onChange={(e) => setCursoSufijo(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Asociar Plan de Estudio</label>
                       <select
                         className="w-full p-2 bg-white border rounded"
-                        value={selectedCursoRegimen}
-                        onChange={(e) => {
-                          setSelectedCursoRegimen(e.target.value as any);
-                          if (selectedCursoNorm.includes('Medio')) setSelectedCursoNivel('5° a 8° Básico');
-                          else setSelectedCursoNivel('1° a 4° Básico');
-                        }}
+                        value={selectedPlanIndex}
+                        onChange={(e) => setSelectedPlanIndex(Number(e.target.value))}
                       >
-                        <option value="JEC">JEC (38 hrs)</option>
-                        <option value="No JEC">No JEC (33 hrs)</option>
+                        {planesEstudio.map((p, idx) => (
+                          <option key={idx} value={idx}>
+                            {p.nivel} ({p.regimen}) - {p.horasObligatorias} hrs
+                          </option>
+                        ))}
                       </select>
                     </div>
 
