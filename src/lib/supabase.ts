@@ -182,6 +182,32 @@ const TUTELAS_INICIAL: ProfesionalEscuelaAsignada[] = [
   { profesional_run: '11.111.111-1', establecimiento_rbd: '10204' },
 ];
 
+const ALERTAS_MOCK_INICIAL: AlertaConciliacion[] = [
+  {
+    id: 'al1',
+    run: '12.345.678-9',
+    nombre_funcionario: 'María Loreto González Soto',
+    rbd: '10201',
+    tipo: 'descalce_horas',
+    nivel_alerta: 'advertencia',
+    mensaje: 'Horas contratadas no coinciden con horas asignadas',
+    detalle: 'Contratada por 44 horas, pero tiene asignadas 17 horas lectivas en aula y requiere completar sus horas.',
+    resuelta: false
+  },
+  {
+    id: 'al2',
+    run: '15.432.987-K',
+    nombre_funcionario: 'Carlos Andrés Muñoz Riquelme',
+    rbd: '10202',
+    tipo: 'sobrecarga_horas',
+    nivel_alerta: 'critica',
+    mensaje: 'Funcionario excede el límite máximo de horas contratadas en el territorio',
+    detalle: 'Registra un contrato de 38 horas en Escuela E-250 y otro contrato de 10 horas en Liceo Manuel Bulnes (Total: 48 horas, supera el límite legal de 44 horas).',
+    resuelta: false
+  }
+];
+
+
 class DatabaseLocal {
   private getStorageItem<T>(key: string, defaultValue: T): T {
     if (typeof window === 'undefined') return defaultValue;

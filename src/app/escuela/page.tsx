@@ -842,7 +842,7 @@ export default function EscuelaDashboard() {
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {asignaciones.map(a => {
-                          const c = contratos.find(cont => cont.id === a.contract_id || cont.id === a.contrato_id);
+                          const c = contratos.find(cont => cont.id === a.contrato_id);
                           const f = c ? funcionarios.find(func => func.run === c.funcionario_run) : null;
                           return (
                             <tr key={a.id}>
