@@ -28,6 +28,8 @@ export default function SostenedorDashboard() {
   const [supervisores, setSupervisores] = useState<Supervisor[]>([]);
   const [planesEstudio, setPlanesEstudio] = useState<PlanEstudioNorm[]>([]);
   
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio'>('dashboard');
+  
   // CRUD Active forms
   const [newSupRun, setNewSupRun] = useState('');
   const [newSupNombre, setNewSupNombre] = useState('');
@@ -488,415 +490,560 @@ export default function SostenedorDashboard() {
         </div>
       </header>
 
-      {/* Main Grid */}
-      <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
-        
-        {/* Left / Center content: School and Supervisor CRUDs & Heatmap */}
-        <div className="lg:col-span-2 space-y-6">
-          
-          {/* Heatmap & Escuelas List */}
-          <div className="bg-white rounded-xl shadow border border-slate-200/60 overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
-              <div>
-                <h2 className="text-base font-bold text-slate-800">Mapa de Establecimientos del Territorio (131)</h2>
-                <p className="text-xs text-slate-500 mt-1 font-medium">Control territorial y auditoría de tutela.</p>
-              </div>
+      {/* Tab Selector */}
+      <div className="max-w-7xl mx-auto px-4 md:px-8 mt-6 flex gap-2">
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className={`px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition-all duration-200 ${
+            activeTab === 'dashboard'
+              ? 'bg-slep-blue text-white'
+              : 'bg-white text-slate-600 border hover:bg-slate-50'
+          }`}
+        >
+          🎛️ Tablero de Gobernanza
+        </button>
+        <button
+          onClick={() => setActiveTab('compendio')}
+          className={`px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition-all duration-200 ${
+            activeTab === 'compendio'
+              ? 'bg-slep-blue text-white'
+              : 'bg-white text-slate-600 border hover:bg-slate-50'
+          }`}
+        >
+          📊 Compendio Consolidado Escuelas
+        </button>
+      </div>
 
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  placeholder="RBD o Escuela..." 
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
-                  value={searchEst}
-                  onChange={(e) => setSearchEst(e.target.value)}
-                />
-                <select
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
-                  value={selectedComuna}
-                  onChange={(e) => setSelectedComuna(e.target.value)}
+      {activeTab === 'compendio' ? (
+        <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full">
+          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-800">Compendio y Reporte Territorial de Establecimientos</h2>
+                <p className="text-xs text-slate-500 mt-1 font-medium">Consolidado general de dotaciones, horas de planes de estudio y financiamiento (Regular/SEP/PIE).</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => alert('📥 Exportando compendio completo a Excel (XLSX)...')}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition-all cursor-pointer"
                 >
-                  {comunas.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                  📥 Excel (XLSX)
+                </button>
+                <button 
+                  onClick={() => alert('📥 Generando documento PDF del compendio territorial...')}
+                  className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition-all cursor-pointer"
+                >
+                  📄 Exportar PDF
+                </button>
+                <button 
+                  onClick={() => window.print()}
+                  className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition-all cursor-pointer"
+                >
+                  🖨️ Imprimir
+                </button>
               </div>
             </div>
 
-            <div className="max-h-[300px] overflow-y-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead className="bg-slate-100 font-bold uppercase text-slate-600 sticky top-0 z-10">
+            <div className="mt-4 flex gap-2 w-full max-w-md">
+              <input 
+                type="text" 
+                placeholder="Filtrar por RBD o Nombre..." 
+                className="w-full px-3 py-1.5 border rounded-lg text-xs"
+                value={searchEst}
+                onChange={(e) => setSearchEst(e.target.value)}
+              />
+            </div>
+
+            <div className="mt-6 overflow-x-auto text-xs">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-100 font-bold text-slate-600 border-b">
                   <tr>
-                    <th className="p-3 pl-6">RBD</th>
+                    <th className="p-3 pl-4">RBD</th>
                     <th className="p-3">Establecimiento</th>
+                    <th className="p-3">Comuna</th>
                     <th className="p-3 text-center">IVM</th>
-                    <th className="p-3 text-center">Régimen</th>
-                    <th className="p-3 text-center">Supervisor</th>
-                    <th className="p-3 text-center">Acciones</th>
+                    <th className="p-3 text-center">Docentes</th>
+                    <th className="p-3 text-center">Asistentes</th>
+                    <th className="p-3 text-center">Horas Contrato</th>
+                    <th className="p-3 text-center">Regular</th>
+                    <th className="p-3 text-center">SEP</th>
+                    <th className="p-3 text-center">PIE</th>
+                    <th className="p-3 text-center">Alertas</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredEstablecimientos.map(e => {
-                    const supervisorList = tutelas.filter(t => t.establecimiento_rbd === e.rbd);
+                    const escConts = contratos.filter(c => c.rbd === e.rbd);
+                    const escContsIds = escConts.map(c => c.id);
+                    const escFins = financiamientos.filter(f => escContsIds.includes(f.contrato_id));
+                    
+                    const docenteCount = new Set(escConts.map(c => c.funcionario_run).filter(run => {
+                      const f = funcionarios.find(func => func.run === run);
+                      return f?.estamento === 'Docente';
+                    })).size;
+
+                    const asistenteCount = new Set(escConts.map(c => c.funcionario_run).filter(run => {
+                      const f = funcionarios.find(func => func.run === run);
+                      return f?.estamento === 'Asistente de la Educación';
+                    })).size;
+
+                    const totalHrs = escConts.reduce((sum, c) => sum + c.horas_totales, 0);
+                    const regularHrs = escFins.filter(f => f.origen_fondo === 'Subvención Regular').reduce((sum, f) => sum + f.horas, 0);
+                    const sepHrs = escFins.filter(f => f.origen_fondo === 'SEP').reduce((sum, f) => sum + f.horas, 0);
+                    const pieHrs = escFins.filter(f => f.origen_fondo === 'PIE').reduce((sum, f) => sum + f.horas, 0);
+                    const activeAlts = alertas.filter(a => a.rbd === e.rbd && !a.resuelta).length;
+
                     return (
                       <tr key={e.rbd} className="hover:bg-slate-50">
-                        <td className="p-3 pl-6 font-mono font-medium text-slate-500">{e.rbd}</td>
+                        <td className="p-3 pl-4 font-mono font-bold text-slate-500">{e.rbd}</td>
                         <td className="p-3 font-semibold text-slate-800">{e.nombre}</td>
-                        <td className="p-3 text-center font-bold text-slate-600">{e.ivm}%</td>
-                        <td className="p-3 text-center font-semibold">{e.regimen}</td>
+                        <td className="p-3 text-slate-600">{e.comuna}</td>
+                        <td className="p-3 text-center font-bold text-slate-700">{e.ivm}%</td>
+                        <td className="p-3 text-center font-semibold text-slep-blue">{docenteCount}</td>
+                        <td className="p-3 text-center font-semibold text-slate-600">{asistenteCount}</td>
+                        <td className="p-3 text-center font-bold text-slate-700">{totalHrs} hrs</td>
+                        <td className="p-3 text-center text-slate-600">{regularHrs} hrs</td>
+                        <td className="p-3 text-center text-slate-600">{sepHrs} hrs</td>
+                        <td className="p-3 text-center text-slate-600">{pieHrs} hrs</td>
                         <td className="p-3 text-center">
-                          {supervisorList.map(s => {
-                            const found = supervisores.find(sup => sup.run === s.profesional_run);
-                            return found ? found.nombre : s.profesional_run;
-                          }).join(', ') || <span className="text-slate-400 italic">Ninguno</span>}
+                          {activeAlts > 0 ? (
+                            <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded-full font-bold text-[10px]">
+                              ⚠️ {activeAlts} Alertas
+                            </span>
+                          ) : (
+                            <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold text-[10px]">
+                              ✓ Conciliado
+                            </span>
+                          )}
                         </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+      ) : (
+        <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
+          
+          {/* Left / Center content: School and Supervisor CRUDs & Heatmap */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            {/* Heatmap & Escuelas List */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 overflow-hidden">
+              <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
+                <div>
+                  <h2 className="text-base font-bold text-slate-800">Mapa de Establecimientos del Territorio (131)</h2>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">Control territorial y auditoría de tutela.</p>
+                </div>
+
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="RBD o Escuela..." 
+                    className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                    value={searchEst}
+                    onChange={(e) => setSearchEst(e.target.value)}
+                  />
+                  <select
+                    className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
+                    value={selectedComuna}
+                    onChange={(e) => setSelectedComuna(e.target.value)}
+                  >
+                    {comunas.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto text-xs">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-100 font-bold text-slate-600 uppercase border-b">
+                    <tr>
+                      <th className="p-3 pl-6">RBD</th>
+                      <th className="p-3">Establecimiento</th>
+                      <th className="p-3 text-center">IVM</th>
+                      <th className="p-3">Comuna</th>
+                      <th className="p-3">Supervisión SLEP</th>
+                      <th className="p-3 text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredEstablecimientos.map(e => {
+                      const supervisorList = tutelas.filter(t => t.establecimiento_rbd === e.rbd);
+                      return (
+                        <tr key={e.rbd} className="hover:bg-slate-50">
+                          <td className="p-3 pl-6 font-mono font-bold text-slate-500">{e.rbd}</td>
+                          <td className="p-3 font-semibold text-slate-800">{e.nombre}</td>
+                          <td className="p-3 text-center font-bold text-slate-700">{e.ivm}%</td>
+                          <td className="p-3 text-slate-600">{e.comuna}</td>
+                          <td className="p-3 text-slate-700">
+                            {supervisorList.length > 0 ? (
+                              <div className="space-y-0.5">
+                                {supervisorList.map(t => {
+                                  const sup = supervisores.find(s => s.run === t.profesional_run);
+                                  return (
+                                    <span key={t.profesional_run} className="inline-block bg-blue-100 text-blue-800 px-2 py-0.5 rounded mr-1 text-[10px] font-bold">
+                                      👤 {sup ? sup.nombre : t.profesional_run}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">Sin Asignar</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => handleDeleteEscuela(e.rbd)}
+                              className="text-red-500 hover:text-red-700 font-bold text-xs"
+                            >
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* School CRUD creation */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <span>🏫</span> Agregar Nuevo Establecimiento (Escuela)
+              </h3>
+              <form onSubmit={handleCreateEscuela} className="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs bg-slate-50 p-4 rounded-xl border">
+                <div>
+                  <label className="block font-bold text-slate-500 mb-1">RBD Único</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-2 border rounded"
+                    value={newEscRbd}
+                    onChange={(e) => setNewEscRbd(e.target.value)}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block font-bold text-slate-500 mb-1">Nombre Escuela</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-2 border rounded"
+                    value={newEscNombre}
+                    onChange={(e) => setNewEscNombre(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-500 mb-1">Vulnerabilidad (IVM)</label>
+                  <input 
+                    type="number" 
+                    className="w-full p-2 border rounded font-bold"
+                    value={newEscIvm}
+                    onChange={(e) => setNewEscIvm(parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2 rounded text-xs shadow">
+                    Agregar RBD
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Supervisor CRUD */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <span>👥</span> Gestión de Supervisores (Profesionales SLEP)
+              </h3>
+
+              <form onSubmit={handleCreateSupervisor} className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs bg-slate-50 p-4 rounded-xl border mb-4">
+                <div>
+                  <label className="block font-bold text-slate-500 mb-1">RUN Supervisor</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-2 border rounded"
+                    value={newSupRun}
+                    onChange={(e) => setNewSupRun(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-500 mb-1">Nombre Completo</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-2 border rounded"
+                    value={newSupNombre}
+                    onChange={(e) => setNewSupNombre(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-500 mb-1">Email Institucional</label>
+                  <input 
+                    type="email" 
+                    className="w-full p-2 border rounded"
+                    value={newSupEmail}
+                    onChange={(e) => setNewSupEmail(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2 rounded text-xs shadow">
+                    Guardar Supervisor
+                  </button>
+                </div>
+              </form>
+
+              <div className="border rounded-lg overflow-hidden text-xs">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-100 font-bold text-slate-600">
+                    <tr>
+                      <th className="p-3">Supervisor</th>
+                      <th className="p-3">Email</th>
+                      <th className="p-3 text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {supervisores.map(s => (
+                      <tr key={s.run}>
+                        <td className="p-3 font-semibold text-slate-800">{s.nombre} ({s.run})</td>
+                        <td className="p-3 text-slate-600">{s.email}</td>
                         <td className="p-3 text-center">
                           <button
-                            onClick={() => handleDeleteEscuela(e.rbd)}
+                            onClick={() => handleDeleteSupervisor(s.run)}
                             className="text-red-500 hover:text-red-700 font-bold"
                           >
                             Eliminar
                           </button>
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* School CRUD creation */}
-          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-            <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <span>🏫</span> Agregar Nuevo Establecimiento (Escuela)
-            </h3>
-            <form onSubmit={handleCreateEscuela} className="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs bg-slate-50 p-4 rounded-xl border">
-              <div>
-                <label className="block font-bold text-slate-500 mb-1">RBD Único</label>
-                <input 
-                  type="text" 
-                  className="w-full p-2 border rounded"
-                  value={newEscRbd}
-                  onChange={(e) => setNewEscRbd(e.target.value)}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block font-bold text-slate-500 mb-1">Nombre Escuela</label>
-                <input 
-                  type="text" 
-                  className="w-full p-2 border rounded"
-                  value={newEscNombre}
-                  onChange={(e) => setNewEscNombre(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-slate-500 mb-1">Vulnerabilidad (IVM)</label>
-                <input 
-                  type="number" 
-                  className="w-full p-2 border rounded font-bold"
-                  value={newEscIvm}
-                  onChange={(e) => setNewEscIvm(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-              <div className="flex items-end">
-                <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2 rounded text-xs shadow">
-                  Agregar RBD
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Supervisor CRUD */}
-          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-            <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <span>👥</span> Gestión de Supervisores (Profesionales SLEP)
-            </h3>
-
-            <form onSubmit={handleCreateSupervisor} className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs bg-slate-50 p-4 rounded-xl border mb-4">
-              <div>
-                <label className="block font-bold text-slate-500 mb-1">RUN Supervisor</label>
-                <input 
-                  type="text" 
-                  className="w-full p-2 border rounded"
-                  value={newSupRun}
-                  onChange={(e) => setNewSupRun(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-slate-500 mb-1">Nombre Completo</label>
-                <input 
-                  type="text" 
-                  className="w-full p-2 border rounded"
-                  value={newSupNombre}
-                  onChange={(e) => setNewSupNombre(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-slate-500 mb-1">Email Institucional</label>
-                <input 
-                  type="email" 
-                  className="w-full p-2 border rounded"
-                  value={newSupEmail}
-                  onChange={(e) => setNewSupEmail(e.target.value)}
-                />
-              </div>
-              <div className="flex items-end">
-                <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2 rounded text-xs shadow">
-                  Guardar Supervisor
-                </button>
-              </div>
-            </form>
-
-            <div className="border rounded-lg overflow-hidden text-xs">
-              <table className="w-full text-left">
-                <thead className="bg-slate-100 font-bold text-slate-600">
-                  <tr>
-                    <th className="p-3">Supervisor</th>
-                    <th className="p-3">Email</th>
-                    <th className="p-3 text-center">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {supervisores.map(s => (
-                    <tr key={s.run}>
-                      <td className="p-3 font-semibold text-slate-800">{s.nombre} ({s.run})</td>
-                      <td className="p-3 text-slate-600">{s.email}</td>
-                      <td className="p-3 text-center">
-                        <button
-                          onClick={() => handleDeleteSupervisor(s.run)}
-                          className="text-red-500 hover:text-red-700 font-bold"
-                        >
-                          Eliminar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Tutela assignments */}
-          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-            <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <span>🔗</span> Asignación de Tutela de Supervisores
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl text-xs border">
-              <div>
-                <label className="block font-bold text-slate-500 mb-1">Supervisor</label>
-                <select
-                  className="w-full p-2 bg-white border rounded"
-                  value={selectedProfRun}
-                  onChange={(e) => setSelectedProfRun(e.target.value)}
-                >
-                  {supervisores.map(s => (
-                    <option key={s.run} value={s.run}>{s.nombre}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block font-bold text-slate-500 mb-1">Establecimiento</label>
-                <select
-                  className="w-full p-2 bg-white border rounded"
-                  value={assignRbd}
-                  onChange={(e) => setAssignRbd(e.target.value)}
-                >
-                  {establecimientos.map(e => (
-                    <option key={e.rbd} value={e.rbd}>{e.nombre} (RBD {e.rbd})</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-end">
-                <button onClick={handleAssignSchool} className="w-full bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold py-2 rounded text-xs shadow">
-                  Vincular Tutela
-                </button>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 
-            <div className="mt-4 border rounded-lg overflow-hidden text-xs">
-              <table className="w-full text-left">
-                <thead className="bg-slate-100 font-bold text-slate-600">
-                  <tr>
-                    <th className="p-3">Supervisor</th>
-                    <th className="p-3">Escuela Supervisada</th>
-                    <th className="p-3 text-center">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {tutelas.map(t => {
-                    const esc = establecimientos.find(e => e.rbd === t.establecimiento_rbd);
-                    const sup = supervisores.find(s => s.run === t.profesional_run);
-                    return (
-                      <tr key={`${t.profesional_run}-${t.establecimiento_rbd}`}>
-                        <td className="p-3 font-semibold text-slate-800">{sup ? sup.nombre : t.profesional_run}</td>
-                        <td className="p-3 text-slate-700">{esc ? esc.nombre : `RBD ${t.establecimiento_rbd}`}</td>
-                        <td className="p-3 text-center">
-                          <button
-                            onClick={() => handleRemoveSchool(t.profesional_run, t.establecimiento_rbd)}
-                            className="text-red-500 hover:text-red-700 font-bold"
-                          >
-                            Eliminar Vínculo
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Right Column: Files drag and drop and central statistics */}
-        <div className="space-y-6">
-          
-          {/* Drag-and-Drop Uploader for CSV/JSON Docentes */}
-          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <span>📥</span> Cargar Nómina Docentes (Profesores)
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">Sube el archivo físico `.csv` o `.json` con la nómina de docentes.</p>
-
-            <div 
-              onDragEnter={handleDrag} 
-              onDragOver={handleDrag} 
-              onDragLeave={handleDrag} 
-              onDrop={handleDrop}
-              className={`mt-4 border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-                dragActive ? 'border-slep-blue bg-blue-50/50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
-              }`}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input 
-                ref={fileInputRef}
-                type="file" 
-                accept=".csv,.json"
-                className="hidden" 
-                onChange={handleFileChange}
-              />
-              <span className="text-2xl block mb-2">👨‍🏫</span>
-              <p className="text-xs font-bold text-slate-700">Arrastra nómina de Docentes o haz clic</p>
-              <p className="text-[10px] text-slate-500 mt-1">Soporta formatos .CSV y .JSON únicamente</p>
-            </div>
-
-            {importLogs && (
-              <pre className="mt-3 p-2.5 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
-                {importLogs}
-              </pre>
-            )}
-          </div>
-
-          {/* Drag-and-Drop Uploader for CSV/JSON Asistentes */}
-          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <span>📥</span> Cargar Nómina Asistentes de la Educación
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">Sube el archivo físico `.csv` o `.json` con asistentes, psicólogos, administrativos, etc.</p>
-
-            <div 
-              onDragEnter={handleDragAsis} 
-              onDragOver={handleDragAsis} 
-              onDragLeave={handleDragAsis} 
-              onDrop={handleDropAsis}
-              className={`mt-4 border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-                dragActiveAsis ? 'border-slep-blue bg-blue-50/50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
-              }`}
-              onClick={() => fileInputRefAsis.current?.click()}
-            >
-              <input 
-                ref={fileInputRefAsis}
-                type="file" 
-                accept=".csv,.json"
-                className="hidden" 
-                onChange={handleFileChangeAsis}
-              />
-              <span className="text-2xl block mb-2">🤝</span>
-              <p className="text-xs font-bold text-slate-700">Arrastra nómina de Asistentes o haz clic</p>
-              <p className="text-[10px] text-slate-500 mt-1">Soporta formatos .CSV and .JSON únicamente</p>
-            </div>
-
-            {importLogsAsis && (
-              <pre className="mt-3 p-2.5 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
-                {importLogsAsis}
-              </pre>
-            )}
-          </div>
-
-          {/* Sostenedor Curricular Governance: PlanEstudio JSON uploader */}
-          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <span>📜</span> Cargar Planes de Estudio MINEDUC (JSON)
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">Carga decretos oficiales para todo el territorio. Control central exclusivo.</p>
-
-            <div 
-              onDragEnter={handleDragPlan} 
-              onDragOver={handleDragPlan} 
-              onDragLeave={handleDragPlan} 
-              onDrop={handleDropPlan}
-              className={`mt-4 border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-                dragActivePlan ? 'border-slep-blue bg-blue-50/50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
-              }`}
-              onClick={() => planFileInputRef.current?.click()}
-            >
-              <input 
-                ref={planFileInputRef}
-                type="file" 
-                accept=".json"
-                className="hidden" 
-                onChange={handleFileChangePlan}
-              />
-              <span className="text-2xl block mb-2">⚙️</span>
-              <p className="text-xs font-bold text-slate-700">Arrastra el JSON de planes oficiales o haz clic</p>
-            </div>
-
-            {planImportLogs && (
-              <pre className="mt-3 p-2.5 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
-                {planImportLogs}
-              </pre>
-            )}
-          </div>
-
-          {/* RUN Search */}
-          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <span>🔍</span> Buscador Central de RUN
-            </h2>
-            
-            <div className="mt-3 flex gap-2">
-              <input 
-                type="text" 
-                placeholder="RUT..." 
-                className="flex-1 px-3 py-1.5 border border-slate-300 rounded text-xs"
-                value={searchRun}
-                onChange={(e) => setSearchRun(e.target.value)}
-              />
-              <button onClick={handleSearchRun} className="bg-slep-blue text-white px-3 py-1 rounded text-xs font-bold shadow">
-                Buscar
-              </button>
-            </div>
-
-            {searchRunResult && (
-              <div className="mt-4 bg-slate-50 p-3 rounded-lg border text-xs space-y-2">
-                <p className="font-bold text-slate-800">{searchRunResult.funcionario.nombre}</p>
-                <p className="text-[10px] text-slate-500 uppercase font-bold">Estamento: {searchRunResult.funcionario.estamento || 'Docente'}</p>
-                <div className="space-y-1">
-                  {searchRunResult.contratos.map(c => (
-                    <div key={c.id} className="flex justify-between border-b pb-1 text-[10px]">
-                      <span>{c.escuelaNombre}</span>
-                      <span className="font-bold text-slep-blue">{c.horas_totales} hrs ({c.estado})</span>
-                    </div>
-                  ))}
+            {/* Tutela assignments */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <span>🔗</span> Asignación de Tutela de Supervisores
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl text-xs border">
+                <div>
+                  <label className="block font-bold text-slate-500 mb-1">Supervisor</label>
+                  <select
+                    className="w-full p-2 bg-white border rounded"
+                    value={selectedProfRun}
+                    onChange={(e) => setSelectedProfRun(e.target.value)}
+                  >
+                    {supervisores.map(s => (
+                      <option key={s.run} value={s.run}>{s.nombre}</option>
+                    ))}
+                  </select>
                 </div>
-                <p className="font-bold text-slate-700 text-right">Total: {searchRunResult.totalHoras} hrs</p>
+                <div>
+                  <label className="block font-bold text-slate-500 mb-1">Establecimiento</label>
+                  <select
+                    className="w-full p-2 bg-white border rounded"
+                    value={assignRbd}
+                    onChange={(e) => setAssignRbd(e.target.value)}
+                  >
+                    {establecimientos.map(e => (
+                      <option key={e.rbd} value={e.rbd}>{e.nombre} (RBD {e.rbd})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button onClick={handleAssignSchool} className="w-full bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold py-2 rounded text-xs shadow">
+                    Vincular Tutela
+                  </button>
+                </div>
               </div>
-            )}
+
+              <div className="mt-4 border rounded-lg overflow-hidden text-xs">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-100 font-bold text-slate-600">
+                    <tr>
+                      <th className="p-3">Supervisor</th>
+                      <th className="p-3">Escuela Supervisada</th>
+                      <th className="p-3 text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {tutelas.map(t => {
+                      const esc = establecimientos.find(e => e.rbd === t.establecimiento_rbd);
+                      const sup = supervisores.find(s => s.run === t.profesional_run);
+                      return (
+                        <tr key={`${t.profesional_run}-${t.establecimiento_rbd}`}>
+                          <td className="p-3 font-semibold text-slate-800">{sup ? sup.nombre : t.profesional_run}</td>
+                          <td className="p-3 text-slate-700">{esc ? esc.nombre : `RBD ${t.establecimiento_rbd}`}</td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => handleRemoveSchool(t.profesional_run, t.establecimiento_rbd)}
+                              className="text-red-500 hover:text-red-700 font-bold"
+                            >
+                              Eliminar Vínculo
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
 
-        </div>
+          {/* Right Column: Files drag and drop and central statistics */}
+          <div className="space-y-6">
+            
+            {/* Drag-and-Drop Uploader for CSV/JSON Docentes */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>📥</span> Cargar Nómina Docentes (Profesores)
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">Sube el archivo físico `.csv` o `.json` con la nómina de docentes.</p>
 
-      </main>
+              <div 
+                onDragEnter={handleDrag} 
+                onDragOver={handleDrag} 
+                onDragLeave={handleDrag} 
+                onDrop={handleDrop}
+                className={`mt-4 border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                  dragActive ? 'border-slep-blue bg-blue-50/50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
+                }`}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input 
+                  ref={fileInputRef}
+                  type="file" 
+                  accept=".csv,.json"
+                  className="hidden" 
+                  onChange={handleFileChange}
+                />
+                <span className="text-2xl block mb-2">👨‍🏫</span>
+                <p className="text-xs font-bold text-slate-700">Arrastra nómina de Docentes o haz clic</p>
+                <p className="text-[10px] text-slate-500 mt-1">Soporta formatos .CSV y .JSON únicamente</p>
+              </div>
+
+              {importLogs && (
+                <pre className="mt-3 p-2.5 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
+                  {importLogs}
+                </pre>
+              )}
+            </div>
+
+            {/* Drag-and-Drop Uploader for CSV/JSON Asistentes */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>📥</span> Cargar Nómina Asistentes de la Educación
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">Sube el archivo físico `.csv` o `.json` con asistentes, psicólogos, administrativos, etc.</p>
+
+              <div 
+                onDragEnter={handleDragAsis} 
+                onDragOver={handleDragAsis} 
+                onDragLeave={handleDragAsis} 
+                onDrop={handleDropAsis}
+                className={`mt-4 border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                  dragActiveAsis ? 'border-slep-blue bg-blue-50/50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
+                }`}
+                onClick={() => fileInputRefAsis.current?.click()}
+              >
+                <input 
+                  ref={fileInputRefAsis}
+                  type="file" 
+                  accept=".csv,.json"
+                  className="hidden" 
+                  onChange={handleFileChangeAsis}
+                />
+                <span className="text-2xl block mb-2">🤝</span>
+                <p className="text-xs font-bold text-slate-700">Arrastra nómina de Asistentes o haz clic</p>
+                <p className="text-[10px] text-slate-500 mt-1">Soporta formatos .CSV and .JSON únicamente</p>
+              </div>
+
+              {importLogsAsis && (
+                <pre className="mt-3 p-2.5 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
+                  {importLogsAsis}
+                </pre>
+              )}
+            </div>
+
+            {/* Sostenedor Curricular Governance: PlanEstudio JSON uploader */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>📜</span> Cargar Planes de Estudio MINEDUC (JSON)
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">Carga decretos oficiales para todo el territorio. Control central exclusivo.</p>
+
+              <div 
+                onDragEnter={handleDragPlan} 
+                onDragOver={handleDragPlan} 
+                onDragLeave={handleDragPlan} 
+                onDrop={handleDropPlan}
+                className={`mt-4 border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                  dragActivePlan ? 'border-slep-blue bg-blue-50/50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
+                }`}
+                onClick={() => planFileInputRef.current?.click()}
+              >
+                <input 
+                  ref={planFileInputRef}
+                  type="file" 
+                  accept=".json"
+                  className="hidden" 
+                  onChange={handleFileChangePlan}
+                />
+                <span className="text-2xl block mb-2">⚙️</span>
+                <p className="text-xs font-bold text-slate-700">Arrastra el JSON de planes oficiales o haz clic</p>
+              </div>
+
+              {planImportLogs && (
+                <pre className="mt-3 p-2.5 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
+                  {planImportLogs}
+                </pre>
+              )}
+            </div>
+
+            {/* RUN Search */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>🔍</span> Buscador Central de RUN
+              </h2>
+              
+              <div className="mt-3 flex gap-2">
+                <input 
+                  type="text" 
+                  placeholder="RUT..." 
+                  className="flex-1 px-3 py-1.5 border border-slate-300 rounded text-xs"
+                  value={searchRun}
+                  onChange={(e) => setSearchRun(e.target.value)}
+                />
+                <button onClick={handleSearchRun} className="bg-slep-blue text-white px-3 py-1 rounded text-xs font-bold shadow">
+                  Buscar
+                </button>
+              </div>
+
+              {searchRunResult && (
+                <div className="mt-4 bg-slate-50 p-3 rounded-lg border text-xs space-y-2">
+                  <p className="font-bold text-slate-800">{searchRunResult.funcionario.nombre}</p>
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Estamento: {searchRunResult.funcionario.estamento || 'Docente'}</p>
+                  <div className="space-y-1">
+                    {searchRunResult.contratos.map(c => (
+                      <div key={c.id} className="flex justify-between border-b pb-1 text-[10px]">
+                        <span>{c.escuelaNombre}</span>
+                        <span className="font-bold text-slep-blue">{c.horas_totales} hrs ({c.estado})</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="font-bold text-slate-700 text-right">Total: {searchRunResult.totalHoras} hrs</p>
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </main>
+      )}
     </div>
   );
 }

@@ -35,8 +35,8 @@ export default function EscuelaDashboard() {
   const [cargosPersonalizados, setCargosPersonalizados] = useState<CargoPersonalizado[]>([]);
   const [planesEstudio, setPlanesEstudio] = useState<PlanEstudioNorm[]>([]);
 
-  // Navigation tab state: 'docentes' | 'asistentes' | 'cursos'
-  const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos'>('docentes');
+  // Navigation tab state: 'docentes' | 'asistentes' | 'cursos' | 'compendio'
+  const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos' | 'compendio'>('docentes');
 
   // Supervisor delegated mode
   const [isSupervisorMode, setIsSupervisorMode] = useState(false);
@@ -565,6 +565,16 @@ export default function EscuelaDashboard() {
             }`}
           >
             🏫 Cursos y Carga Horaria
+          </button>
+          <button 
+            onClick={() => setActiveTab('compendio')}
+            className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all ${
+              activeTab === 'compendio' 
+                ? 'bg-slep-blue text-white shadow-sm' 
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            📊 Compendio Escolar
           </button>
         </div>
 
@@ -1164,6 +1174,179 @@ export default function EscuelaDashboard() {
                   </div>
                 </div>
 
+              </div>
+            )}
+
+            {activeTab === 'compendio' && (
+              <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-6">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Compendio e Información Completa del Establecimiento</h3>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">Consolidado interactivo de matrícula, dotaciones docentes, horas de plan de estudio, y financiamiento SEP/PIE.</p>
+                </div>
+
+                {/* Dashboard Stats Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                    <p className="text-[10px] uppercase font-bold text-blue-700">Régimen Horario</p>
+                    <p className="text-lg font-black text-blue-900 mt-1">{colegio?.regimen || 'JEC'}</p>
+                  </div>
+                  <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                    <p className="text-[10px] uppercase font-bold text-amber-700">Índice Vulnerabilidad (IVM)</p>
+                    <p className="text-lg font-black text-amber-900 mt-1">{colegio?.ivm || 80}%</p>
+                  </div>
+                  <div className="p-4 bg-purple-50 border border-purple-100 rounded-xl">
+                    <p className="text-[10px] uppercase font-bold text-purple-700">Financiamiento SEP</p>
+                    <p className="text-lg font-black text-purple-900 mt-1">
+                      {contratos.reduce((sum, c) => {
+                        const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+                        return sum + fins.filter(f => f.origen_fondo === 'SEP').reduce((s, f) => s + f.horas, 0);
+                      }, 0)} hrs
+                    </p>
+                  </div>
+                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+                    <p className="text-[10px] uppercase font-bold text-emerald-700">Financiamiento PIE</p>
+                    <p className="text-lg font-black text-emerald-900 mt-1">
+                      {contratos.reduce((sum, c) => {
+                        const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+                        return sum + fins.filter(f => f.origen_fondo === 'PIE').reduce((s, f) => s + f.horas, 0);
+                      }, 0)} hrs
+                    </p>
+                  </div>
+                </div>
+
+                {/* Director / UTP Information Card */}
+                <div className="border border-slate-200/80 rounded-xl p-4 bg-slate-50/50">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-3">Equipo Directivo / UTP Registrado</h4>
+                  <div className="space-y-2.5 text-xs">
+                    {(() => {
+                      const dirCon = contratos.find(c => c.funcion_principal.toLowerCase().includes('director'));
+                      const dirFunc = dirCon ? funcionarios.find(f => f.run === dirCon.funcionario_run) : null;
+                      
+                      const utpCon = contratos.find(c => c.funcion_principal.toLowerCase().includes('utp') || c.funcion_principal.toLowerCase().includes('jefe de utp') || c.funcion_principal.toLowerCase().includes('director_academico') || c.funcion_principal.toLowerCase().includes('coordinador utp'));
+                      const utpFunc = utpCon ? funcionarios.find(f => f.run === utpCon.funcionario_run) : null;
+
+                      return (
+                        <>
+                          <div className="flex justify-between items-center bg-white p-2.5 rounded border">
+                            <div>
+                              <span className="font-bold text-slate-800">{dirFunc ? dirFunc.nombre : 'Director No Registrado en Ingesta'}</span>
+                              <span className="text-[10px] text-slate-400 font-bold ml-2">Director</span>
+                            </div>
+                            <span className="font-mono text-slate-500 font-semibold">{dirCon ? `${dirCon.horas_totales} hrs` : '--'}</span>
+                          </div>
+                          <div className="flex justify-between items-center bg-white p-2.5 rounded border">
+                            <div>
+                              <span className="font-bold text-slate-800">{utpFunc ? utpFunc.nombre : 'Jefe de UTP No Registrado en Ingesta'}</span>
+                              <span className="text-[10px] text-slate-400 font-bold ml-2">Jefe de UTP / Coordinación</span>
+                            </div>
+                            <span className="font-mono text-slate-500 font-semibold">{utpCon ? `${utpCon.horas_totales} hrs` : '--'}</span>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Detailed Summary Table */}
+                <div className="border rounded-xl overflow-hidden text-xs">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 font-bold border-b">
+                      <tr>
+                        <th className="p-3 pl-4">Indicador / Resumen</th>
+                        <th className="p-3 text-center">Profesores (Docentes)</th>
+                        <th className="p-3 text-center">Asistentes de la Educación</th>
+                        <th className="p-3 text-center">Total Contratado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y text-slate-700">
+                      <tr>
+                        <td className="p-3 pl-4 font-semibold text-slate-900">Total Personas</td>
+                        <td className="p-3 text-center font-bold text-slep-blue">
+                          {funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run)).length}
+                        </td>
+                        <td className="p-3 text-center font-bold text-slate-600">
+                          {funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run)).length}
+                        </td>
+                        <td className="p-3 text-center font-bold text-slate-900">
+                          {contratos.length}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 pl-4 font-semibold text-slate-900">Total Horas Contrato</td>
+                        <td className="p-3 text-center font-semibold">
+                          {contratos.filter(c => {
+                            const f = funcionarios.find(func => func.run === c.funcionario_run);
+                            return f?.estamento === 'Docente';
+                          }).reduce((sum, c) => sum + c.horas_totales, 0)} hrs
+                        </td>
+                        <td className="p-3 text-center font-semibold">
+                          {contratos.filter(c => {
+                            const f = funcionarios.find(func => func.run === c.funcionario_run);
+                            return f?.estamento === 'Asistente de la Educación';
+                          }).reduce((sum, c) => sum + c.horas_totales, 0)} hrs
+                        </td>
+                        <td className="p-3 text-center font-bold text-slate-900">
+                          {contratos.reduce((sum, c) => sum + c.horas_totales, 0)} hrs
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 pl-4 font-semibold text-slate-900">Financiamiento Regular (Subv. Común)</td>
+                        <td className="p-3 text-center">
+                          {contratos.filter(c => {
+                            const f = funcionarios.find(func => func.run === c.funcionario_run);
+                            return f?.estamento === 'Docente';
+                          }).reduce((sum, c) => {
+                            const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+                            return sum + fins.filter(f => f.origen_fondo === 'Subvención Regular').reduce((s, f) => s + f.horas, 0);
+                          }, 0)} hrs
+                        </td>
+                        <td className="p-3 text-center">
+                          {contratos.filter(c => {
+                            const f = funcionarios.find(func => func.run === c.funcionario_run);
+                            return f?.estamento === 'Asistente de la Educación';
+                          }).reduce((sum, c) => {
+                            const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+                            return sum + fins.filter(f => f.origen_fondo === 'Subvención Regular').reduce((s, f) => s + f.horas, 0);
+                          }, 0)} hrs
+                        </td>
+                        <td className="p-3 text-center font-bold">
+                          {contratos.reduce((sum, c) => {
+                            const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+                            return sum + fins.filter(f => f.origen_fondo === 'Subvención Regular').reduce((s, f) => s + f.horas, 0);
+                          }, 0)} hrs
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Study Plan detail */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase">Resumen por Cursos y Planes de Estudio</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {cursosDinamicos.map(c => {
+                      const basePlan = planesEstudio.find(p => p.nivel === c.nivel && p.regimen === c.regimen);
+                      const assignedHrs = asignaciones.filter(a => a.curso === c.nombre).reduce((sum, a) => sum + a.horas, 0);
+                      const baseOblig = basePlan?.horasObligatorias || 38;
+
+                      return (
+                        <div key={c.nombre} className="border p-3 rounded-lg text-xs">
+                          <div className="flex justify-between font-bold text-slate-800 mb-1">
+                            <span>{c.nombre}</span>
+                            <span>{assignedHrs} / {baseOblig} hrs</span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-1.5 mb-2">
+                            <div 
+                              className={`h-1.5 rounded-full ${assignedHrs > baseOblig ? 'bg-red-500' : 'bg-slep-blue'}`} 
+                              style={{ width: `${Math.min(100, (assignedHrs / baseOblig) * 100)}%` }}
+                            ></div>
+                          </div>
+                          <p className="text-[10px] text-slate-400">Plan asociado: {c.nivel} ({c.regimen})</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 

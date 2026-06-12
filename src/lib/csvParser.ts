@@ -3,9 +3,11 @@ import Papa from 'papaparse';
 import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion } from './types';
 
 // Normalization function for RUN
-export function normalizarRun(runRaw: string): string {
-  if (!runRaw) return '';
-  let clean = runRaw.replace(/[\.\-\s]/g, '').trim();
+export function normalizarRun(runRaw: any): string {
+  if (runRaw === undefined || runRaw === null) return '';
+  const strVal = String(runRaw).trim();
+  if (!strVal) return '';
+  let clean = strVal.replace(/[\.\-\s]/g, '').trim();
   if (clean.length < 2) return clean.toUpperCase();
   
   const dv = clean.slice(-1).toUpperCase();
