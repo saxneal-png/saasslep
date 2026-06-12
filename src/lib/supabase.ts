@@ -585,5 +585,11 @@ export const api = {
       list.push(comuna);
       dbLocal.comunas = list;
     }
+  },
+
+  deleteComuna: async (comuna: string): Promise<void> => {
+    let list = [...dbLocal.comunas];
+    list = list.filter(c => c !== comuna);
+    dbLocal.comunas = list;
   }
 };

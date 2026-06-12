@@ -1608,10 +1608,14 @@ export default function EscuelaDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
                     <p className="text-[10px] uppercase font-bold text-blue-700">Régimen Horario</p>
-                    <p className="text-lg font-black text-blue-900 mt-1">{colegio?.regimen || 'JEC'}</p>
+                    <p className="text-lg font-black text-blue-900 mt-1">
+                      {cursosDinamicos.length > 0
+                        ? Array.from(new Set(cursosDinamicos.map(c => c.regimen))).join(' / ')
+                        : 'JEC'}
+                    </p>
                   </div>
                   <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
-                    <p className="text-[10px] uppercase font-bold text-amber-700">Índice Vulnerabilidad (IVM)</p>
+                    <p className="text-[10px] uppercase font-bold text-amber-700">Prioritarios %</p>
                     <p className="text-lg font-black text-amber-900 mt-1">{colegio?.ivm || 80}%</p>
                   </div>
                   <div className="p-4 bg-purple-50 border border-purple-100 rounded-xl">

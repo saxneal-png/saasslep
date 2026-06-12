@@ -336,7 +336,7 @@ export default function ProfesionalDashboard() {
                   <tr>
                     <th className="p-3 pl-4">RBD</th>
                     <th className="p-3">Establecimiento</th>
-                    <th className="p-3 text-center">IVM</th>
+                    <th className="p-3 text-center">Prioritarios %</th>
                     <th className="p-3 text-center">Docentes</th>
                     <th className="p-3 text-center">Asistentes</th>
                     <th className="p-3 text-center">Horas Contrato</th>
@@ -441,7 +441,7 @@ export default function ProfesionalDashboard() {
                     <tr>
                       <th className="p-3 pl-6">RBD</th>
                       <th className="p-3">Establecimiento</th>
-                      <th className="p-3 text-center">IVM</th>
+                      <th className="p-3 text-center">Prioritarios %</th>
                       <th className="p-3 text-center">Alertas</th>
                       <th className="p-3 text-center">Gestión</th>
                     </tr>

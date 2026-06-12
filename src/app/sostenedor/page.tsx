@@ -56,7 +56,6 @@ export default function SostenedorDashboard() {
   const [newEscNombre, setNewEscNombre] = useState('');
   const [newEscIvm, setNewEscIvm] = useState(80);
   const [newEscComuna, setNewEscComuna] = useState('Bulnes');
-  const [newEscRegimen, setNewEscRegimen] = useState<'JEC' | 'No JEC'>('JEC');
 
   // Tutorship
   const [selectedProfRun, setSelectedProfRun] = useState('');
@@ -199,6 +198,14 @@ export default function SostenedorDashboard() {
     alert('✅ Comuna agregada exitosamente.');
   };
 
+  const handleDeleteComuna = async (comuna: string) => {
+    if (confirm(`¿Está seguro de eliminar la comuna "${comuna}"?`)) {
+      await api.deleteComuna(comuna);
+      await loadAllData();
+      alert('✅ Comuna eliminada.');
+    }
+  };
+
   // Supervisor CRUD Actions
   const handleCreateSupervisor = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,7 +245,7 @@ export default function SostenedorDashboard() {
       nombre: newEscNombre,
       ivm: parseFloat(newEscIvm.toString()) || 80,
       comuna: newEscComuna,
-      regimen: newEscRegimen
+      regimen: 'JEC'
     });
     setNewEscRbd('');
     setNewEscNombre('');
@@ -804,7 +811,7 @@ export default function SostenedorDashboard() {
                     <th className="p-3 pl-4">RBD</th>
                     <th className="p-3">Establecimiento</th>
                     <th className="p-3">Comuna</th>
-                    <th className="p-3 text-center">IVM</th>
+                    <th className="p-3 text-center">Prioritarios %</th>
                     <th className="p-3 text-center">Docentes</th>
                     <th className="p-3 text-center">Asistentes</th>
                     <th className="p-3 text-center">Horas Contrato</th>
@@ -915,7 +922,7 @@ export default function SostenedorDashboard() {
                     <tr>
                       <th className="p-3 pl-6">RBD</th>
                       <th className="p-3">Establecimiento</th>
-                      <th className="p-3 text-center">IVM</th>
+                      <th className="p-3 text-center">Prioritarios %</th>
                       <th className="p-3">Comuna</th>
                       <th className="p-3">Supervisión SLEP</th>
                       <th className="p-3 text-center">Acciones</th>
@@ -970,7 +977,7 @@ export default function SostenedorDashboard() {
                 <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                   <span>🏫</span> Agregar Nuevo Establecimiento (Escuela)
                 </h3>
-                <form onSubmit={handleCreateEscuela} className="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs bg-slate-50 p-4 rounded-xl border">
+                <form onSubmit={handleCreateEscuela} className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs bg-slate-50 p-4 rounded-xl border">
                   <div className="md:col-span-2">
                     <label className="block font-bold text-slate-500 mb-1">Nombre Escuela</label>
                     <input 
@@ -1002,24 +1009,13 @@ export default function SostenedorDashboard() {
                     </select>
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-500 mb-1">IVM %</label>
+                    <label className="block font-bold text-slate-500 mb-1">Prioritarios %</label>
                     <input 
                       type="number" 
                       className="w-full p-2 border rounded font-bold"
                       value={newEscIvm}
                       onChange={(e) => setNewEscIvm(parseFloat(e.target.value) || 0)}
                     />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-500 mb-1">Régimen</label>
-                    <select 
-                      className="w-full p-2 bg-white border rounded"
-                      value={newEscRegimen}
-                      onChange={(e) => setNewEscRegimen(e.target.value as any)}
-                    >
-                      <option value="JEC">JEC</option>
-                      <option value="No JEC">No JEC</option>
-                    </select>
                   </div>
                   <div className="md:col-span-4 flex items-end justify-end">
                     <button type="submit" className="bg-slep-blue text-white font-bold py-2 px-6 rounded text-xs shadow cursor-pointer">
@@ -1054,8 +1050,16 @@ export default function SostenedorDashboard() {
                   <span className="text-[10px] uppercase font-bold text-slate-400">Comunas Registradas:</span>
                   <div className="flex flex-wrap gap-1 mt-1 max-h-[80px] overflow-y-auto">
                     {comunasList.map(c => (
-                      <span key={c} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-semibold border">
+                      <span key={c} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-semibold border flex items-center gap-1">
                         {c}
+                        <button 
+                          type="button"
+                          onClick={() => handleDeleteComuna(c)}
+                          className="text-red-500 hover:text-red-700 font-bold ml-0.5 px-0.5"
+                          title="Eliminar Comuna"
+                        >
+                          ✕
+                        </button>
                       </span>
                     ))}
                   </div>
