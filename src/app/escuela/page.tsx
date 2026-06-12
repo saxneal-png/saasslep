@@ -37,10 +37,11 @@ export default function EscuelaDashboard() {
   const [planesEstudio, setPlanesEstudio] = useState<PlanEstudioNorm[]>([]);
 
   // Navigation tab state: 'docentes' | 'asistentes' | 'cursos' | 'compendio'
-  const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos' | 'compendio'>('docentes');
+  const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'dotacion'>('docentes');
 
   // Supervisor delegated mode
   const [isSupervisorMode, setIsSupervisorMode] = useState(false);
+  const [isSostenedorMode, setIsSostenedorMode] = useState(false);
 
   // Individual Funcionario CRUD state
   const [newRun, setNewRun] = useState('');
@@ -103,6 +104,9 @@ export default function EscuelaDashboard() {
       
       const supMode = localStorage.getItem('slep_supervisor_mode') === 'true';
       setIsSupervisorMode(supMode);
+
+      const sostMode = localStorage.getItem('slep_sostenedor_mode') === 'true';
+      setIsSostenedorMode(sostMode);
     }
   }, []);
 
@@ -541,6 +545,14 @@ export default function EscuelaDashboard() {
     }
   };
 
+  const handleExitSostenedorMode = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('slep_sim_role', 'sostenedor_maestro');
+      localStorage.removeItem('slep_sostenedor_mode');
+      router.push('/sostenedor');
+    }
+  };
+
   // Mock Export files (xlsx / pdf)
   const handleExportDotacion = (format: 'xlsx' | 'pdf') => {
     alert(`📥 Descargando Dotación de Personal Completa (${colegio?.nombre}) en formato ${format.toUpperCase()}...`);
@@ -846,10 +858,10 @@ export default function EscuelaDashboard() {
       <header className="bg-slep-blue text-white shadow-md py-4 px-6 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="brightness-0 invert object-contain" />
+            <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain" />
             <div className="border-l border-white/20 pl-3">
               <p className="text-[9px] uppercase tracking-wider text-slate-300 font-semibold leading-none">
-                {isSupervisorMode ? 'Acceso Supervisor Delegado' : 'Director / UTP de Escuela'}
+                {isSupervisorMode ? 'Acceso Supervisor Delegado' : isSostenedorMode ? 'Sostenedor (Gestión de Escuela)' : 'Director / UTP de Escuela'}
               </p>
               <h1 className="text-sm font-bold tracking-tight mt-0.5">{colegio ? colegio.nombre : 'Establecimiento'}</h1>
             </div>
@@ -862,6 +874,13 @@ export default function EscuelaDashboard() {
                 className="bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold px-4 py-2 rounded-lg text-xs shadow transition-all duration-200"
               >
                 Volver a Supervisor 🔙
+              </button>
+            ) : isSostenedorMode ? (
+              <button 
+                onClick={handleExitSostenedorMode}
+                className="bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold px-4 py-2 rounded-lg text-xs shadow transition-all duration-200"
+              >
+                Volver a Sostenedor 🔙
               </button>
             ) : (
               <Link href="/" className="bg-white/10 hover:bg-white/20 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors border border-white/10">
@@ -949,6 +968,16 @@ export default function EscuelaDashboard() {
             }`}
           >
             📊 Compendio Escolar
+          </button>
+          <button 
+            onClick={() => setActiveTab('dotacion')}
+            className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all ${
+              activeTab === 'dotacion' 
+                ? 'bg-slep-blue text-white shadow-sm' 
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            📋 Dotación Completa
           </button>
         </div>
 
@@ -1813,6 +1842,76 @@ export default function EscuelaDashboard() {
                       );
                     })}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'dotacion' && (
+              <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-6">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Dotación Completa de Personal</h3>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">Listado consolidado de docentes y asistentes con sus cargas horarias y cursos asignados.</p>
+                </div>
+
+                <div className="overflow-x-auto text-xs">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-slate-100 font-bold text-slate-600 border-b">
+                      <tr>
+                        <th className="p-3 pl-4">Funcionario</th>
+                        <th className="p-3">Estamento</th>
+                        <th className="p-3">Cargo / Función</th>
+                        <th className="p-3">Título Profesional</th>
+                        <th className="p-3 text-center">Horas Contrato</th>
+                        <th className="p-3 text-center">Horas Aula</th>
+                        <th className="p-3 text-center">Horas No Pedag.</th>
+                        <th className="p-3">Cursos / Clases Asignadas</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(() => {
+                        const schoolConts = contratos.filter(c => c.rbd === selectedRbd);
+                        return schoolConts.map(c => {
+                          const f = funcionarios.find(func => func.run === c.funcionario_run);
+                          if (!f) return null;
+                          const cAsigs = asignaciones.filter(a => a.contrato_id === c.id);
+                          const pedagogicas = cAsigs.reduce((sum, a) => sum + a.horas, 0);
+                          const noPedagogicas = Math.max(0, c.horas_totales - pedagogicas);
+                          const coursesString = cAsigs.map(a => `${a.curso} (${a.asignatura})`).join(', ');
+
+                          return (
+                            <tr key={c.id} className="hover:bg-slate-50">
+                              <td className="p-3 pl-4">
+                                <button
+                                  onClick={() => handleOpenEditFuncionario(f)}
+                                  className="text-slep-blue font-bold hover:underline text-left cursor-pointer"
+                                >
+                                  {f.nombre}
+                                </button>
+                                <p className="text-[10px] font-mono text-slate-400 mt-0.5">{f.run}</p>
+                              </td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  f.estamento === 'Docente' 
+                                    ? 'bg-blue-100 text-blue-800' 
+                                    : 'bg-purple-100 text-purple-800'
+                                }`}>
+                                  {f.estamento}
+                                </span>
+                              </td>
+                              <td className="p-3 text-slate-700 font-medium">{f.cargo || '--'}</td>
+                              <td className="p-3 text-slate-500 font-medium">{f.titulo || 'No registrado'}</td>
+                              <td className="p-3 text-center font-bold text-slate-800">{c.horas_totales} hrs</td>
+                              <td className="p-3 text-center font-bold text-slep-blue">{pedagogicas} hrs</td>
+                              <td className="p-3 text-center font-bold text-slate-500">{noPedagogicas.toFixed(1)} hrs</td>
+                              <td className="p-3 text-slate-600 max-w-[200px] truncate" title={coursesString}>
+                                {coursesString || <span className="text-slate-400 italic">Ninguno</span>}
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}

@@ -35,11 +35,12 @@ export default function ProfesionalDashboard() {
   const [importLogsAsis, setImportLogsAsis] = useState('');
   const fileInputRefAsis = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio' | 'dotacion'>('dashboard');
   const [funcionarios, setFuncionarios] = useState<any[]>([]);
 
   // Local filters
   const [searchEst, setSearchEst] = useState('');
+  const [selectedDotacionRbd, setSelectedDotacionRbd] = useState<string>('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -82,6 +83,12 @@ export default function ProfesionalDashboard() {
     }
     loadData();
   }, [profesionalRun]);
+
+  useEffect(() => {
+    if (escuelasAsignadasRbd.length > 0 && !selectedDotacionRbd) {
+      setSelectedDotacionRbd(escuelasAsignadasRbd[0]);
+    }
+  }, [escuelasAsignadasRbd, selectedDotacionRbd]);
 
   // Handle click on delegate school administration
   const handleAdministrarEscuela = (rbd: string) => {
@@ -254,7 +261,7 @@ export default function ProfesionalDashboard() {
       <header className="bg-slep-blue text-white shadow-md py-4 px-6 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="brightness-0 invert object-contain" />
+            <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain" />
             <div className="border-l border-white/20 pl-3">
               <p className="text-[9px] uppercase tracking-wider text-slate-300 font-semibold leading-none">Supervisor Técnico / Profesional SLEP</p>
               <h1 className="text-sm font-bold tracking-tight mt-0.5">Bandeja de Tutela Delegada</h1>
@@ -288,9 +295,19 @@ export default function ProfesionalDashboard() {
         >
           📊 Compendio Tutela de Escuelas
         </button>
+        <button
+          onClick={() => setActiveTab('dotacion')}
+          className={`px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition-all duration-200 ${
+            activeTab === 'dotacion'
+              ? 'bg-slep-blue text-white'
+              : 'bg-white text-slate-600 border hover:bg-slate-50'
+          }`}
+        >
+          📋 Dotaciones de Personal
+        </button>
       </div>
 
-      {activeTab === 'compendio' ? (
+      {activeTab === 'compendio' && (
         <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full animate-fadeIn">
           <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -406,7 +423,9 @@ export default function ProfesionalDashboard() {
             </div>
           </div>
         </main>
-      ) : (
+      )}
+
+      {activeTab === 'dashboard' && (
         <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
           {/* Left Column: Supervised schools list */}
           <div className="lg:col-span-2 space-y-6">
@@ -579,6 +598,110 @@ export default function ProfesionalDashboard() {
                 })}
               </div>
             </div>
+          </div>
+        </main>
+      )}
+
+      {activeTab === 'dotacion' && (
+        <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full animate-fadeIn">
+          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-800">Visualización de Dotación Completa</h2>
+                <p className="text-xs text-slate-500 mt-1 font-medium">Consulte la nómina completa de docentes y asistentes por establecimiento con desglose de horas.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-bold text-slate-600">Establecimiento:</label>
+                <select
+                  value={selectedDotacionRbd}
+                  onChange={(e) => setSelectedDotacionRbd(e.target.value)}
+                  className="p-2 border rounded-lg bg-white text-xs font-bold text-slate-800 shadow-sm"
+                >
+                  {establecimientos.map(est => (
+                    <option key={est.rbd} value={est.rbd}>
+                      {est.nombre} (RBD {est.rbd})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {selectedDotacionRbd ? (() => {
+              const schoolConts = contratos.filter(c => c.rbd === selectedDotacionRbd);
+              
+              return (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center text-xs bg-slate-50 p-3 rounded-lg border">
+                    <span className="font-bold text-slate-700">RBD Seleccionado: {selectedDotacionRbd}</span>
+                    <span className="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded text-[10px]">
+                      {schoolConts.length} Funcionarios Contratados
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto text-xs">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-slate-100 font-bold text-slate-600 border-b">
+                        <tr>
+                          <th className="p-3 pl-4">Funcionario</th>
+                          <th className="p-3">Estamento</th>
+                          <th className="p-3">Cargo / Función</th>
+                          <th className="p-3">Título Profesional</th>
+                          <th className="p-3 text-center">Horas Contrato</th>
+                          <th className="p-3 text-center">Horas Aula</th>
+                          <th className="p-3 text-center">Horas No Pedag.</th>
+                          <th className="p-3">Cursos / Clases Asignadas</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {schoolConts.map(c => {
+                          const f = funcionarios.find(func => func.run === c.funcionario_run);
+                          if (!f) return null;
+                          const cAsigs = asignaciones.filter(a => a.contrato_id === c.id);
+                          const pedagogicas = cAsigs.reduce((sum, a) => sum + a.horas, 0);
+                          const noPedagogicas = Math.max(0, c.horas_totales - pedagogicas);
+                          const coursesString = cAsigs.map(a => `${a.curso} (${a.asignatura})`).join(', ');
+
+                          return (
+                            <tr key={c.id} className="hover:bg-slate-50">
+                              <td className="p-3 pl-4">
+                                <span className="font-bold text-slate-800">{f.nombre}</span>
+                                <p className="text-[10px] font-mono text-slate-400 mt-0.5">{f.run}</p>
+                              </td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  f.estamento === 'Docente' 
+                                    ? 'bg-blue-100 text-blue-800' 
+                                    : 'bg-purple-100 text-purple-800'
+                                }`}>
+                                  {f.estamento}
+                                </span>
+                              </td>
+                              <td className="p-3 text-slate-700 font-medium">{f.cargo || '--'}</td>
+                              <td className="p-3 text-slate-500 font-medium">{f.titulo || 'No registrado'}</td>
+                              <td className="p-3 text-center font-bold text-slate-800">{c.horas_totales} hrs</td>
+                              <td className="p-3 text-center font-bold text-slep-blue">{pedagogicas} hrs</td>
+                              <td className="p-3 text-center font-bold text-slate-500">{noPedagogicas.toFixed(1)} hrs</td>
+                              <td className="p-3 text-slate-600 max-w-[200px] truncate" title={coursesString}>
+                                {coursesString || <span className="text-slate-400 italic">Ninguno</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {schoolConts.length === 0 && (
+                          <tr>
+                            <td colSpan={8} className="p-4 text-center text-slate-400 italic">
+                              No hay funcionarios registrados en este establecimiento.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })() : (
+              <p className="text-center text-slate-400 italic py-6">Seleccione un establecimiento para ver su dotación.</p>
+            )}
           </div>
         </main>
       )}

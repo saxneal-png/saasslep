@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { api, dbLocal } from '@/lib/supabase';
 import { parsearNominaCsv, normalizarRun } from '@/lib/csvParser';
 import { 
@@ -21,6 +22,7 @@ import {
 import { validarCargaDocente } from '@/lib/rulesEngine';
 
 export default function SostenedorDashboard() {
+  const router = useRouter();
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [financiamientos, setFinanciamientos] = useState<FinanciamientoContrato[]>([]);
@@ -257,6 +259,15 @@ export default function SostenedorDashboard() {
     if (confirm('¿Está seguro de eliminar esta escuela?')) {
       await api.deleteEstablecimiento(rbd);
       await loadAllData();
+    }
+  };
+
+  const handleManageSchool = (rbd: string) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('slep_sim_rbd', rbd);
+      localStorage.setItem('slep_sim_role', 'director_escuela');
+      localStorage.setItem('slep_sostenedor_mode', 'true');
+      router.push('/escuela');
     }
   };
 
@@ -728,7 +739,7 @@ export default function SostenedorDashboard() {
       <header className="bg-slep-blue text-white shadow-md py-4 px-6 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="brightness-0 invert object-contain" />
+            <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain" />
             <div className="border-l border-white/20 pl-3">
               <p className="text-[9px] uppercase tracking-wider text-slate-300 font-semibold leading-none">Sostenedor Maestro (Superusuario)</p>
               <h1 className="text-sm font-bold tracking-tight mt-0.5">Consola de Gobernanza Territorial</h1>
@@ -852,7 +863,15 @@ export default function SostenedorDashboard() {
                     return (
                       <tr key={e.rbd} className="hover:bg-slate-50">
                         <td className="p-3 pl-4 font-mono font-bold text-slate-500">{e.rbd}</td>
-                        <td className="p-3 font-semibold text-slate-800">{e.nombre}</td>
+                        <td className="p-3 font-semibold text-slate-800">
+                          <button
+                            onClick={() => handleManageSchool(e.rbd)}
+                            className="text-slep-blue hover:text-slep-blue-hover hover:underline font-semibold text-left cursor-pointer"
+                            title="Ver y Gestionar Escuela"
+                          >
+                            🏫 {e.nombre}
+                          </button>
+                        </td>
                         <td className="p-3 text-slate-600">{e.comuna}</td>
                         <td className="p-3 text-center font-bold text-slate-700">{e.ivm}%</td>
                         <td className="p-3 text-center font-semibold text-slep-blue">{docenteCount}</td>
@@ -934,7 +953,15 @@ export default function SostenedorDashboard() {
                       return (
                         <tr key={e.rbd} className="hover:bg-slate-50">
                           <td className="p-3 pl-6 font-mono font-bold text-slate-500">{e.rbd}</td>
-                          <td className="p-3 font-semibold text-slate-800">{e.nombre}</td>
+                          <td className="p-3 font-semibold text-slate-800">
+                            <button
+                              onClick={() => handleManageSchool(e.rbd)}
+                              className="text-slep-blue hover:text-slep-blue-hover hover:underline font-semibold text-left cursor-pointer"
+                              title="Ver y Gestionar Escuela"
+                            >
+                              🏫 {e.nombre}
+                            </button>
+                          </td>
                           <td className="p-3 text-center font-bold text-slate-700">{e.ivm}%</td>
                           <td className="p-3 text-slate-600">{e.comuna}</td>
                           <td className="p-3 text-slate-700">
@@ -953,10 +980,16 @@ export default function SostenedorDashboard() {
                               <span className="text-slate-400 italic">Sin Asignar</span>
                             )}
                           </td>
-                          <td className="p-3 text-center">
+                          <td className="p-3 text-center flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleManageSchool(e.rbd)}
+                              className="text-slep-blue hover:text-slep-blue-hover font-bold text-xs bg-blue-50 border border-blue-200 px-2.5 py-1 rounded shadow cursor-pointer"
+                            >
+                              ⚙️ Gestionar
+                            </button>
                             <button
                               onClick={() => handleDeleteEscuela(e.rbd)}
-                              className="text-red-500 hover:text-red-700 font-bold text-xs"
+                              className="text-red-500 hover:text-red-700 font-bold text-xs bg-red-50 border border-red-200 px-2.5 py-1 rounded shadow cursor-pointer"
                             >
                               Eliminar
                             </button>
@@ -1547,6 +1580,25 @@ export default function SostenedorDashboard() {
                           }`}>
                             {leyCalculo.cumpleLey20903 ? 'CUMPLE' : 'EXCEDIDO'}
                           </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Course Assignments List */}
+                    {editingFuncionario.estamento === 'Docente' && teacherAsigs.length > 0 && (
+                      <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-2">
+                        <p className="font-bold text-slate-800 border-b pb-1 text-[11px]">Carga Horaria en Aula (Cursos y Asignaturas)</p>
+                        <div className="space-y-1">
+                          {teacherAsigs.map((a, idx) => (
+                            <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border text-[11px]">
+                              <div>
+                                <span className="font-bold text-slate-800">{a.curso}</span>
+                                <span className="text-slate-400 mx-1.5">•</span>
+                                <span className="text-slate-600 font-semibold">{a.asignatura}</span>
+                              </div>
+                              <span className="font-mono font-bold text-slep-blue bg-blue-50 px-2 py-0.5 rounded">{a.horas} hrs</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
