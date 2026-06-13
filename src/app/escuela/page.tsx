@@ -18,7 +18,8 @@ import {
   OrigenFondo,
   EstamentoType,
   PlanEstudioNorm,
-  FinanciamientoContrato
+  FinanciamientoContrato,
+  TareaReemplazo
 } from '@/lib/types';
 
 import { normalizarRun } from '@/lib/csvParser';
@@ -38,6 +39,9 @@ export default function EscuelaDashboard() {
 
   // Navigation tab state: 'docentes' | 'asistentes' | 'cursos' | 'compendio'
   const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'dotacion'>('docentes');
+  const [tareasReemplazo, setTareasReemplazo] = useState<TareaReemplazo[]>([]);
+  const [taskReemplazoRun, setTaskReemplazoRun] = useState<{[key: string]: string}>({});
+
 
   // Supervisor delegated mode
   const [isSupervisorMode, setIsSupervisorMode] = useState(false);
@@ -138,11 +142,65 @@ export default function EscuelaDashboard() {
     setCargosPersonalizados(customCargs);
     setPlanesEstudio(plans);
 
+    const tasks = await api.getTareasReemplazo();
+    setTareasReemplazo(tasks);
+
     if (dynCursos.length > 0) {
       setSelectedCursoForAsig(dynCursos[0].nombre);
       setSelectedCursoPlan(dynCursos[0].nombre);
     }
   }
+
+  const handleResolveReemplazo = async (tarea: TareaReemplazo, reemplazoRun: string) => {
+    if (!reemplazoRun) {
+      alert('⚠️ Por favor seleccione o ingrese un RUT de reemplazo.');
+      return;
+    }
+    const cleanRun = normalizarRun(reemplazoRun);
+
+    // 1. Check if replacement funcionario profile exists; if not, create a default profile
+    const existingFunc = funcionarios.find(f => f.run === cleanRun);
+    if (!existingFunc) {
+      const nomPlaceholder = prompt("Ingrese el nombre completo para el nuevo docente de reemplazo:");
+      if (!nomPlaceholder) {
+        alert("⚠️ Operación cancelada. El docente de reemplazo debe tener un nombre.");
+        return;
+      }
+      await api.upsertFuncionario({
+        run: cleanRun,
+        nombre: nomPlaceholder.toUpperCase(),
+        estamento: 'Docente',
+        cargo: `Reemplazo de ${tarea.funcionario_titular_nombre}`
+      });
+    }
+
+    // 2. Create the mirror replacement contract
+    const newContId = `c-reemplazo-${tarea.id}-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}`;
+    await api.upsertContratoCompleto({
+      id: newContId,
+      funcionario_run: cleanRun,
+      rbd: selectedRbd,
+      calidad_juridica: 'Contrata',
+      funcion_principal: `Reemplazo Docente (${tarea.funcionario_titular_nombre})`,
+      estado: 'Reemplazo',
+      horas_totales: tarea.horas_a_cubrir,
+      vinculo_titular_id: `c-${selectedRbd}-${tarea.funcionario_titular_run.replace(/[^a-zA-Z0-9]/g, '')}`
+    }, [
+      {
+        id: `f-${newContId}-Regular`,
+        contrato_id: newContId,
+        origen_fondo: 'Subvención Regular',
+        horas: tarea.horas_a_cubrir
+      }
+    ]);
+
+    // 3. Resolve the task
+    await api.resolverTareaReemplazo(tarea.id, cleanRun);
+
+    // 4. Reload school data
+    await loadAllSchoolData();
+    alert('✅ Contrato de reemplazo creado con éxito y tarea resuelta.');
+  };
 
   // Check for multi-school active contracts when selected teacher changes (itinerancy alert)
   useEffect(() => {
@@ -999,7 +1057,66 @@ export default function EscuelaDashboard() {
           <div className="lg:col-span-2 space-y-6">
             
             {activeTab === 'docentes' && (
-              <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <div className="space-y-6 w-full">
+                
+                {/* Tareas de Reemplazo Pendientes Panel */}
+                {(() => {
+                  const pendingTasks = tareasReemplazo.filter(t => t.rbd === selectedRbd && t.estado === 'Pendiente');
+                  if (pendingTasks.length === 0) return null;
+                  return (
+                    <div className="bg-red-50/50 border border-slep-coral/30 rounded-xl p-5 animate-fadeIn">
+                      <h4 className="text-xs font-bold text-red-800 flex items-center gap-1.5 uppercase tracking-wide">
+                        ⚠️ Tareas de Reemplazo Pendientes ({pendingTasks.length})
+                      </h4>
+                      <p className="text-[11px] text-slate-600 mt-1">
+                        Sostenedor/RR.HH. ha reportado Licencias Médicas para esta escuela. Asigne un docente de reemplazo para cubrir las horas correspondientes:
+                      </p>
+                      <div className="mt-3 space-y-3">
+                        {pendingTasks.map(t => (
+                          <div key={t.id} className="bg-white border rounded-lg p-3 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                            <div>
+                              <p className="font-bold text-slate-800">Docente Licenciado: {t.funcionario_titular_nombre}</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">RUN: {t.funcionario_titular_run} | Horas a Cubrir: <span className="font-bold text-slep-blue">{t.horas_a_cubrir} hrs</span></p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <select
+                                value={taskReemplazoRun[t.id] || ''}
+                                onChange={(e) => setTaskReemplazoRun({...taskReemplazoRun, [t.id]: e.target.value})}
+                                className="p-1.5 border rounded bg-white font-medium text-slate-700"
+                              >
+                                <option value="">-- Seleccionar Docente --</option>
+                                {funcionarios
+                                  .filter(f => f.estamento === 'Docente')
+                                  .map(f => (
+                                    <option key={f.run} value={f.run}>
+                                      {f.nombre} ({f.run})
+                                    </option>
+                                  ))
+                                }
+                              </select>
+                              <span className="text-slate-400">o</span>
+                              <input
+                                type="text"
+                                placeholder="RUT Reemplazo Manual"
+                                value={taskReemplazoRun[t.id] || ''}
+                                onChange={(e) => setTaskReemplazoRun({...taskReemplazoRun, [t.id]: e.target.value})}
+                                className="p-1.5 border rounded font-mono w-32"
+                              />
+                              <button
+                                onClick={() => handleResolveReemplazo(t, taskReemplazoRun[t.id] || '')}
+                                className="bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold px-3 py-1.5 rounded shadow text-[11px]"
+                              >
+                                Asignar y Resolver 🤝
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
                 <div className="flex justify-between items-center pb-2 border-b border-slate-100">
                   <div>
                     <h3 className="text-base font-bold text-slate-800">Docentes del Establecimiento</h3>
@@ -1157,7 +1274,8 @@ export default function EscuelaDashboard() {
                   </table>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
             {activeTab === 'asistentes' && (
               <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">

@@ -1,4 +1,4 @@
-import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado } from './types';
+import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado, RegistroRemuneracion } from './types';
 
 export interface PlanEstudioNivel {
   nivel: string;
@@ -367,5 +367,60 @@ export function auditarReemplazo(
     horasEspejo,
     horasAsignadas: contratoReemplazo.horas_totales,
     costoDuplicadoEstimado: contratoReemplazo.horas_totales * costoHora * 4 // Monthly cost (4 weeks approx)
+  };
+}
+
+export function calcularHaberBaseEUS(grado: number): number {
+  if (grado < 1 || grado > 24) return 0;
+  const baseGrado24 = 380000; // base minimum salary for grade 24
+  // Grado 1 is highest, Grado 24 is lowest. Exponential scale:
+  return Math.round(baseGrado24 * Math.pow(1.075, 24 - grado));
+}
+
+export function conciliarFuncionario(
+  runNormalizado: string,
+  contratos: Contrato[],
+  asignaciones: AsignacionAula[],
+  remuneraciones: RegistroRemuneracion[]
+): {
+  contratadas: number;
+  aula: number;
+  pagadas: number;
+  discrepancia: boolean;
+  mensaje: string;
+} {
+  const contrs = contratos.filter(c => c.funcionario_run === runNormalizado);
+  const totalContratadas = contrs.reduce((sum, c) => sum + c.horas_totales, 0);
+
+  const contrIds = contrs.map(c => c.id);
+  const totalAula = asignaciones.filter(a => contrIds.includes(a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
+
+  const remuns = remuneraciones.filter(r => r.funcionario_run === runNormalizado);
+  const totalPagadas = remuns.reduce((sum, r) => sum + r.horas_pagadas, 0);
+
+  const isLicencia = contrs.some(c => c.estado === 'Licencia Médica');
+
+  let discrepancia = false;
+  let mensaje = 'Conciliado correctamente.';
+
+  if (contrs.length > 0) {
+    if (totalContratadas !== totalPagadas) {
+      discrepancia = true;
+      mensaje = `Descalce financiero: Contratadas ${totalContratadas} hrs vs Pagadas ${totalPagadas} hrs.`;
+    } else if (!isLicencia && totalAula > totalContratadas) {
+      discrepancia = true;
+      mensaje = `Sobrecarga de Aula: Registradas ${totalAula} hrs en aula vs Contratadas ${totalContratadas} hrs.`;
+    }
+  } else if (totalPagadas > 0) {
+    discrepancia = true;
+    mensaje = `Pago sin contrato: Registrado pago de ${totalPagadas} hrs pero no tiene contrato activo en RR.HH.`;
+  }
+
+  return {
+    contratadas: totalContratadas,
+    aula: totalAula,
+    pagadas: totalPagadas,
+    discrepancia,
+    mensaje
   };
 }

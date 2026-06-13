@@ -1,6 +1,6 @@
 // @ts-ignore
 import Papa from 'papaparse';
-import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion } from './types';
+import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion } from './types';
 
 // Normalization function for RUN
 export function normalizarRun(runRaw: any): string {
@@ -226,3 +226,52 @@ export function parsearNominaCsv(
 
   return { funcionarios, contratos, financiamientos, alertas };
 }
+
+export function parsearRemuneracionesCsv(csvContent: string): RegistroRemuneracion[] {
+  let rows: any[] = [];
+  const trimmed = csvContent.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsedJson = JSON.parse(trimmed);
+      rows = Array.isArray(parsedJson) ? parsedJson : [parsedJson];
+    } catch (e) {
+      // Fallback
+    }
+  }
+
+  if (rows.length === 0) {
+    const parsed = Papa.parse(csvContent, {
+      header: true,
+      skipEmptyLines: true,
+    });
+    rows = parsed.data;
+  }
+
+  const result: RegistroRemuneracion[] = [];
+  rows.forEach((row: any, idx: number) => {
+    let runRaw = row.RUN || row.run || row.Rut || row.rut || row.RUT || '';
+    if (!runRaw) return;
+    const run = normalizarRun(runRaw);
+
+    const horas_pagadas = parseDecimalHours(row.HorasPagadas || row.horas_pagadas || row.Horas || row.horas || 0);
+    const total_haberes = parseInt(row.TotalHaberes || row.total_haberes || row.Haberes || row.haberes || row.Sueldo || row.sueldo || '0', 10) || 0;
+    const mes_pago = String(row.MesPago || row.mes_pago || row.Mes || row.mes || '2026-06').trim();
+    const est = String(row.GrupoEstamento || row.grupo_estamento || row.Estamento || row.estamento || 'P02_Educacion').trim();
+    const grupo_estamento: 'P01_Administrativo' | 'P02_Educacion' = (est.includes('P01') || est.toLowerCase().includes('admin')) 
+      ? 'P01_Administrativo' 
+      : 'P02_Educacion';
+
+    result.push({
+      id: `rem-${run.replace(/[^a-zA-Z0-9]/g, '')}-${idx}`,
+      funcionario_run: run,
+      nombre_esta: row.NombreEsta || row.nombre_esta || row.Establecimiento || row.establecimiento || undefined,
+      horas_pagadas,
+      total_haberes,
+      mes_pago,
+      grupo_estamento
+    });
+  });
+
+  return result;
+}
+

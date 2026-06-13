@@ -10,6 +10,8 @@ export type CalidadJuridica = 'Titular' | 'Contrata';
 export type EstadoContrato = 'Activo' | 'Licencia Médica' | 'Reemplazo';
 export type EstamentoType = 'Docente' | 'Asistente de la Educación';
 
+export type GrupoEstamento = 'P01_Administrativo' | 'P02_Educacion';
+
 export interface Funcionario {
   run: string; // Unique primary key (normalized)
   nombre: string;
@@ -18,6 +20,10 @@ export interface Funcionario {
   estamento?: EstamentoType; // Docente or Asistente
   cargo?: string; // Specific role, e.g. Docente Aula, Auxiliar, Psicopedagogo
   titulo?: string; // Professional title or degree
+  grupo_estamento?: GrupoEstamento;
+  calidad_juridica_p01?: 'Planta' | 'Contrata';
+  escalafon_p01?: 'Directivo' | 'Profesional' | 'Técnico' | 'Administrativo' | 'Auxiliar';
+  grado_eus?: number;
 }
 
 export interface Contrato {
@@ -106,4 +112,24 @@ export interface Supervisor {
   run: string;
   nombre: string;
   email: string;
+}
+
+export interface RegistroRemuneracion {
+  id: string;
+  funcionario_run: string;
+  nombre_esta?: string;
+  horas_pagadas: number;
+  total_haberes: number;
+  mes_pago: string; // e.g. "2026-06"
+  grupo_estamento: GrupoEstamento;
+}
+
+export interface TareaReemplazo {
+  id: string;
+  rbd: string;
+  funcionario_titular_run: string;
+  funcionario_titular_nombre: string;
+  horas_a_cubrir: number;
+  estado: 'Pendiente' | 'Asignado';
+  reemplazo_run?: string;
 }

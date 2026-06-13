@@ -11,7 +11,9 @@ import {
   AsignaturaDinamica,
   CargoPersonalizado,
   PlanEstudioNorm,
-  Supervisor
+  Supervisor,
+  RegistroRemuneracion,
+  TareaReemplazo
 } from './types';
 
 // Comunas in Diguillín/Valle Diguillín area
@@ -326,6 +328,22 @@ class DatabaseLocal {
   set comunas(val: string[]) {
     this.setStorageItem('comunas', val);
   }
+
+  get libroRemuneraciones(): RegistroRemuneracion[] {
+    return this.getStorageItem('libro_remuneraciones', []);
+  }
+
+  set libroRemuneraciones(val: RegistroRemuneracion[]) {
+    this.setStorageItem('libro_remuneraciones', val);
+  }
+
+  get tareasReemplazo(): TareaReemplazo[] {
+    return this.getStorageItem('tareas_reemplazo', []);
+  }
+
+  set tareasReemplazo(val: TareaReemplazo[]) {
+    this.setStorageItem('tareas_reemplazo', val);
+  }
 }
 
 export const dbLocal = new DatabaseLocal();
@@ -591,5 +609,32 @@ export const api = {
     let list = [...dbLocal.comunas];
     list = list.filter(c => c !== comuna);
     dbLocal.comunas = list;
+  },
+
+  getRemuneraciones: async (): Promise<RegistroRemuneracion[]> => {
+    return dbLocal.libroRemuneraciones;
+  },
+
+  cargarRemuneraciones: async (registros: RegistroRemuneracion[]): Promise<void> => {
+    dbLocal.libroRemuneraciones = registros;
+  },
+
+  getTareasReemplazo: async (): Promise<TareaReemplazo[]> => {
+    return dbLocal.tareasReemplazo;
+  },
+
+  crearTareaReemplazo: async (tarea: TareaReemplazo): Promise<void> => {
+    const list = [...dbLocal.tareasReemplazo, tarea];
+    dbLocal.tareasReemplazo = list;
+  },
+
+  resolverTareaReemplazo: async (id: string, reemplazoRun: string): Promise<void> => {
+    const list = dbLocal.tareasReemplazo.map(t => {
+      if (t.id === id) {
+        return { ...t, estado: 'Asignado' as const, reemplazo_run: reemplazoRun };
+      }
+      return t;
+    });
+    dbLocal.tareasReemplazo = list;
   }
 };

@@ -5,15 +5,18 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { api, dbLocal } from '@/lib/supabase';
-import { parsearNominaCsv } from '@/lib/csvParser';
+
 import { 
   Establecimiento, 
   Contrato, 
   FinanciamientoContrato, 
   AlertaConciliacion,
   AsignacionAula,
-  Funcionario
+  Funcionario,
+  RegistroRemuneracion
 } from '@/lib/types';
+import { parsearNominaCsv, parsearRemuneracionesCsv } from '@/lib/csvParser';
+import { conciliarFuncionario } from '@/lib/rulesEngine';
 
 export default function ProfesionalDashboard() {
   const router = useRouter();
@@ -35,12 +38,19 @@ export default function ProfesionalDashboard() {
   const [importLogsAsis, setImportLogsAsis] = useState('');
   const fileInputRefAsis = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio' | 'dotacion'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio' | 'dotacion' | 'finanzas'>('dashboard');
   const [funcionarios, setFuncionarios] = useState<any[]>([]);
 
   // Local filters
   const [searchEst, setSearchEst] = useState('');
   const [selectedDotacionRbd, setSelectedDotacionRbd] = useState<string>('');
+  
+  // Finanzas states
+  const [remuneraciones, setRemuneraciones] = useState<RegistroRemuneracion[]>([]);
+  const [uploadRemunLogs, setUploadRemunLogs] = useState('');
+  const remunFileInputRef = useRef<HTMLInputElement>(null);
+  const [filtroDiscrepancias, setFiltroDiscrepancias] = useState(false);
+
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -80,6 +90,9 @@ export default function ProfesionalDashboard() {
 
       const allAsigs = dbLocal.asignacionesAula;
       setAsignaciones(allAsigs);
+
+      const rems = await api.getRemuneraciones();
+      setRemuneraciones(rems);
     }
     loadData();
   }, [profesionalRun]);
@@ -255,59 +268,90 @@ export default function ProfesionalDashboard() {
   const sumFinanciamientos = totalRegular + totalSep + totalPie + totalRef + totalPro + totalOtro;
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
-      
-      {/* Header */}
-      <header className="bg-slep-blue text-white shadow-md py-4 px-6 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain" />
-            <div className="border-l border-white/20 pl-3">
-              <p className="text-[9px] uppercase tracking-wider text-slate-300 font-semibold leading-none">Supervisor Técnico / Profesional SLEP</p>
-              <h1 className="text-sm font-bold tracking-tight mt-0.5">Bandeja de Tutela Delegada</h1>
-            </div>
+    <div className="flex min-h-screen bg-slate-50">
+      {/* Sidebar */}
+      <aside className="w-64 bg-slep-blue-dark text-white flex flex-col z-40 shadow-xl shrink-0">
+        <div className="p-6 border-b border-white/10 flex items-center gap-3">
+          <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain" />
+        </div>
+        
+        <div className="p-4 flex-1 space-y-6">
+          <div>
+            <p className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 mb-2">Unidad UATP</p>
+            <nav className="space-y-1">
+              <button
+                onClick={() => { setActiveTab('dashboard'); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all text-left ${
+                  activeTab === 'dashboard' ? 'bg-slep-blue text-white shadow' : 'text-slate-300 hover:bg-white/5'
+                }`}
+              >
+                🎛️ Tablero de Supervisión
+              </button>
+              <button
+                onClick={() => { setActiveTab('compendio'); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all text-left ${
+                  activeTab === 'compendio' ? 'bg-slep-blue text-white shadow' : 'text-slate-300 hover:bg-white/5'
+                }`}
+              >
+                📊 Compendio Escuelas
+              </button>
+              <button
+                onClick={() => { setActiveTab('dotacion'); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all text-left ${
+                  activeTab === 'dotacion' ? 'bg-slep-blue text-white shadow' : 'text-slate-300 hover:bg-white/5'
+                }`}
+              >
+                📋 Dotaciones de Personal
+              </button>
+            </nav>
           </div>
-          <Link href="/" className="bg-white/10 hover:bg-white/20 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors border border-white/10">
+
+          <div>
+            <p className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 mb-2">Gestión de Personas</p>
+            <nav className="space-y-1">
+              <Link
+                href="/sostenedor/rrhh"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all text-left text-slate-300 hover:bg-white/5 block"
+              >
+                💼 Fichas, Licencias & Reemplazos
+              </Link>
+            </nav>
+          </div>
+
+          <div>
+            <p className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 mb-2">Finanzas SLEP</p>
+            <nav className="space-y-1">
+              <button
+                onClick={() => { setActiveTab('finanzas'); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all text-left ${
+                  activeTab === 'finanzas' ? 'bg-slep-blue text-white shadow' : 'text-slate-300 hover:bg-white/5'
+                }`}
+              >
+                💵 Conciliación Remuneraciones
+              </button>
+            </nav>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-white/10 text-center">
+          <p className="text-[10px] text-slate-400 font-medium">Supervisor SLEP</p>
+          <p className="text-[9px] text-slate-500 font-mono mt-0.5 truncate" title={profesionalRun}>{profesionalRun}</p>
+          <Link href="/" className="mt-2 block w-full bg-white/10 hover:bg-white/20 text-white font-bold py-1.5 rounded text-[10px] transition-colors border border-white/10">
             Cerrar Sesión
           </Link>
         </div>
-      </header>
+      </aside>
 
-      {/* Tab Selector */}
-      <div className="max-w-7xl mx-auto px-4 md:px-8 mt-6 flex gap-2 w-full">
-        <button
-          onClick={() => setActiveTab('dashboard')}
-          className={`px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition-all duration-200 ${
-            activeTab === 'dashboard'
-              ? 'bg-slep-blue text-white'
-              : 'bg-white text-slate-600 border hover:bg-slate-50'
-          }`}
-        >
-          🎛️ Tablero de Supervisión
-        </button>
-        <button
-          onClick={() => setActiveTab('compendio')}
-          className={`px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition-all duration-200 ${
-            activeTab === 'compendio'
-              ? 'bg-slep-blue text-white'
-              : 'bg-white text-slate-600 border hover:bg-slate-50'
-          }`}
-        >
-          📊 Compendio Tutela de Escuelas
-        </button>
-        <button
-          onClick={() => setActiveTab('dotacion')}
-          className={`px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition-all duration-200 ${
-            activeTab === 'dotacion'
-              ? 'bg-slep-blue text-white'
-              : 'bg-white text-slate-600 border hover:bg-slate-50'
-          }`}
-        >
-          📋 Dotaciones de Personal
-        </button>
-      </div>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+        <header className="bg-white border-b py-4 px-6 flex items-center justify-between shadow-sm">
+          <div>
+            <h1 className="text-base font-bold text-slate-800">Bandeja de Tutela Delegada</h1>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">Control y asistencia técnica a escuelas supervisadas</p>
+          </div>
+        </header>
 
-      {activeTab === 'compendio' && (
+        {activeTab === 'compendio' && (
         <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full animate-fadeIn">
           <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -705,6 +749,174 @@ export default function ProfesionalDashboard() {
           </div>
         </main>
       )}
+
+      {activeTab === 'finanzas' && (
+        <main className="p-6 md:p-8 flex-1 flex flex-col gap-6 w-full animate-fadeIn">
+          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <span>💵</span> Auditoría y Conciliación de Remuneraciones
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">Conciliación de haberes y horas contratadas vs horas pagadas para personal de sus establecimientos bajo tutela.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => remunFileInputRef.current?.click()}
+                  className="bg-slep-blue hover:bg-slep-blue-hover text-white text-xs font-bold px-3 py-2 rounded shadow transition-all cursor-pointer"
+                >
+                  📥 Cargar Libro Remuneraciones
+                </button>
+                <input
+                  ref={remunFileInputRef}
+                  type="file"
+                  accept=".csv,.json"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) {
+                      const reader = new FileReader();
+                      reader.onload = async (evt) => {
+                        try {
+                          const text = evt.target?.result as string;
+                          const parsed = parsearRemuneracionesCsv(text);
+                          await api.cargarRemuneraciones(parsed);
+                          setRemuneraciones(parsed);
+                          setUploadRemunLogs(`✅ Éxito: Se procesaron ${parsed.length} registros de remuneraciones.`);
+                        } catch (err: any) {
+                          setUploadRemunLogs(`❌ Error al procesar archivo: ${err.message}`);
+                        }
+                      };
+                      reader.readAsText(e.target.files[0], 'UTF-8');
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            {uploadRemunLogs && (
+              <div className="mt-3 p-3 bg-slate-50 border rounded-lg text-xs font-bold text-slate-700">
+                {uploadRemunLogs}
+              </div>
+            )}
+
+            {(() => {
+              const rbdContratos = contratos.filter(c => escuelasAsignadasRbd.includes(c.rbd));
+              const rbdContratosRuns = new Set(rbdContratos.map(c => c.funcionario_run));
+              
+              const relevantRemun = remuneraciones.filter(r => rbdContratosRuns.has(r.funcionario_run));
+              const totalRemunerado = relevantRemun.reduce((sum, r) => sum + r.total_haberes, 0);
+              const totalHrsPagadas = relevantRemun.reduce((sum, r) => sum + r.horas_pagadas, 0);
+              const totalHrsContrato = rbdContratos.reduce((sum, c) => sum + c.horas_totales, 0);
+              
+              const relevantFuncionarios = funcionarios.filter(f => rbdContratosRuns.has(f.run));
+              const alertsCount = relevantFuncionarios.filter(f => {
+                const conc = conciliarFuncionario(f.run, contratos, asignaciones, remuneraciones);
+                return conc.discrepancia;
+              }).length;
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 shadow-sm">
+                    <p className="text-slate-500 text-[10px] uppercase font-bold">Total Liquidado (Supervisado)</p>
+                    <p className="text-lg font-extrabold text-slate-800 mt-1">${totalRemunerado.toLocaleString('es-CL')}</p>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 shadow-sm">
+                    <p className="text-slate-500 text-[10px] uppercase font-bold">Horas Pagadas (Supervisadas)</p>
+                    <p className="text-lg font-extrabold text-slate-800 mt-1">{totalHrsPagadas.toFixed(1)} hrs</p>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 shadow-sm">
+                    <p className="text-slate-500 text-[10px] uppercase font-bold">Horas Contratadas (RR.HH.)</p>
+                    <p className="text-lg font-extrabold text-slep-blue mt-1">{totalHrsContrato.toFixed(1)} hrs</p>
+                  </div>
+                  <div className="bg-red-50 border border-slep-coral/30 rounded-xl p-4 shadow-sm">
+                    <p className="text-red-700 text-[10px] uppercase font-bold">Alertas de Descalce</p>
+                    <p className="text-lg font-extrabold text-red-600 mt-1">⚠️ {alertsCount} Funcionarios</p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="mt-6 space-y-4">
+              <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border">
+                <span className="text-xs font-bold text-slate-700">Detalle de Conciliación (Sus Escuelas Supervisadas)</span>
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filtroDiscrepancias}
+                    onChange={(e) => setFiltroDiscrepancias(e.target.checked)}
+                    className="rounded text-slep-blue"
+                  />
+                  <span>Mostrar sólo descalces y discrepancias</span>
+                </label>
+              </div>
+
+              <div className="overflow-x-auto text-xs">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-slate-100 font-bold text-slate-600 border-b">
+                    <tr>
+                      <th className="p-3 pl-4">Funcionario / RUN</th>
+                      <th className="p-3">Estamento</th>
+                      <th className="p-3 text-center">Horas Contratadas</th>
+                      <th className="p-3 text-center">Horas en Aula</th>
+                      <th className="p-3 text-center">Horas Pagadas</th>
+                      <th className="p-3">Estado de Auditoría / Descalce</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(() => {
+                      const rbdContratos = contratos.filter(c => escuelasAsignadasRbd.includes(c.rbd));
+                      const rbdContratosRuns = new Set(rbdContratos.map(c => c.funcionario_run));
+                      return funcionarios
+                        .filter(f => rbdContratosRuns.has(f.run))
+                        .filter(f => {
+                          if (!filtroDiscrepancias) return true;
+                          const conc = conciliarFuncionario(f.run, contratos, asignaciones, remuneraciones);
+                          return conc.discrepancia;
+                        })
+                        .map(f => {
+                          const conc = conciliarFuncionario(f.run, contratos, asignaciones, remuneraciones);
+                          return (
+                            <tr key={f.run} className="hover:bg-slate-50">
+                              <td className="p-3 pl-4">
+                                <span className="font-bold text-slate-800">{f.nombre}</span>
+                                <p className="text-[10px] font-mono text-slate-400 mt-0.5">{f.run}</p>
+                              </td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  f.estamento === 'Docente' 
+                                    ? 'bg-blue-100 text-blue-800' 
+                                    : 'bg-purple-100 text-purple-800'
+                                }`}>
+                                  {f.estamento || 'P01 Administrativo'}
+                                </span>
+                              </td>
+                              <td className="p-3 text-center font-bold text-slate-700">{conc.contratadas} hrs</td>
+                              <td className="p-3 text-center font-bold text-slep-blue">{conc.aula} hrs</td>
+                              <td className="p-3 text-center font-bold text-slate-600">{conc.pagadas} hrs</td>
+                              <td className="p-3">
+                                {conc.discrepancia ? (
+                                  <span className="inline-block bg-slep-coral/20 text-red-950 border border-slep-coral/40 px-2.5 py-1 rounded font-semibold text-[10.5px]">
+                                    ⚠️ {conc.mensaje}
+                                  </span>
+                                ) : (
+                                  <span className="inline-block bg-slep-emerald/20 text-emerald-950 border border-slep-emerald/40 px-2.5 py-1 rounded font-semibold text-[10.5px]">
+                                    ✓ Conciliado Correctamente
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </main>
+      )}
+
+      </div>
     </div>
   );
 }
