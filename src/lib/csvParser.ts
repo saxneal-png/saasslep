@@ -127,8 +127,16 @@ export function parsearNominaCsv(
       calidad_juridica = 'A contrata';
     }
 
-    const funcion_principal = (row.Funcion || row.funcion || row.FUNCION_PRINCIPAL || row.funcion_principal || 'Docente de Aula').trim();
-    const estamento = forceEstamento || (row.Estamento || row.estamento || (funcion_principal.toLowerCase().includes('docente') || funcion_principal.toLowerCase().includes('profesor') ? 'Docente' : 'Asistente de la Educación'));
+    const funcion_principal = (row.Funcion || row.funcion || row.FUNCION_PRINCIPAL || row.funcion_principal || 'Auxiliar de Servicios').trim();
+    let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
+    if (forceEstamento) {
+      estamento = forceEstamento === 'Docente' ? 'Docente' : 'Asistente de la Educación';
+    } else {
+      const rawEst = String(row.Estamento || row.estamento || '').trim().toLowerCase();
+      if (rawEst.includes('docente') || rawEst.includes('profesor') || funcion_principal.toLowerCase().includes('docente') || funcion_principal.toLowerCase().includes('profesor')) {
+        estamento = 'Docente';
+      }
+    }
     
     const horas_totales = parseDecimalHours(row.HorasTotales || row.horas_totales || row.HORAS_CONTRATO || row.horas_contrato);
 
