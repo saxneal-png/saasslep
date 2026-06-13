@@ -62,6 +62,12 @@ export default function RRHHPage() {
   // Viewing Ficha Modal
   const [viewingFuncionario, setViewingFuncionario] = useState<Funcionario | null>(null);
 
+  // Dynamic financing lines for contracting form (supports combination of funds and qualities)
+  const [subventionLines, setSubventionLines] = useState<{ origen_fondo: OrigenFondo; calidad_juridica: CalidadJuridica; horas: number }[]>([
+    { origen_fondo: 'Subvención Regular', calidad_juridica: 'Titular', horas: 30 },
+    { origen_fondo: 'SEP', calidad_juridica: 'A contrata', horas: 14 }
+  ]);
+
   // Replacement Form State
   const [addingReemplazoContratoId, setAddingReemplazoContratoId] = useState<string | null>(null);
   const [reemplazoRun, setReemplazoRun] = useState('');
@@ -158,27 +164,57 @@ export default function RRHHPage() {
 
     // If P02, create a contract linked to the selected school
     if (estamento === 'P02_Educacion') {
-      const nuevoContrato: Contrato = {
-        id: `rrhh-cont-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-${rbd}`,
-        funcionario_run: cleanRun,
-        rbd,
-        calidad_juridica: calidadP02,
-        funcion_principal: funcionPrincipal,
-        estado: 'Activo',
-        horas_totales: horasContrato
-      };
-      dbLocal.contratos = [...dbLocal.contratos, nuevoContrato];
+      if (subventionLines.length > 0) {
+        // Create multiple contracts if there are different Calidades/Subventions, or group by Calidad
+        // Let's create one contract per unique Calidad Jurídica for this teacher at this school, with the sum of hours
+        const calidadesUnicas = Array.from(new Set(subventionLines.map(sl => sl.calidad_juridica)));
+        
+        calidadesUnicas.forEach((cal, cIdx) => {
+          const linesForCal = subventionLines.filter(l => l.calidad_juridica === cal);
+          const totalHorasCal = linesForCal.reduce((sum, l) => sum + l.horas, 0);
+          
+          const nuevoContrato: Contrato = {
+            id: `rrhh-cont-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-${rbd}-${cal.toLowerCase().replace(/[^a-z]/g, '')}-${cIdx}`,
+            funcionario_run: cleanRun,
+            rbd,
+            calidad_juridica: cal,
+            funcion_principal: funcionPrincipal,
+            estado: 'Activo',
+            horas_totales: totalHorasCal
+          };
+          dbLocal.contratos = [...dbLocal.contratos, nuevoContrato];
 
-      // Add default Subvención Regular financing
-      dbLocal.financiamientoContratos = [
-        ...dbLocal.financiamientoContratos,
-        {
-          id: `fin-${nuevoContrato.id}-1`,
-          contrato_id: nuevoContrato.id,
-          origen_fondo: 'Subvención Regular' as OrigenFondo,
-          horas: horasContrato
-        }
-      ];
+          // Associate financing records to this contract
+          const newFins = linesForCal.map((l, lIdx) => ({
+            id: `fin-${nuevoContrato.id}-${lIdx}`,
+            contrato_id: nuevoContrato.id,
+            origen_fondo: l.origen_fondo,
+            horas: l.horas
+          }));
+          dbLocal.financiamientoContratos = [...dbLocal.financiamientoContratos, ...newFins];
+        });
+      } else {
+        const nuevoContrato: Contrato = {
+          id: `rrhh-cont-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-${rbd}`,
+          funcionario_run: cleanRun,
+          rbd,
+          calidad_juridica: calidadP02,
+          funcion_principal: funcionPrincipal,
+          estado: 'Activo',
+          horas_totales: horasContrato
+        };
+        dbLocal.contratos = [...dbLocal.contratos, nuevoContrato];
+
+        dbLocal.financiamientoContratos = [
+          ...dbLocal.financiamientoContratos,
+          {
+            id: `fin-${nuevoContrato.id}-1`,
+            contrato_id: nuevoContrato.id,
+            origen_fondo: 'Subvención Regular' as OrigenFondo,
+            horas: horasContrato
+          }
+        ];
+      }
     } else {
       // P01 Central Office Contract
       const nuevoContrato: Contrato = {
@@ -706,82 +742,140 @@ export default function RRHHPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-amber-50/40 p-3 rounded-lg border border-amber-100 col-span-full grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Destinación Establecimiento</label>
-                        <select 
-                          className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800 cursor-pointer"
-                          value={rbd}
-                          onChange={(e) => setRbd(e.target.value)}
-                        >
-                          {escuelas.map(e => (
-                            <option key={e.rbd} value={e.rbd}>{e.nombre}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Calidad Jurídica P02</label>
-                        <select 
-                          className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800 cursor-pointer"
-                          value={calidadP02}
-                          onChange={(e) => setCalidadP02(e.target.value as any)}
-                        >
-                          <option value="Titular">Titular</option>
-                          <option value="A contrata">A contrata</option>
-                          <option value="Plazo fijo">Plazo fijo</option>
-                          <option value="Indefinido">Indefinido</option>
-                          <option value="Reemplazo">Reemplazo</option>
-                          <option value="Habilitación especial">Habilitación especial</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Horas Semanales Contrato</label>
-                        <input 
-                          type="number"
-                          className="w-full p-1.5 bg-white border rounded font-bold text-slate-800 text-center"
-                          value={horasContrato}
-                          onChange={(e) => setHorasContrato(parseInt(e.target.value) || 44)}
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-slate-600 font-bold mb-1">Título Profesional / Especialidad</label>
-                        <input 
-                          type="text"
-                          placeholder="Ej: Profesor de Lenguaje y Comunicación"
-                          className="w-full p-1.5 bg-white border rounded text-slate-800"
-                          value={titulo}
-                          onChange={(e) => setTitulo(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Función Principal</label>
-                        <div className="space-y-2">
+                    <div className="bg-amber-50/40 p-4 rounded-lg border border-amber-100 col-span-full space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-slate-600 font-bold mb-1">Destinación Establecimiento</label>
                           <select 
                             className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800 cursor-pointer"
-                            value={CARGOS_DOCENTES_LIST.includes(funcionPrincipal as any) ? funcionPrincipal : 'OTRO'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'OTRO') {
-                                setFuncionPrincipal('');
-                              } else {
-                                setFuncionPrincipal(val);
-                              }
-                            }}
+                            value={rbd}
+                            onChange={(e) => setRbd(e.target.value)}
                           >
-                            {CARGOS_DOCENTES_LIST.map(cargoOption => (
-                              <option key={cargoOption} value={cargoOption}>{cargoOption}</option>
+                            {escuelas.map(e => (
+                              <option key={e.rbd} value={e.rbd}>{e.nombre}</option>
                             ))}
                           </select>
-                          
-                          {(!CARGOS_DOCENTES_LIST.includes(funcionPrincipal as any) || funcionPrincipal === 'OTRO') && (
-                            <input 
-                              type="text" 
-                              placeholder="Especifique otra función docente..." 
-                              className="w-full p-1.5 bg-white border rounded text-slate-800"
-                              value={funcionPrincipal}
-                              onChange={(e) => setFuncionPrincipal(e.target.value)}
-                            />
-                          )}
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-slate-600 font-bold mb-1">Título Profesional / Especialidad</label>
+                          <input 
+                            type="text"
+                            placeholder="Ej: Profesor de Lenguaje y Comunicación"
+                            className="w-full p-1.5 bg-white border rounded text-slate-800 font-semibold"
+                            value={titulo}
+                            onChange={(e) => setTitulo(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-600 font-bold mb-1">Función Principal</label>
+                          <div className="space-y-2">
+                            <select 
+                              className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800 cursor-pointer"
+                              value={CARGOS_DOCENTES_LIST.includes(funcionPrincipal as any) ? funcionPrincipal : 'OTRO'}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === 'OTRO') {
+                                  setFuncionPrincipal('');
+                                } else {
+                                  setFuncionPrincipal(val);
+                                }
+                              }}
+                            >
+                              {CARGOS_DOCENTES_LIST.map(cargoOption => (
+                                <option key={cargoOption} value={cargoOption}>{cargoOption}</option>
+                              ))}
+                            </select>
+                            
+                            {(!CARGOS_DOCENTES_LIST.includes(funcionPrincipal as any) || funcionPrincipal === 'OTRO') && (
+                              <input 
+                                type="text" 
+                                placeholder="Especifique otra función docente..." 
+                                className="w-full p-1.5 bg-white border rounded text-slate-800"
+                                value={funcionPrincipal}
+                                onChange={(e) => setFuncionPrincipal(e.target.value)}
+                              />
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="md:col-span-2 bg-white p-3 rounded-lg border border-amber-200 space-y-2">
+                          <p className="font-bold text-slate-700 text-[11px] flex items-center justify-between border-b pb-1">
+                            <span>Distribución por Calidad Jurídica y Fondos</span>
+                            <span className="text-slep-blue font-extrabold text-[10px]">
+                              Total: {subventionLines.reduce((sum, l) => sum + l.horas, 0)} Horas
+                            </span>
+                          </p>
+                          <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
+                            {subventionLines.map((line, idx) => (
+                              <div key={idx} className="flex gap-2 items-center text-[10px]">
+                                <select
+                                  value={line.origen_fondo}
+                                  onChange={(e) => {
+                                    const next = [...subventionLines];
+                                    next[idx].origen_fondo = e.target.value as OrigenFondo;
+                                    setSubventionLines(next);
+                                  }}
+                                  className="p-1 border rounded bg-slate-50 font-semibold"
+                                >
+                                  <option value="Subvención Regular">Subvención Regular</option>
+                                  <option value="SEP">SEP</option>
+                                  <option value="PIE">PIE</option>
+                                  <option value="Reforzamiento">Reforzamiento</option>
+                                  <option value="Pro-retención">Pro-retención</option>
+                                  <option value="Liceos Bicentenarios">Liceos Bicentenarios</option>
+                                  <option value="Otro">Otro</option>
+                                </select>
+
+                                <select
+                                  value={line.calidad_juridica}
+                                  onChange={(e) => {
+                                    const next = [...subventionLines];
+                                    next[idx].calidad_juridica = e.target.value as CalidadJuridica;
+                                    setSubventionLines(next);
+                                  }}
+                                  className="p-1 border rounded bg-slate-50 font-semibold"
+                                >
+                                  <option value="Titular">Titular</option>
+                                  <option value="A contrata">A contrata</option>
+                                  <option value="Plazo fijo">Plazo fijo</option>
+                                  <option value="Indefinido">Indefinido</option>
+                                  <option value="Reemplazo">Reemplazo</option>
+                                  <option value="Habilitación especial">Habilitación especial</option>
+                                </select>
+
+                                <input
+                                  type="number"
+                                  placeholder="Horas"
+                                  className="w-16 p-1 border rounded text-center font-bold"
+                                  value={line.horas}
+                                  onChange={(e) => {
+                                    const next = [...subventionLines];
+                                    next[idx].horas = parseInt(e.target.value) || 0;
+                                    setSubventionLines(next);
+                                  }}
+                                />
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSubventionLines(subventionLines.filter((_, lIdx) => lIdx !== idx));
+                                  }}
+                                  className="text-red-500 hover:text-red-700 font-bold ml-1"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSubventionLines([...subventionLines, { origen_fondo: 'Subvención Regular', calidad_juridica: 'A contrata', horas: 10 }]);
+                            }}
+                            className="text-[10px] text-slep-blue font-bold hover:underline flex items-center gap-1"
+                          >
+                            ➕ Agregar Línea de Financiamiento/Calidad
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1254,7 +1348,7 @@ export default function RRHHPage() {
                                              <div>
                                                <label className="block text-[9px] text-slate-500 font-bold">Correo Electrónico (Opcional)</label>
                                                <input
-                                                 type="email"
+                          type="email"
                                                  placeholder="correo@reemplazo.cl"
                                                  className="w-full p-1 border rounded text-[10px] bg-white text-slate-800"
                                                  value={reemplazoManualEmail}
@@ -1263,21 +1357,47 @@ export default function RRHHPage() {
                                              </div>
                                            </div>
                                          ) : (
-                                           <div>
-                                             <label className="block text-[9px] text-slate-500 font-bold">Docente Reemplazante (Internos y Banco de Reemplazos)</label>
-                                             <select
-                                               value={reemplazoRun}
-                                               onChange={(e) => setReemplazoRun(e.target.value)}
-                                               className="w-full p-1 border rounded text-[10px] bg-white cursor-pointer"
-                                             >
-                                               <option value="">Seleccione...</option>
-                                               {funcionarios.filter(func => func.run !== c.funcionario_run).map(func => (
-                                                 <option key={func.run} value={func.run}>
-                                                   {func.nombre} ({func.cargo === 'Postulante Reemplazo' ? 'Banco de Reemplazos' : func.run})
-                                                 </option>
-                                               ))}
-                                             </select>
-                                           </div>
+                                            <div>
+                                              <label className="block text-[9px] text-slate-500 font-bold">
+                                                Docente Reemplazante (Filtrados por título "{f?.titulo || 'Sin título'}"):
+                                              </label>
+                                              <select
+                                                value={reemplazoRun}
+                                                onChange={(e) => setReemplazoRun(e.target.value)}
+                                                className="w-full p-1 border rounded text-[10px] bg-white cursor-pointer"
+                                              >
+                                                <option value="">Seleccione...</option>
+                                                
+                                                {/* Coincidencias exactas o parciales por Título */}
+                                                <optgroup label="Coinciden en Título/Especialidad">
+                                                  {funcionarios.filter(func => {
+                                                    if (func.run === c.funcionario_run) return false;
+                                                    const titularTitle = (f?.titulo || '').toLowerCase().trim();
+                                                    const candTitle = (func.titulo || '').toLowerCase().trim();
+                                                    return titularTitle && candTitle && (candTitle.includes(titularTitle) || titularTitle.includes(candTitle));
+                                                  }).map(func => (
+                                                    <option key={func.run} value={func.run}>
+                                                      {func.nombre} ({func.titulo || 'Sin Título'}) — {func.cargo === 'Postulante Reemplazo' ? 'Banco' : 'Docente'}
+                                                    </option>
+                                                  ))}
+                                                </optgroup>
+
+                                                {/* Otros candidatos */}
+                                                <optgroup label="Otros Candidatos Disponibles">
+                                                  {funcionarios.filter(func => {
+                                                    if (func.run === c.funcionario_run) return false;
+                                                    const titularTitle = (f?.titulo || '').toLowerCase().trim();
+                                                    const candTitle = (func.titulo || '').toLowerCase().trim();
+                                                    const isMatch = titularTitle && candTitle && (candTitle.includes(titularTitle) || titularTitle.includes(candTitle));
+                                                    return !isMatch;
+                                                  }).map(func => (
+                                                    <option key={func.run} value={func.run}>
+                                                      {func.nombre} ({func.titulo || 'Sin Título'}) — {func.cargo === 'Postulante Reemplazo' ? 'Banco' : 'Docente'}
+                                                    </option>
+                                                  ))}
+                                                </optgroup>
+                                              </select>
+                                            </div>
                                          )}
                                         <div className="grid grid-cols-2 gap-1.5">
                                           <div>
