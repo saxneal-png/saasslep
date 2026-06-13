@@ -1,6 +1,6 @@
 // @ts-ignore
 import Papa from 'papaparse';
-import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion, CalidadJuridica } from './types';
+import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion, CalidadJuridica, normalizarCargoDocente } from './types';
 
 // Normalization function for RUN
 export function normalizarRun(runRaw: any): string {
@@ -173,7 +173,7 @@ export function parsearNominaCsv(
       calidad_juridica = 'A contrata';
     }
 
-    const funcion_principal = limpiarCaracteresCorruptos((
+    const raw_funcion_principal = limpiarCaracteresCorruptos((
       row.Funcion || 
       row.funcion || 
       row.FUNCION_PRINCIPAL || 
@@ -189,10 +189,14 @@ export function parsearNominaCsv(
     } else {
       const isAsisHeader = row.ASISTENTE_RUN !== undefined || row.asistente_run !== undefined;
       const rawEst = String(row.Estamento || row.estamento || '').trim().toLowerCase();
-      if (!isAsisHeader && (rawEst.includes('docente') || rawEst.includes('profesor') || funcion_principal.toLowerCase().includes('docente') || funcion_principal.toLowerCase().includes('profesor'))) {
+      if (!isAsisHeader && (rawEst.includes('docente') || rawEst.includes('profesor') || raw_funcion_principal.toLowerCase().includes('docente') || raw_funcion_principal.toLowerCase().includes('profesor'))) {
         estamento = 'Docente';
       }
     }
+
+    const funcion_principal = estamento === 'Docente' 
+      ? normalizarCargoDocente(raw_funcion_principal) 
+      : raw_funcion_principal;
     
     const horas_totales = parseDecimalHours(row.HorasTotales || row.horas_totales || row.HORAS_CONTRATO || row.horas_contrato);
 

@@ -11,7 +11,8 @@ import {
   GrupoEstamento, 
   TareaReemplazo, 
   OrigenFondo,
-  CalidadJuridica
+  CalidadJuridica,
+  CARGOS_DOCENTES_LIST
 } from '@/lib/types';
 import { normalizarRun } from '@/lib/csvParser';
 import { calcularHaberBaseEUS } from '@/lib/rulesEngine';
@@ -45,7 +46,7 @@ export default function RRHHPage() {
   // P02 Fields
   const [rbd, setRbd] = useState('');
   const [calidadP02, setCalidadP02] = useState<CalidadJuridica>('A contrata');
-  const [funcionPrincipal, setFuncionPrincipal] = useState('Docente de Aula');
+  const [funcionPrincipal, setFuncionPrincipal] = useState('DOCENTE DE AULA');
   const [horasContrato, setHorasContrato] = useState(44);
   const [titulo, setTitulo] = useState('');
 
@@ -518,12 +519,34 @@ export default function RRHHPage() {
                       </div>
                       <div>
                         <label className="block text-slate-600 font-bold mb-1">Función Principal</label>
-                        <input 
-                          type="text"
-                          className="w-full p-1.5 bg-white border rounded text-slate-800"
-                          value={funcionPrincipal}
-                          onChange={(e) => setFuncionPrincipal(e.target.value)}
-                        />
+                        <div className="space-y-2">
+                          <select 
+                            className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800 cursor-pointer"
+                            value={CARGOS_DOCENTES_LIST.includes(funcionPrincipal as any) ? funcionPrincipal : 'OTRO'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'OTRO') {
+                                setFuncionPrincipal('');
+                              } else {
+                                setFuncionPrincipal(val);
+                              }
+                            }}
+                          >
+                            {CARGOS_DOCENTES_LIST.map(cargoOption => (
+                              <option key={cargoOption} value={cargoOption}>{cargoOption}</option>
+                            ))}
+                          </select>
+                          
+                          {(!CARGOS_DOCENTES_LIST.includes(funcionPrincipal as any) || funcionPrincipal === 'OTRO') && (
+                            <input 
+                              type="text" 
+                              placeholder="Especifique otra función docente..." 
+                              className="w-full p-1.5 bg-white border rounded text-slate-800"
+                              value={funcionPrincipal}
+                              onChange={(e) => setFuncionPrincipal(e.target.value)}
+                            />
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}

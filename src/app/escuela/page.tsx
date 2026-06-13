@@ -19,7 +19,8 @@ import {
   EstamentoType,
   PlanEstudioNorm,
   FinanciamientoContrato,
-  TareaReemplazo
+  TareaReemplazo,
+  CARGOS_DOCENTES_LIST
 } from '@/lib/types';
 
 import { normalizarRun } from '@/lib/csvParser';
@@ -2391,7 +2392,7 @@ export default function EscuelaDashboard() {
                     value={newEstamento}
                     onChange={(e) => {
                       setNewEstamento(e.target.value as any);
-                      if (e.target.value === 'Docente') setNewCargo('Docente de Aula');
+                      if (e.target.value === 'Docente') setNewCargo('DOCENTE DE AULA');
                       else setNewCargo('Auxiliar de Servicios');
                     }}
                   >
@@ -2401,13 +2402,44 @@ export default function EscuelaDashboard() {
                 </div>
                 <div>
                   <label className="block text-slate-500 font-bold mb-1">Función / Cargo</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ej: Docente de Matemática, Psicóloga, etc." 
-                    className="w-full p-2 border rounded"
-                    value={newCargo}
-                    onChange={(e) => setNewCargo(e.target.value)}
-                  />
+                  {newEstamento === 'Docente' ? (
+                    <div className="space-y-2">
+                      <select 
+                        className="w-full p-2 border rounded bg-white"
+                        value={CARGOS_DOCENTES_LIST.includes(newCargo as any) ? newCargo : 'OTRO'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === 'OTRO') {
+                            setNewCargo('');
+                          } else {
+                            setNewCargo(val);
+                          }
+                        }}
+                      >
+                        {CARGOS_DOCENTES_LIST.map(cargoOption => (
+                          <option key={cargoOption} value={cargoOption}>{cargoOption}</option>
+                        ))}
+                      </select>
+                      
+                      {(!CARGOS_DOCENTES_LIST.includes(newCargo as any) || newCargo === 'OTRO') && (
+                        <input 
+                          type="text" 
+                          placeholder="Especifique otro cargo docente..." 
+                          className="w-full p-2 border rounded"
+                          value={newCargo}
+                          onChange={(e) => setNewCargo(e.target.value)}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <input 
+                      type="text" 
+                      placeholder="Ej: Auxiliar de Servicios, Psicóloga, etc." 
+                      className="w-full p-2 border rounded"
+                      value={newCargo}
+                      onChange={(e) => setNewCargo(e.target.value)}
+                    />
+                  )}
                 </div>
 
                 <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2.5 rounded shadow">
@@ -2539,12 +2571,43 @@ export default function EscuelaDashboard() {
                     </div>
                     <div>
                       <label className="block text-slate-500 font-bold mb-1">Cargo / Función</label>
-                      <input 
-                        type="text" 
-                        className="w-full p-2 border rounded font-semibold text-slate-800 focus:outline-slep-blue"
-                        value={editFuncCargo}
-                        onChange={(e) => setEditFuncCargo(e.target.value)}
-                      />
+                      {editingFuncionario.estamento === 'Docente' ? (
+                        <div className="space-y-2">
+                          <select 
+                            className="w-full p-2 border rounded bg-white font-semibold text-slate-800 focus:outline-slep-blue"
+                            value={CARGOS_DOCENTES_LIST.includes(editFuncCargo as any) ? editFuncCargo : 'OTRO'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'OTRO') {
+                                setEditFuncCargo('');
+                              } else {
+                                setEditFuncCargo(val);
+                              }
+                            }}
+                          >
+                            {CARGOS_DOCENTES_LIST.map(cargoOption => (
+                              <option key={cargoOption} value={cargoOption}>{cargoOption}</option>
+                            ))}
+                          </select>
+                          
+                          {(!CARGOS_DOCENTES_LIST.includes(editFuncCargo as any) || editFuncCargo === 'OTRO') && (
+                            <input 
+                              type="text" 
+                              placeholder="Especifique otro cargo docente..."
+                              className="w-full p-2 border rounded font-semibold text-slate-800 focus:outline-slep-blue"
+                              value={editFuncCargo}
+                              onChange={(e) => setEditFuncCargo(e.target.value)}
+                            />
+                          )}
+                        </div>
+                      ) : (
+                        <input 
+                          type="text" 
+                          className="w-full p-2 border rounded font-semibold text-slate-800 focus:outline-slep-blue"
+                          value={editFuncCargo}
+                          onChange={(e) => setEditFuncCargo(e.target.value)}
+                        />
+                      )}
                     </div>
                   </div>
 
