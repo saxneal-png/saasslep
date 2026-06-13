@@ -371,6 +371,15 @@ export default function EscuelaDashboard() {
     alert('✅ Curso y plan de estudio asociado creados con éxito.');
   };
 
+  const handleDeleteCurso = async (nombre: string) => {
+    if (confirm(`¿Está seguro de eliminar el curso "${nombre}"? Se borrarán sus asignaturas y carga horaria asociada.`)) {
+      // @ts-ignore
+      await api.eliminarCursoDinamico(selectedRbd, nombre);
+      await loadAllSchoolData();
+      alert('✅ Curso eliminado correctamente.');
+    }
+  };
+
   // Create Custom Roles (SEP/PIE etc. bound)
   const handleCreateCargoPersonalizado = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -992,6 +1001,25 @@ export default function EscuelaDashboard() {
               <p className="text-slate-400 font-bold uppercase">Cursos Creados</p>
               <p className="text-xl font-bold text-slep-blue">{cursosDinamicos.length}</p>
             </div>
+            <div className="border-l border-slate-200 pl-6">
+              <p className="text-slate-400 font-bold uppercase">Hrs Req. Plan Estudio</p>
+              <p className="text-xl font-bold text-slep-blue">
+                {(() => {
+                  let totalReq = 0;
+                  for (const c of cursosDinamicos) {
+                    const plan = planesEstudio.find(p => p.nivel === c.nivel && p.regimen === c.regimen);
+                    totalReq += plan ? plan.horasObligatorias : 38;
+                  }
+                  return totalReq;
+                })()} hrs
+              </p>
+            </div>
+            <div className="border-l border-slate-200 pl-6">
+              <p className="text-slate-400 font-bold uppercase">Total Hrs Contratadas</p>
+              <p className="text-xl font-bold text-slep-blue">
+                {contratos.reduce((sum, c) => sum + c.horas_totales, 0)} hrs
+              </p>
+            </div>
           </div>
 
           <div className="flex gap-2">
@@ -1481,16 +1509,28 @@ export default function EscuelaDashboard() {
                     <p className="text-xs font-bold text-slate-500 uppercase mb-3">Cursos Registrados (Haz clic para ver, editar e imprimir asignaturas y docentes)</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                       {cursosDinamicos.map(c => (
-                        <button
-                          key={c.nombre}
-                          type="button"
-                          onClick={() => handleOpenEditCurso(c)}
-                          className="p-3.5 bg-slate-50 hover:bg-slep-blue hover:text-white border border-slate-200 hover:border-slep-blue rounded-xl text-xs font-bold text-center transition-all shadow-sm flex flex-col items-center justify-center gap-1 group cursor-pointer"
-                        >
-                          <span className="text-xl group-hover:scale-110 transition-transform">🏫</span>
-                          <span className="text-slate-800 group-hover:text-white transition-colors">{c.nombre}</span>
-                          <span className="text-[9px] text-slate-400 group-hover:text-white/80 font-normal">{c.nivel}</span>
-                        </button>
+                        <div key={c.nombre} className="relative group">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditCurso(c)}
+                            className="w-full p-3.5 bg-slate-50 hover:bg-slep-blue hover:text-white border border-slate-200 hover:border-slep-blue rounded-xl text-xs font-bold text-center transition-all shadow-sm flex flex-col items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <span className="text-xl group-hover:scale-110 transition-transform">🏫</span>
+                            <span className="text-slate-800 group-hover:text-white transition-colors">{c.nombre}</span>
+                            <span className="text-[9px] text-slate-400 group-hover:text-white/80 font-normal">{c.nivel}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCurso(c.nombre);
+                            }}
+                            className="absolute top-1 right-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black border border-red-300 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm cursor-pointer z-10"
+                            title="Eliminar Curso"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       ))}
                       {cursosDinamicos.length === 0 && (
                         <p className="col-span-full py-4 text-center text-slate-400 italic">No hay cursos creados aún.</p>
@@ -1531,11 +1571,38 @@ export default function EscuelaDashboard() {
                         value={selectedPlanIndex}
                         onChange={(e) => setSelectedPlanIndex(Number(e.target.value))}
                       >
-                        {planesEstudio.map((p, idx) => (
-                          <option key={idx} value={idx}>
-                            {p.nivel} ({p.regimen}) - {p.horasObligatorias} hrs
-                          </option>
-                        ))}
+                        {planesEstudio.map((p, idx) => {
+                          // Filter to avoid confusion: check if selectedCursoNorm matches plan level
+                          // Selected base course is like: '1° Básico', '2° Medio', etc.
+                          // Plan levels are like: '1° a 4° Básico', '5° a 8° Básico', 'Educación Parvularia (Pre-Kínder y Kínder)', '1° y 2° Medio', '3° y 4° Medio'
+                          const isBasic = selectedCursoNorm.includes('Básico');
+                          const isMed = selectedCursoNorm.includes('Medio');
+                          const isPlanBasic = p.nivel.includes('Básico');
+                          const isPlanMed = p.nivel.includes('Medio');
+
+                          // Custom parsing helper to see if specific number matches
+                          const baseNumMatch = selectedCursoNorm.match(/\d+/);
+                          const baseNum = baseNumMatch ? parseInt(baseNumMatch[0], 10) : 1;
+
+                          let matches = false;
+                          if (isBasic && isPlanBasic) {
+                            if (p.nivel.includes('1° a 4°') && baseNum <= 4) matches = true;
+                            if (p.nivel.includes('5° a 8°') && baseNum >= 5) matches = true;
+                            if (!p.nivel.includes('1° a 4°') && !p.nivel.includes('5° a 8°')) matches = true; // fallback
+                          } else if (isMed && isPlanMed) {
+                            if (p.nivel.includes('1° y 2°') && baseNum <= 2) matches = true;
+                            if (p.nivel.includes('3° y 4°') && baseNum >= 3) matches = true;
+                            if (!p.nivel.includes('1° y 2°') && !p.nivel.includes('3° y 4°')) matches = true; // fallback
+                          }
+                          
+                          if (!matches) return null;
+
+                          return (
+                            <option key={idx} value={idx}>
+                              {p.nivel} ({p.regimen}) - {p.horasObligatorias} hrs
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
 

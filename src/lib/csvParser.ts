@@ -105,15 +105,37 @@ export function parsearNominaCsv(
     // Clean corrupted encoding characters if any slipped through (e.g.  -> proper letters)
     const limpiarCaracteresCorruptos = (str: string): string => {
       if (!str) return '';
-      // Direct replacement for common chilean names/surnames that get corrupted
-      return str
+      // Direct replacement for common chilean names/surnames/cargos that get corrupted
+      let clean = str
         .replace(/PREZ/gi, 'PÉREZ')
         .replace(/GONZLEZ/gi, 'GONZÁLEZ')
         .replace(/JOS/gi, 'JOSÉ')
         .replace(/GMEZ/gi, 'GÓMEZ')
         .replace(/MUOZ/gi, 'MUÑOZ')
         .replace(/RIQUELME PREZ/gi, 'RIQUELME PÉREZ')
-        .replace(/\uFFFD/g, 'Ñ'); // Fallback wildcard to Ñ or you could clean it
+        .replace(/TCNICO/gi, 'TÉCNICO')
+        .replace(/TECNICO/gi, 'TÉCNICO')
+        .replace(/PRVULOS/gi, 'PÁRVULOS')
+        .replace(/PARVULOS/gi, 'PÁRVULOS')
+        .replace(/ASISTENTE\/TCNICO PRVULOS/gi, 'ASISTENTE/TÉCNICO PÁRVULOS')
+        .replace(/ASISTENTE\/TECNICO PARVULOS/gi, 'ASISTENTE/TÉCNICO PÁRVULOS');
+
+      // If we find raw replacement characters, try contextual fixes:
+      // If it looks like TCNICO -> TÉCNICO, PRVULOS -> PÁRVULOS, JOS -> JOSÉ, PREZ -> PÉREZ
+      clean = clean
+        .replace(/ASISTENTE\/T\uFFFDCnico P\uFFFDRvulos/gi, 'ASISTENTE/TÉCNICO PÁRVULOS')
+        .replace(/ASISTENTE\/T\uFFFDCnico P\uFFFDRvulo/gi, 'ASISTENTE/TÉCNICO PÁRVULA')
+        .replace(/T\uFFFDCNICO/gi, 'TÉCNICO')
+        .replace(/P\uFFFDRVULOS/gi, 'PÁRVULOS')
+        .replace(/T\uFFFDCnico/gi, 'TÉCNICO')
+        .replace(/P\uFFFDRvulos/gi, 'PÁRVULOS')
+        .replace(/JOS\uFFFD/gi, 'JOSÉ')
+        .replace(/P\uFFFDRez/gi, 'PÉREZ')
+        .replace(/GONZ\uFFFDLez/gi, 'GONZÁLEZ')
+        .replace(/G\uFFFDMez/gi, 'GÓMEZ')
+        .replace(/MU\uFFFDOz/gi, 'MUÑOZ')
+        .replace(/\uFFFD/g, 'Ñ'); // fallback general replacement
+      return clean;
     };
 
     let nombre = 'Funcionario Sin Nombre';
@@ -150,7 +172,7 @@ export function parsearNominaCsv(
       calidad_juridica = 'A contrata';
     }
 
-    const funcion_principal = (
+    const funcion_principal = limpiarCaracteresCorruptos((
       row.Funcion || 
       row.funcion || 
       row.FUNCION_PRINCIPAL || 
@@ -158,7 +180,7 @@ export function parsearNominaCsv(
       row.FUNCION_UNO || 
       row.funcion_uno || 
       'Auxiliar de Servicios'
-    ).trim();
+    ).trim());
 
     let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
     if (forceEstamento) {

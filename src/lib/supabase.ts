@@ -524,6 +524,15 @@ export const api = {
     }
   },
 
+  eliminarCursoDinamico: async (rbd: string, nombre: string): Promise<void> => {
+    dbLocal.cursosDinamicos = dbLocal.cursosDinamicos.filter(c => !(c.rbd === rbd && c.nombre === nombre));
+    dbLocal.asignaturasDinamicas = dbLocal.asignaturasDinamicas.filter(a => !(a.rbd === rbd && a.cursoNombre === nombre));
+    // Optionally clean assignments associated with this course name under this rbd
+    const conts = dbLocal.contratos.filter(c => c.rbd === rbd);
+    const contIds = conts.map(c => c.id);
+    dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => !(a.curso === nombre && contIds.includes(a.contrato_id)));
+  },
+
   // Asignaturas Dinámicas por Escuela/Curso
   getAsignaturasDinamicas: async (rbd: string, cursoNombre: string): Promise<AsignaturaDinamica[]> => {
     return dbLocal.asignaturasDinamicas.filter(a => a.rbd === rbd && a.cursoNombre === cursoNombre);
