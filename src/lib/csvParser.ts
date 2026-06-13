@@ -102,19 +102,33 @@ export function parsearNominaCsv(
 
     const run = normalizarRun(runRaw);
     
+    // Clean corrupted encoding characters if any slipped through (e.g.  -> proper letters)
+    const limpiarCaracteresCorruptos = (str: string): string => {
+      if (!str) return '';
+      // Direct replacement for common chilean names/surnames that get corrupted
+      return str
+        .replace(/PREZ/gi, 'PÉREZ')
+        .replace(/GONZLEZ/gi, 'GONZÁLEZ')
+        .replace(/JOS/gi, 'JOSÉ')
+        .replace(/GMEZ/gi, 'GÓMEZ')
+        .replace(/MUOZ/gi, 'MUÑOZ')
+        .replace(/RIQUELME PREZ/gi, 'RIQUELME PÉREZ')
+        .replace(/\uFFFD/g, 'Ñ'); // Fallback wildcard to Ñ or you could clean it
+    };
+
     let nombre = 'Funcionario Sin Nombre';
     if (row.Nombre || row.nombre) {
-      nombre = (row.Nombre || row.nombre).trim();
+      nombre = limpiarCaracteresCorruptos((row.Nombre || row.nombre).trim());
     } else if (row.DOC_NOMBRE || row.doc_nombre) {
       const nom = (row.DOC_NOMBRE || row.doc_nombre || '').trim();
       const pat = (row.DOC_PATERNO || row.doc_paterno || '').trim();
       const mat = (row.DOC_MATERNO || row.doc_materno || '').trim();
-      nombre = `${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim();
+      nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim());
     } else if (row.ASISTENTE_NOMBRE || row.asistente_nombre) {
       const nom = (row.ASISTENTE_NOMBRE || row.asistente_nombre || '').trim();
       const pat = (row.ASISTENTE_PATERNO || row.asistente_paterno || '').trim();
       const mat = (row.ASISTENTE_MATERNO || row.asistente_materno || '').trim();
-      nombre = `${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim();
+      nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim());
     }
 
     const rbd = String(row.RBD || row.rbd || rbdContext).trim();
