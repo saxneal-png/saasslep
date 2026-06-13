@@ -367,7 +367,7 @@ export default function SostenedorDashboard() {
         setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
       }
     };
-    reader.readAsText(file, 'UTF-8');
+    reader.readAsText(file, 'ISO-8859-1');
   };
 
   const handleDragAsis = (e: React.DragEvent) => {
@@ -426,7 +426,7 @@ export default function SostenedorDashboard() {
         setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
       }
     };
-    reader.readAsText(file, 'UTF-8');
+    reader.readAsText(file, 'ISO-8859-1');
   };
 
   // Drag-and-drop Plan Estudio JSON

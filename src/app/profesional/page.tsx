@@ -198,7 +198,7 @@ export default function ProfesionalDashboard() {
         setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
       }
     };
-    reader.readAsText(file, 'UTF-8');
+    reader.readAsText(file, 'ISO-8859-1');
   };
 
   const handleDragAsis = (e: React.DragEvent) => {
@@ -266,7 +266,7 @@ export default function ProfesionalDashboard() {
         setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
       }
     };
-    reader.readAsText(file, 'UTF-8');
+    reader.readAsText(file, 'ISO-8859-1');
   };
 
   const filteredEsts = establecimientos.filter(e => 
