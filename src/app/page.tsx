@@ -30,6 +30,7 @@ export default function Home() {
     // Save simulated session parameters to sessionStorage/localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem('slep_sim_role', selectedRole);
+      document.cookie = `slep_sim_role=${selectedRole}; path=/`;
       if (selectedRole === 'profesional_slep') {
         localStorage.setItem('slep_sim_run', profesionalRun);
         router.push('/profesional');

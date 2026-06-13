@@ -7,7 +7,7 @@ export interface Establecimiento {
 }
 
 export type CalidadJuridica = 'Titular' | 'Contrata';
-export type EstadoContrato = 'Activo' | 'Licencia Médica' | 'Reemplazo';
+export type EstadoContrato = 'Activo' | 'Licencia Médica' | 'Reemplazo' | 'Pendiente_Aprobacion';
 export type EstamentoType = 'Docente' | 'Asistente de la Educación';
 
 export type GrupoEstamento = 'P01_Administrativo' | 'P02_Educacion';

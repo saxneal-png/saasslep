@@ -52,8 +52,24 @@ export default function RRHHPage() {
   const [selectedLicenciaRun, setSelectedLicenciaRun] = useState('');
   const [licenciaDias, setLicenciaDias] = useState(15);
 
+  const [authorized, setAuthorized] = useState(false);
+
   useEffect(() => {
-    loadData();
+    if (typeof window !== 'undefined') {
+      const role = localStorage.getItem('slep_sim_role');
+      if (role !== 'sostenedor_maestro') {
+        if (role === 'profesional_slep') {
+          router.push('/profesional');
+        } else if (role === 'director_escuela') {
+          router.push('/escuela');
+        } else {
+          router.push('/');
+        }
+      } else {
+        setAuthorized(true);
+        loadData();
+      }
+    }
   }, []);
 
   async function loadData() {
@@ -192,6 +208,33 @@ export default function RRHHPage() {
     alert('✅ Licencia médica registrada. Se ha notificado al Director de la escuela para la designación de reemplazo.');
   };
 
+  const handleAprobarReemplazo = async (contratoId: string) => {
+    const allConts = await api.getContratos();
+    const updatedConts = allConts.map(c => {
+      if (c.id === contratoId) {
+        return { ...c, estado: 'Reemplazo' as const };
+      }
+      return c;
+    });
+    dbLocal.contratos = updatedConts;
+
+    const targetCont = allConts.find(c => c.id === contratoId);
+    if (targetCont) {
+      const tasks = await api.getTareasReemplazo();
+      const matchingTask = tasks.find(t => 
+        t.rbd === targetCont.rbd && 
+        t.estado === 'Pendiente' && 
+        (targetCont.vinculo_titular_id?.includes(t.funcionario_titular_run) || t.funcionario_titular_run === targetCont.vinculo_titular_id)
+      );
+      if (matchingTask) {
+        await api.resolverTareaReemplazo(matchingTask.id, targetCont.funcionario_run);
+      }
+    }
+
+    await loadData();
+    alert('✅ Contrato de reemplazo aprobado y activado en el sistema.');
+  };
+
   // Filter staff
   const filteredFuncionarios = funcionarios.filter(f => {
     const matchesSearch = f.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || f.run.includes(searchTerm);
@@ -200,30 +243,73 @@ export default function RRHHPage() {
     return matchesSearch;
   });
 
+  if (!authorized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 text-slate-600 font-bold">
+        🔒 Acceso Restringido. Redirigiendo...
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-slate-100">
       
       {/* Sidebar Navigation */}
       <aside className="w-64 bg-slep-blue-dark text-white flex flex-col shrink-0">
         <div className="p-6 border-b border-white/10 flex items-center gap-3">
-          <Image src="/logo.png" alt="Logo SLEP" width={100} height={40} className="object-contain bg-white/5 p-1 rounded-lg" />
+          <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain" />
         </div>
         
-        <nav className="flex-1 p-4 space-y-2 text-xs font-semibold">
-          <p className="text-[10px] uppercase text-slate-400 font-bold px-3 mb-2 tracking-wider">Menú de Navegación</p>
-          <Link href="/sostenedor" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/10 hover:text-white transition-all">
-            🏫 Dotación Escuelas (UATP)
+        <div className="p-4 flex-1 space-y-6 text-xs">
+          <div>
+            <p className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 mb-2">Unidad UATP</p>
+            <nav className="space-y-1">
+              <Link
+                href="/sostenedor?tab=dashboard"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-300 hover:bg-white/5 block font-bold"
+              >
+                🎛️ Tablero de Gobernanza
+              </Link>
+              <Link
+                href="/sostenedor?tab=compendio"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-300 hover:bg-white/5 block font-bold"
+              >
+                📊 Compendio Territorial
+              </Link>
+            </nav>
+          </div>
+
+          <div>
+            <p className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 mb-2">Gestión de Personas</p>
+            <nav className="space-y-1">
+              <Link
+                href="/sostenedor/rrhh"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-slep-blue text-white shadow block font-bold"
+              >
+                💼 Fichas, Licencias & Reemplazos
+              </Link>
+            </nav>
+          </div>
+
+          <div>
+            <p className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 mb-2">Finanzas SLEP</p>
+            <nav className="space-y-1">
+              <Link
+                href="/sostenedor/finanzas"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-300 hover:bg-white/5 block font-bold"
+              >
+                💵 Conciliación Remuneraciones
+              </Link>
+            </nav>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-white/10 text-center">
+          <p className="text-[10px] text-slate-400 font-medium">Sostenedor Maestro</p>
+          <Link href="/" className="mt-2 block w-full bg-white/10 hover:bg-white/20 text-white font-bold py-1.5 rounded text-[10px] transition-colors border border-white/10">
+            Cerrar Sesión
           </Link>
-          <Link href="/sostenedor/rrhh" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-slep-blue text-white shadow transition-all">
-            👥 Gestión de Personas (RR.HH.)
-          </Link>
-          <Link href="/profesional" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/10 hover:text-white transition-all">
-            💼 Finanzas y Remuneraciones
-          </Link>
-          <Link href="/" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-slate-400 hover:text-red-300 transition-all border-t border-white/10 mt-6 pt-4">
-            ↩️ Volver al Inicio
-          </Link>
-        </nav>
+        </div>
       </aside>
 
       {/* Main Content Area */}
@@ -475,6 +561,71 @@ export default function RRHHPage() {
             </div>
 
           </div>
+
+          {/* Bandeja de Aprobación de Reemplazos */}
+          {(() => {
+            const propuestas = contratos.filter(c => c.estado === 'Pendiente_Aprobacion');
+            if (propuestas.length === 0) return null;
+            return (
+              <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4 animate-fadeIn">
+                <div className="pb-2 border-b flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-red-700 flex items-center gap-2">
+                      <span>🤝</span> Propuestas de Reemplazo Pendientes de Aprobación
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">Directores de establecimientos han propuesto a los siguientes candidatos en espejo. Revise y proceda a visar y contratar.</p>
+                  </div>
+                  <span className="bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider">
+                    {propuestas.length} Propuestas
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto text-xs">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 font-bold text-slate-600">
+                      <tr>
+                        <th className="p-3 pl-4">Candidato Propuesto</th>
+                        <th className="p-3">Escuela RBD</th>
+                        <th className="p-3">Función Principal / Horas</th>
+                        <th className="p-3">Docente Titular Reemplazado</th>
+                        <th className="p-3 text-center">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {propuestas.map(p => {
+                        const candidateFunc = funcionarios.find(f => f.run === p.funcionario_run);
+                        return (
+                          <tr key={p.id} className="hover:bg-slate-50">
+                            <td className="p-3 pl-4">
+                              <p className="font-bold text-slate-800">{candidateFunc ? candidateFunc.nombre : 'Candidato Reemplazo'}</p>
+                              <p className="text-[10px] font-mono text-slate-400 mt-0.5">{p.funcionario_run}</p>
+                            </td>
+                            <td className="p-3 font-semibold text-slate-700">
+                              🏫 RBD {p.rbd}
+                            </td>
+                            <td className="p-3 font-medium text-slate-600">
+                              {p.funcion_principal} • <span className="font-bold text-slep-blue">{p.horas_totales} hrs</span>
+                            </td>
+                            <td className="p-3 text-slate-500">
+                              👤 RUN: {p.vinculo_titular_id ? p.vinculo_titular_id.replace('c-' + p.rbd + '-', '') : 'N/A'}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                onClick={() => handleAprobarReemplazo(p.id)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-1.5 rounded shadow text-xs transition-colors cursor-pointer"
+                              >
+                                Aceptar y Contratar ✍️
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Bottom Table: Staff list */}
           <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">

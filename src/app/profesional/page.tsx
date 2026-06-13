@@ -52,10 +52,24 @@ export default function ProfesionalDashboard() {
   const [filtroDiscrepancias, setFiltroDiscrepancias] = useState(false);
 
 
+  const [authorized, setAuthorized] = useState(false);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const run = localStorage.getItem('slep_sim_run') || '11.111.111-1';
-      setProfesionalRun(run);
+      const role = localStorage.getItem('slep_sim_role');
+      if (role !== 'profesional_slep') {
+        if (role === 'sostenedor_maestro') {
+          router.push('/sostenedor');
+        } else if (role === 'director_escuela') {
+          router.push('/escuela');
+        } else {
+          router.push('/');
+        }
+      } else {
+        setAuthorized(true);
+        const run = localStorage.getItem('slep_sim_run') || '11.111.111-1';
+        setProfesionalRun(run);
+      }
     }
   }, []);
 
@@ -266,6 +280,14 @@ export default function ProfesionalDashboard() {
   const totalPro = financiamientos.filter(f => f.origen_fondo === 'Pro-retención').reduce((sum, f) => sum + f.horas, 0);
   const totalOtro = financiamientos.filter(f => f.origen_fondo === 'Otro').reduce((sum, f) => sum + f.horas, 0);
   const sumFinanciamientos = totalRegular + totalSep + totalPie + totalRef + totalPro + totalOtro;
+
+  if (!authorized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 text-slate-600 font-bold">
+        🔒 Acceso Restringido. Redirigiendo...
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-slate-50">

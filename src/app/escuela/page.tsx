@@ -101,9 +101,12 @@ export default function EscuelaDashboard() {
   const [editCursoAsignaciones, setEditCursoAsignaciones] = useState<AsignacionAula[]>([]);
   const [editCursoPIE, setEditCursoPIE] = useState<number>(10);
 
+  const [authorized, setAuthorized] = useState(false);
+
   // Sync role parameters from localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const role = localStorage.getItem('slep_sim_role');
       const rbd = localStorage.getItem('slep_sim_rbd') || '10202';
       setSelectedRbd(rbd);
       
@@ -112,6 +115,12 @@ export default function EscuelaDashboard() {
 
       const sostMode = localStorage.getItem('slep_sostenedor_mode') === 'true';
       setIsSostenedorMode(sostMode);
+
+      if (role === 'director_escuela' || supMode || sostMode || role === 'sostenedor_maestro' || role === 'profesional_slep') {
+        setAuthorized(true);
+      } else {
+        router.push('/');
+      }
     }
   }, []);
 
@@ -182,7 +191,7 @@ export default function EscuelaDashboard() {
       rbd: selectedRbd,
       calidad_juridica: 'Contrata',
       funcion_principal: `Reemplazo Docente (${tarea.funcionario_titular_nombre})`,
-      estado: 'Reemplazo',
+      estado: 'Pendiente_Aprobacion',
       horas_totales: tarea.horas_a_cubrir,
       vinculo_titular_id: `c-${selectedRbd}-${tarea.funcionario_titular_run.replace(/[^a-zA-Z0-9]/g, '')}`
     }, [
@@ -194,12 +203,9 @@ export default function EscuelaDashboard() {
       }
     ]);
 
-    // 3. Resolve the task
-    await api.resolverTareaReemplazo(tarea.id, cleanRun);
-
-    // 4. Reload school data
+    // 3. Reload school data
     await loadAllSchoolData();
-    alert('✅ Contrato de reemplazo creado con éxito y tarea resuelta.');
+    alert('✅ Propuesta de reemplazo enviada con éxito. Pendiente de aprobación por RR.HH. Central.');
   };
 
   // Check for multi-school active contracts when selected teacher changes (itinerancy alert)
@@ -920,6 +926,14 @@ export default function EscuelaDashboard() {
     printWindow.document.close();
   };
 
+  if (!authorized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 text-slate-600 font-bold">
+        🔒 Acceso Restringido. Redirigiendo...
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
       
@@ -1078,37 +1092,54 @@ export default function EscuelaDashboard() {
                               <p className="font-bold text-slate-800">Docente Licenciado: {t.funcionario_titular_nombre}</p>
                               <p className="text-[10px] text-slate-500 mt-0.5">RUN: {t.funcionario_titular_run} | Horas a Cubrir: <span className="font-bold text-slep-blue">{t.horas_a_cubrir} hrs</span></p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <select
-                                value={taskReemplazoRun[t.id] || ''}
-                                onChange={(e) => setTaskReemplazoRun({...taskReemplazoRun, [t.id]: e.target.value})}
-                                className="p-1.5 border rounded bg-white font-medium text-slate-700"
-                              >
-                                <option value="">-- Seleccionar Docente --</option>
-                                {funcionarios
-                                  .filter(f => f.estamento === 'Docente')
-                                  .map(f => (
-                                    <option key={f.run} value={f.run}>
-                                      {f.nombre} ({f.run})
-                                    </option>
-                                  ))
-                                }
-                              </select>
-                              <span className="text-slate-400">o</span>
-                              <input
-                                type="text"
-                                placeholder="RUT Reemplazo Manual"
-                                value={taskReemplazoRun[t.id] || ''}
-                                onChange={(e) => setTaskReemplazoRun({...taskReemplazoRun, [t.id]: e.target.value})}
-                                className="p-1.5 border rounded font-mono w-32"
-                              />
-                              <button
-                                onClick={() => handleResolveReemplazo(t, taskReemplazoRun[t.id] || '')}
-                                className="bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold px-3 py-1.5 rounded shadow text-[11px]"
-                              >
-                                Asignar y Resolver 🤝
-                              </button>
-                            </div>
+                            {(() => {
+                              const propContrato = contratos.find(c => 
+                                c.estado === 'Pendiente_Aprobacion' && 
+                                (c.vinculo_titular_id?.includes(t.funcionario_titular_run) || c.vinculo_titular_id === t.funcionario_titular_run)
+                              );
+                              if (propContrato) {
+                                const propFunc = funcionarios.find(f => f.run === propContrato.funcionario_run);
+                                return (
+                                  <div className="bg-amber-50 text-amber-800 border border-amber-200/80 rounded px-3 py-1.5 font-bold flex items-center gap-1">
+                                    <span>⏳ Propuesta Enviada:</span>
+                                    <span>{propFunc ? propFunc.nombre : propContrato.funcionario_run} (Esperando Aprobación RR.HH.)</span>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <select
+                                    value={taskReemplazoRun[t.id] || ''}
+                                    onChange={(e) => setTaskReemplazoRun({...taskReemplazoRun, [t.id]: e.target.value})}
+                                    className="p-1.5 border rounded bg-white font-medium text-slate-700"
+                                  >
+                                    <option value="">-- Seleccionar Docente --</option>
+                                    {funcionarios
+                                      .filter(f => f.estamento === 'Docente')
+                                      .map(f => (
+                                        <option key={f.run} value={f.run}>
+                                          {f.nombre} ({f.run})
+                                        </option>
+                                      ))
+                                    }
+                                  </select>
+                                  <span className="text-slate-400">o</span>
+                                  <input
+                                    type="text"
+                                    placeholder="RUT Reemplazo Manual"
+                                    value={taskReemplazoRun[t.id] || ''}
+                                    onChange={(e) => setTaskReemplazoRun({...taskReemplazoRun, [t.id]: e.target.value})}
+                                    className="p-1.5 border rounded font-mono w-32"
+                                  />
+                                  <button
+                                    onClick={() => handleResolveReemplazo(t, taskReemplazoRun[t.id] || '')}
+                                    className="bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold px-3 py-1.5 rounded shadow text-[11px]"
+                                  >
+                                    Proponer Reemplazo 🤝
+                                  </button>
+                                </div>
+                              );
+                            })()}
                           </div>
                         ))}
                       </div>
