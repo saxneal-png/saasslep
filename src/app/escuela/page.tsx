@@ -95,6 +95,9 @@ export default function EscuelaDashboard() {
   const [editFuncTitulo, setEditFuncTitulo] = useState('');
   const [editContHoras, setEditContHoras] = useState(44);
   const [editContFins, setEditContFins] = useState<{ origen: OrigenFondo; horas: number }[]>([]);
+  const [editContHorasDirectivas, setEditContHorasDirectivas] = useState<number | undefined>(undefined);
+  const [editContHorasAula, setEditContHorasAula] = useState<number | undefined>(undefined);
+  const [editContHorasTecPed, setEditContHorasTecPed] = useState<number | undefined>(undefined);
 
   const [editingCurso, setEditingCurso] = useState<CursoDinamico | null>(null);
   const [editCursoAsignaturas, setEditCursoAsignaturas] = useState<AsignaturaDinamica[]>([]);
@@ -531,14 +534,20 @@ export default function EscuelaDashboard() {
     const relatedCont = contratos.find(c => c.funcionario_run === f.run);
     if (relatedCont) {
       setEditContHoras(relatedCont.horas_totales);
+      setEditContHorasDirectivas(relatedCont.horas_directivas);
+      setEditContHorasAula(relatedCont.horas_aula);
+      setEditContHorasTecPed(relatedCont.horas_tecnico_pedagogicas);
       const fins = await api.getFinanciamientosPorContrato(relatedCont.id);
       setEditContFins(fins.map(fi => ({ origen: fi.origen_fondo, horas: fi.horas })));
     } else {
       setEditContHoras(0);
+      setEditContHorasDirectivas(undefined);
+      setEditContHorasAula(undefined);
+      setEditContHorasTecPed(undefined);
       setEditContFins([]);
     }
   };
-
+ 
   const handleSaveFuncionario = async () => {
     if (!editingFuncionario) return;
     
@@ -550,16 +559,19 @@ export default function EscuelaDashboard() {
       email: editFuncEmail,
       titulo: editFuncTitulo
     });
-
+ 
     // 2. Update contract and finance sources
     const relatedCont = contratos.find(c => c.funcionario_run === editingFuncionario.run);
     if (relatedCont) {
       const updatedCont = {
         ...relatedCont,
         horas_totales: editContHoras,
-        funcion_principal: editFuncCargo
+        funcion_principal: editFuncCargo,
+        horas_directivas: editContHorasDirectivas,
+        horas_aula: editContHorasAula,
+        horas_tecnico_pedagogicas: editContHorasTecPed
       };
-
+ 
       // Recalculate financing list
       const cleanFins: FinanciamientoContrato[] = editContFins.map((f, index) => ({
         id: `f-${relatedCont.id}-${f.origen}-${index}`,
@@ -567,10 +579,10 @@ export default function EscuelaDashboard() {
         origen_fondo: f.origen,
         horas: f.horas
       }));
-
+ 
       await api.upsertContratoCompleto(updatedCont, cleanFins);
     }
-
+ 
     setEditingFuncionario(null);
     await loadAllSchoolData();
     alert('✅ Funcionario y contrato actualizados exitosamente.');
@@ -742,6 +754,21 @@ export default function EscuelaDashboard() {
                 <div class="label">Estado de Licencia / Reemplazo</div>
                 <div class="value">${contrato?.estado || 'Activo'}</div>
               </div>
+              ${contrato?.horas_directivas !== undefined ? `
+              <div class="field">
+                <div class="label">Horas Directivas</div>
+                <div class="value">${contrato.horas_directivas} hrs</div>
+              </div>` : ''}
+              ${contrato?.horas_aula !== undefined ? `
+              <div class="field">
+                <div class="label">Horas Aula</div>
+                <div class="value">${contrato.horas_aula} hrs</div>
+              </div>` : ''}
+              ${contrato?.horas_tecnico_pedagogicas !== undefined ? `
+              <div class="field">
+                <div class="label">Horas Técnico Pedagógicas</div>
+                <div class="value">${contrato.horas_tecnico_pedagogicas} hrs</div>
+              </div>` : ''}
             </div>
           </div>
 
@@ -935,6 +962,82 @@ export default function EscuelaDashboard() {
     printWindow.document.close();
   };
 
+  // Segmented Hours Calculations
+  const getEstamento = (c: Contrato) => {
+    const f = funcionarios.find(func => func.run === c.funcionario_run);
+    if (f?.estamento) return f.estamento;
+    if (c.legislacion_laboral === 'Asistentes de la educación') return 'Asistente de la Educación';
+    if (c.legislacion_laboral === 'Estatuto docente') return 'Docente';
+    return 'Docente';
+  };
+
+  const asistenteContratos = contratos.filter(c => getEstamento(c) === 'Asistente de la Educación');
+  const docenteContratos = contratos.filter(c => getEstamento(c) === 'Docente');
+
+  const totalHorasAsistentes = asistenteContratos.reduce((sum, c) => sum + c.horas_totales, 0);
+  const totalHorasDocentes = docenteContratos.reduce((sum, c) => sum + c.horas_totales, 0);
+
+  // Docente Hours by Function
+  let horasDirectivas = 0;
+  let horasTecnicoPedagogicas = 0;
+  let horasCoordinacionesUTP = 0;
+  let horasApoyoUTP = 0;
+  let horasDocenciaAulaOtras = 0;
+
+  docenteContratos.forEach(c => {
+    const funcLower = (c.funcion_principal || '').toLowerCase();
+    const isDirectiva = funcLower.includes('director') || funcLower.includes('rector') || funcLower.includes('directiva') || funcLower.includes('subdirector') || funcLower.includes('inspector');
+    const isCoordinacionUTP = funcLower.includes('utp') && (funcLower.includes('coordinad') || funcLower.includes('jefe'));
+    const isApoyoUTP = funcLower.includes('utp') && !isCoordinacionUTP;
+    const isTecnicoPedagogica = !isDirectiva && !isCoordinacionUTP && !isApoyoUTP && (
+      funcLower.includes('técnico') || funcLower.includes('tecnico') || 
+      funcLower.includes('pedagóg') || funcLower.includes('pedagog') || 
+      funcLower.includes('curricular') || funcLower.includes('evaluad') || 
+      funcLower.includes('orientad')
+    );
+
+    if (isDirectiva) {
+      horasDirectivas += c.horas_totales;
+    } else if (isCoordinacionUTP) {
+      horasCoordinacionesUTP += c.horas_totales;
+    } else if (isApoyoUTP) {
+      horasApoyoUTP += c.horas_totales;
+    } else if (isTecnicoPedagogica) {
+      horasTecnicoPedagogicas += c.horas_totales;
+    } else {
+      horasDocenciaAulaOtras += c.horas_totales;
+    }
+  });
+
+  // Funding helper for both Docente and Asistente
+  const getFinsSum = (estamento: EstamentoType, origen: OrigenFondo) => {
+    return contratos.filter(c => getEstamento(c) === estamento).reduce((sum, c) => {
+      const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+      return sum + fins.filter(f => f.origen_fondo === origen).reduce((s, f) => s + f.horas, 0);
+    }, 0);
+  };
+
+  const getFinsOtrasSum = (estamento: EstamentoType) => {
+    return contratos.filter(c => getEstamento(c) === estamento).reduce((sum, c) => {
+      const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+      return sum + fins.filter(f => 
+        f.origen_fondo !== 'Subvención Regular' && 
+        f.origen_fondo !== 'SEP' && 
+        f.origen_fondo !== 'PIE' && 
+        f.origen_fondo !== 'Pro-retención' && 
+        f.origen_fondo !== 'Liceos Bicentenarios'
+      ).reduce((s, f) => s + f.horas, 0);
+    }, 0);
+  };
+
+  // Docente Hours by Funding Source
+  const horasSEP = getFinsSum('Docente', 'SEP');
+  const horasPIE = getFinsSum('Docente', 'PIE');
+  const horasSubvencionRegular = getFinsSum('Docente', 'Subvención Regular');
+  const horasProretencion = getFinsSum('Docente', 'Pro-retención');
+  const horasLiceosBicentenarios = getFinsSum('Docente', 'Liceos Bicentenarios');
+  const horasOtrasFondo = getFinsOtrasSum('Docente');
+
   if (!authorized) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50 text-slate-600 font-bold">
@@ -1035,6 +1138,107 @@ export default function EscuelaDashboard() {
             >
               📄 Imprimir PDF
             </button>
+          </div>
+        </div>
+
+        {/* Hours Segmentation Panel */}
+        <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
+          <div className="flex justify-between items-center border-b pb-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide">Distribución Detallada de Horas Contratadas</h2>
+              <p className="text-[11px] text-slate-500 font-medium">Análisis y segmentación de horas contratadas por estamento, funciones docentes y fuentes de financiamiento.</p>
+            </div>
+            <span className="bg-slate-100 text-slate-800 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
+              Total Establecimiento: {contratos.reduce((sum, c) => sum + c.horas_totales, 0)} hrs
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Column 1: Resumen por Estamento */}
+            <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
+              <div>
+                <h3 className="text-[11px] font-black text-slate-600 uppercase tracking-wider mb-3 flex justify-between">
+                  <span>Estamentos</span>
+                  <span className="text-[10px] text-slate-400 normal-case font-bold">Total: {totalHorasDocentes + totalHorasAsistentes} hrs</span>
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                      <span>🍎 Docentes</span>
+                      <span>{totalHorasDocentes} hrs ({((totalHorasDocentes / (totalHorasDocentes + totalHorasAsistentes || 1)) * 100).toFixed(0)}%)</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2">
+                      <div className="bg-slep-blue h-2 rounded-full transition-all" style={{ width: `${(totalHorasDocentes / (totalHorasDocentes + totalHorasAsistentes || 1)) * 100}%` }}></div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                      <span>👥 Asistentes de la Educación</span>
+                      <span>{totalHorasAsistentes} hrs ({((totalHorasAsistentes / (totalHorasDocentes + totalHorasAsistentes || 1)) * 100).toFixed(0)}%)</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2">
+                      <div className="bg-purple-600 h-2 rounded-full transition-all" style={{ width: `${(totalHorasAsistentes / (totalHorasDocentes + totalHorasAsistentes || 1)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Column 2: Funciones Docentes */}
+            <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50">
+              <h3 className="text-[11px] font-black text-slate-600 uppercase tracking-wider mb-3 flex justify-between">
+                <span>Funciones Docentes</span>
+                <span className="text-[10px] text-slate-400 normal-case font-bold">Total: {totalHorasDocentes} hrs</span>
+              </h3>
+              <div className="space-y-2.5 text-[11px]">
+                {[
+                  { label: '💼 Directivas', value: horasDirectivas, color: 'bg-rose-500' },
+                  { label: '⚙️ Técnico Pedagógicas', value: horasTecnicoPedagogicas, color: 'bg-emerald-500' },
+                  { label: '📊 Coordinaciones UTP', value: horasCoordinacionesUTP, color: 'bg-amber-500' },
+                  { label: '🔍 Apoyo UTP', value: horasApoyoUTP, color: 'bg-indigo-500' },
+                  { label: '🧑‍🏫 Docencia Aula / Otras', value: horasDocenciaAulaOtras, color: 'bg-slate-450' }
+                ].map(item => (
+                  <div key={item.label} className="flex flex-col">
+                    <div className="flex justify-between font-bold text-slate-700 mb-0.5">
+                      <span>{item.label}</span>
+                      <span>{item.value} hrs</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-1.5">
+                      <div className={`${item.color} h-1.5 rounded-full transition-all`} style={{ width: `${(item.value / (totalHorasDocentes || 1)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Column 3: Financiamiento Docente */}
+            <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50">
+              <h3 className="text-[11px] font-black text-slate-600 uppercase tracking-wider mb-3 flex justify-between">
+                <span>Financiamiento Docente</span>
+                <span className="text-[10px] text-slate-400 normal-case font-bold">Total: {totalHorasDocentes} hrs</span>
+              </h3>
+              <div className="space-y-2.5 text-[11px]">
+                {[
+                  { label: 'Subvención Regular', value: horasSubvencionRegular, color: 'bg-blue-600' },
+                  { label: 'Horas SEP', value: horasSEP, color: 'bg-purple-600' },
+                  { label: 'Horas PIE', value: horasPIE, color: 'bg-emerald-600' },
+                  { label: 'Horas Proretención', value: horasProretencion, color: 'bg-orange-500' },
+                  { label: 'Horas Liceos Bicentenarios', value: horasLiceosBicentenarios, color: 'bg-cyan-500' },
+                  { label: 'Otras Horas/Fondos', value: horasOtrasFondo, color: 'bg-gray-405' }
+                ].map(item => (
+                  <div key={item.label} className="flex flex-col">
+                    <div className="flex justify-between font-bold text-slate-700 mb-0.5">
+                      <span>💰 {item.label}</span>
+                      <span>{item.value} hrs</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-1.5">
+                      <div className={`${item.color} h-1.5 rounded-full transition-all`} style={{ width: `${(item.value / (totalHorasDocentes || 1)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2008,30 +2212,51 @@ export default function EscuelaDashboard() {
                         );
                       })()}
                       <tr>
-                        <td className="p-3 pl-4 font-semibold text-slate-900">Financiamiento Regular (Subv. Común)</td>
-                        <td className="p-3 text-center">
-                          {contratos.filter(c => {
-                            const f = funcionarios.find(func => func.run === c.funcionario_run);
-                            return f?.estamento === 'Docente';
-                          }).reduce((sum, c) => {
-                            const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
-                            return sum + fins.filter(f => f.origen_fondo === 'Subvención Regular').reduce((s, f) => s + f.horas, 0);
-                          }, 0)} hrs
+                        <td className="p-3 pl-4 font-semibold text-slate-900">Horas Subvención Regular</td>
+                        <td className="p-3 text-center font-medium">{getFinsSum('Docente', 'Subvención Regular')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSum('Asistente de la Educación', 'Subvención Regular')} hrs</td>
+                        <td className="p-3 text-center font-bold text-slate-900">
+                          {getFinsSum('Docente', 'Subvención Regular') + getFinsSum('Asistente de la Educación', 'Subvención Regular')} hrs
                         </td>
-                        <td className="p-3 text-center">
-                          {contratos.filter(c => {
-                            const f = funcionarios.find(func => func.run === c.funcionario_run);
-                            return f?.estamento === 'Asistente de la Educación';
-                          }).reduce((sum, c) => {
-                            const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
-                            return sum + fins.filter(f => f.origen_fondo === 'Subvención Regular').reduce((s, f) => s + f.horas, 0);
-                          }, 0)} hrs
+                      </tr>
+                      <tr>
+                        <td className="p-3 pl-4 font-semibold text-slate-900">Horas SEP</td>
+                        <td className="p-3 text-center font-medium">{getFinsSum('Docente', 'SEP')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSum('Asistente de la Educación', 'SEP')} hrs</td>
+                        <td className="p-3 text-center font-bold text-slate-900">
+                          {getFinsSum('Docente', 'SEP') + getFinsSum('Asistente de la Educación', 'SEP')} hrs
                         </td>
-                        <td className="p-3 text-center font-bold">
-                          {contratos.reduce((sum, c) => {
-                            const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
-                            return sum + fins.filter(f => f.origen_fondo === 'Subvención Regular').reduce((s, f) => s + f.horas, 0);
-                          }, 0)} hrs
+                      </tr>
+                      <tr>
+                        <td className="p-3 pl-4 font-semibold text-slate-900">Horas PIE</td>
+                        <td className="p-3 text-center font-medium">{getFinsSum('Docente', 'PIE')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSum('Asistente de la Educación', 'PIE')} hrs</td>
+                        <td className="p-3 text-center font-bold text-slate-900">
+                          {getFinsSum('Docente', 'PIE') + getFinsSum('Asistente de la Educación', 'PIE')} hrs
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 pl-4 font-semibold text-slate-900">Horas Proretención</td>
+                        <td className="p-3 text-center font-medium">{getFinsSum('Docente', 'Pro-retención')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSum('Asistente de la Educación', 'Pro-retención')} hrs</td>
+                        <td className="p-3 text-center font-bold text-slate-900">
+                          {getFinsSum('Docente', 'Pro-retención') + getFinsSum('Asistente de la Educación', 'Pro-retención')} hrs
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 pl-4 font-semibold text-slate-900">Horas Liceos Bicentenarios</td>
+                        <td className="p-3 text-center font-medium">{getFinsSum('Docente', 'Liceos Bicentenarios')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSum('Asistente de la Educación', 'Liceos Bicentenarios')} hrs</td>
+                        <td className="p-3 text-center font-bold text-slate-900">
+                          {getFinsSum('Docente', 'Liceos Bicentenarios') + getFinsSum('Asistente de la Educación', 'Liceos Bicentenarios')} hrs
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 pl-4 font-semibold text-slate-900">Otras Horas/Fondos</td>
+                        <td className="p-3 text-center font-medium">{getFinsOtrasSum('Docente')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsOtrasSum('Asistente de la Educación')} hrs</td>
+                        <td className="p-3 text-center font-bold text-slate-900">
+                          {getFinsOtrasSum('Docente') + getFinsOtrasSum('Asistente de la Educación')} hrs
                         </td>
                       </tr>
                     </tbody>
@@ -2421,6 +2646,43 @@ export default function EscuelaDashboard() {
                     >
                       ➕ Agregar Nueva Fuente de Financiamiento
                     </button>
+                  </div>
+
+                  {/* Desglose de Horas en Contrato / Nómina (Ingesta) */}
+                  <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                    <span className="font-bold text-slate-800">Desglose de Horas Declarado en Nómina (Ingesta)</span>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-slate-500 font-bold mb-1">Horas Directivas</label>
+                        <input 
+                          type="number"
+                          placeholder="Sin valor"
+                          className="w-full p-2 bg-white border rounded font-semibold text-slate-800 focus:outline-slep-blue text-center"
+                          value={editContHorasDirectivas !== undefined ? editContHorasDirectivas : ''}
+                          onChange={(e) => setEditContHorasDirectivas(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 font-bold mb-1">Horas Aula</label>
+                        <input 
+                          type="number"
+                          placeholder="Sin valor"
+                          className="w-full p-2 bg-white border rounded font-semibold text-slate-800 focus:outline-slep-blue text-center"
+                          value={editContHorasAula !== undefined ? editContHorasAula : ''}
+                          onChange={(e) => setEditContHorasAula(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 font-bold mb-1">Horas Téc. Pedagógicas</label>
+                        <input 
+                          type="number"
+                          placeholder="Sin valor"
+                          className="w-full p-2 bg-white border rounded font-semibold text-slate-800 focus:outline-slep-blue text-center"
+                          value={editContHorasTecPed !== undefined ? editContHorasTecPed : ''}
+                          onChange={(e) => setEditContHorasTecPed(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Ley 20.903 indicators */}

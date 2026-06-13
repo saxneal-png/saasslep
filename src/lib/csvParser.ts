@@ -45,6 +45,7 @@ export interface CsvRow {
   ProRetencion?: string;
   Otro?: string;
   Estamento?: string; // Optional stamento: Docente or Asistente
+  [key: string]: any;
 }
 
 export interface ParseResult {
@@ -195,6 +196,35 @@ export function parsearNominaCsv(
     
     const horas_totales = parseDecimalHours(row.HorasTotales || row.horas_totales || row.HORAS_CONTRATO || row.horas_contrato);
 
+    const checkHasValue = (val: any) => val !== undefined && val !== null && val !== '';
+    const horas_directivas = checkHasValue(row.horas_directivas) ? parseDecimalHours(row.horas_directivas)
+      : checkHasValue(row.HorasDirectivas) ? parseDecimalHours(row.HorasDirectivas)
+      : checkHasValue(row.HORAS_DIRECTIVAS) ? parseDecimalHours(row.HORAS_DIRECTIVAS)
+      : checkHasValue(row.horas_directiva) ? parseDecimalHours(row.horas_directiva)
+      : checkHasValue(row.HorasDirectiva) ? parseDecimalHours(row.HorasDirectiva)
+      : checkHasValue(row.HORAS_DIRECTIVA) ? parseDecimalHours(row.HORAS_DIRECTIVA)
+      : undefined;
+
+    const horas_aula = checkHasValue(row.horas_aula) ? parseDecimalHours(row.horas_aula)
+      : checkHasValue(row.HorasAula) ? parseDecimalHours(row.HorasAula)
+      : checkHasValue(row.HORAS_AULA) ? parseDecimalHours(row.HORAS_AULA)
+      : checkHasValue(row.horas_cronologicas) ? parseDecimalHours(row.horas_cronologicas)
+      : checkHasValue(row.HorasCronologicas) ? parseDecimalHours(row.HorasCronologicas)
+      : checkHasValue(row.HORAS_CRONOLOGICAS) ? parseDecimalHours(row.HORAS_CRONOLOGICAS)
+      : undefined;
+
+    const horas_tecnico_pedagogicas = checkHasValue(row.horas_tecnico_pedagogicas) ? parseDecimalHours(row.horas_tecnico_pedagogicas)
+      : checkHasValue(row.HorasTecnicoPedagogicas) ? parseDecimalHours(row.HorasTecnicoPedagogicas)
+      : checkHasValue(row.HORAS_TECNICO_PEDAGOGICAS) ? parseDecimalHours(row.HORAS_TECNICO_PEDAGOGICAS)
+      : checkHasValue(row.horas_tecnico_pedagogica) ? parseDecimalHours(row.horas_tecnico_pedagogica)
+      : checkHasValue(row.HorasTecnicoPedagogica) ? parseDecimalHours(row.HorasTecnicoPedagogica)
+      : checkHasValue(row.HORAS_TECNICO_PEDAGOGICA) ? parseDecimalHours(row.HORAS_TECNICO_PEDAGOGICA)
+      : checkHasValue(row.horas_tecnica) ? parseDecimalHours(row.horas_tecnica)
+      : checkHasValue(row.horas_tecnico) ? parseDecimalHours(row.horas_tecnico)
+      : checkHasValue(row.HorasTecnica) ? parseDecimalHours(row.HorasTecnica)
+      : checkHasValue(row.HorasTecnico) ? parseDecimalHours(row.HorasTecnico)
+      : undefined;
+
     const dias_trabajados = row.dias_trabajados || row.DiasTrabajados || row.DIAS_TRABAJADOS ? parseInt(row.dias_trabajados || row.DiasTrabajados || row.DIAS_TRABAJADOS, 10) : undefined;
     const dias_licencia_medica = row.dias_licencia_medica || row.DiasLicenciaMedica || row.DIAS_LICENCIA_MEDICA ? parseInt(row.dias_licencia_medica || row.DiasLicenciaMedica || row.DIAS_LICENCIA_MEDICA, 10) : undefined;
     const inasistencias = row.inasistencias || row.Inasistencias || row.INASISTENCIAS ? parseInt(row.inasistencias || row.Inasistencias || row.INASISTENCIAS, 10) : undefined;
@@ -275,7 +305,10 @@ export function parsearNominaCsv(
       dias_trabajados,
       dias_licencia_medica,
       inasistencias,
-      legislacion_laboral
+      legislacion_laboral,
+      horas_directivas,
+      horas_aula,
+      horas_tecnico_pedagogicas
     };
     contratos.push(nuevoContrato);
 

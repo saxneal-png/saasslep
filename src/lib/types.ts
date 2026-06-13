@@ -42,9 +42,12 @@ export interface Contrato {
   dias_licencia_medica?: number;
   inasistencias?: number;
   legislacion_laboral?: LegislacionLaboral;
+  horas_directivas?: number;
+  horas_aula?: number;
+  horas_tecnico_pedagogicas?: number;
 }
 
-export type OrigenFondo = 'Subvención Regular' | 'SEP' | 'PIE' | 'Reforzamiento' | 'Pro-retención' | 'Otro';
+export type OrigenFondo = 'Subvención Regular' | 'SEP' | 'PIE' | 'Reforzamiento' | 'Pro-retención' | 'Liceos Bicentenarios' | 'Otro';
 
 export interface FinanciamientoContrato {
   id: string; // UUID
