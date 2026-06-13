@@ -53,6 +53,10 @@ export default function RRHHPage() {
   const [selectedLicenciaRun, setSelectedLicenciaRun] = useState('');
   const [licenciaDias, setLicenciaDias] = useState(15);
 
+  // Bulk deletion & Tab state
+  const [selectedFuncs, setSelectedFuncs] = useState<string[]>([]);
+  const [rrhhTab, setRrhhTab] = useState<'fichas' | 'licencias'>('fichas');
+
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
@@ -236,6 +240,17 @@ export default function RRHHPage() {
     alert('✅ Contrato de reemplazo aprobado y activado en el sistema.');
   };
 
+  const handleMassDelete = async () => {
+    if (selectedFuncs.length === 0) return;
+    if (confirm(`¿Está seguro de que desea eliminar masivamente a los ${selectedFuncs.length} funcionarios seleccionados y sus contratos correspondientes?`)) {
+      dbLocal.funcionarios = dbLocal.funcionarios.filter(f => !selectedFuncs.includes(f.run));
+      dbLocal.contratos = dbLocal.contratos.filter(c => !selectedFuncs.includes(c.funcionario_run));
+      setSelectedFuncs([]);
+      await loadData();
+      alert('✅ Funcionarios y sus contratos eliminados exitosamente.');
+    }
+  };
+
   // Filter staff
   const filteredFuncionarios = funcionarios.filter(f => {
     const matchesSearch = f.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || f.run.includes(searchTerm);
@@ -327,71 +342,94 @@ export default function RRHHPage() {
         {/* Content */}
         <div className="p-6 space-y-6 max-w-7xl w-full mx-auto">
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Left Column: Contracting Form */}
-            <div className="lg:col-span-2 bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
-              <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                <span>📝</span> Tramitar Nueva Contratación
-              </h2>
+          {/* Sub-tabs Navigation */}
+          <div className="flex border-b border-slate-200 gap-1 bg-white p-1 rounded-xl border">
+            <button 
+              onClick={() => { setRrhhTab('fichas'); setSelectedFuncs([]); }}
+              className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                rrhhTab === 'fichas' 
+                  ? 'bg-slep-blue text-white shadow-sm' 
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              👤 Fichas de Funcionarios (P01 / P02)
+            </button>
+            <button 
+              onClick={() => { setRrhhTab('licencias'); setSelectedFuncs([]); }}
+              className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                rrhhTab === 'licencias' 
+                  ? 'bg-slep-blue text-white shadow-sm' 
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              🏥 Licencias y Reemplazos
+            </button>
+          </div>
+
+          {rrhhTab === 'fichas' && (
+            <div className="space-y-6 animate-fadeIn">
               
-              <form onSubmit={handleContratar} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              {/* Contracting Form */}
+              <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
+                <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <span>📝</span> Tramitar Nueva Contratación
+                </h2>
                 
-                <div>
-                  <label className="block text-slate-500 font-bold mb-1">RUN Funcionario</label>
-                  <input 
-                    type="text" 
-                    placeholder="12.345.678-9"
-                    className="w-full p-2 border rounded font-semibold text-slate-800"
-                    value={run}
-                    onChange={(e) => setRun(e.target.value)}
-                    required
-                  />
-                </div>
+                <form onSubmit={handleContratar} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <label className="block text-slate-500 font-bold mb-1">RUN Funcionario</label>
+                    <input 
+                      type="text" 
+                      placeholder="12.345.678-9"
+                      className="w-full p-2 border rounded font-semibold text-slate-800"
+                      value={run}
+                      onChange={(e) => setRun(e.target.value)}
+                      required
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-slate-500 font-bold mb-1">Nombre Completo</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ej: MARÍA LUZ PINTO GONZÁLEZ"
-                    className="w-full p-2 border rounded font-semibold text-slate-800"
-                    value={nombre}
-                    onChange={(e) => setNombre(e.target.value)}
-                    required
-                  />
-                </div>
+                  <div>
+                    <label className="block text-slate-500 font-bold mb-1">Nombre Completo</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej: MARÍA LUZ PINTO GONZÁLEZ"
+                      className="w-full p-2 border rounded font-semibold text-slate-800"
+                      value={nombre}
+                      onChange={(e) => setNombre(e.target.value)}
+                      required
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-slate-500 font-bold mb-1">Clasificación Estamento</label>
-                  <select
-                    className="w-full p-2 bg-white border rounded font-bold text-slate-700"
-                    value={estamento}
-                    onChange={(e) => setEstamento(e.target.value as GrupoEstamento)}
-                  >
-                    <option value="P02_Educacion">P02 (Educación - Escuelas)</option>
-                    <option value="P01_Administrativo">P01 (Estatuto Administrativo - Nivel Central)</option>
-                  </select>
-                </div>
+                  <div>
+                    <label className="block text-slate-500 font-bold mb-1">Clasificación Estamento</label>
+                    <select
+                      className="w-full p-2 bg-white border rounded font-bold text-slate-700 cursor-pointer"
+                      value={estamento}
+                      onChange={(e) => setEstamento(e.target.value as GrupoEstamento)}
+                    >
+                      <option value="P02_Educacion">P02 (Educación - Escuelas)</option>
+                      <option value="P01_Administrativo">P01 (Estatuto Administrativo - Nivel Central)</option>
+                    </select>
+                  </div>
 
-                <div>
-                  <label className="block text-slate-500 font-bold mb-1">Email</label>
-                  <input 
-                    type="email" 
-                    placeholder="correo@slep.cl"
-                    className="w-full p-2 border rounded text-slate-800"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
+                  <div>
+                    <label className="block text-slate-500 font-bold mb-1">Email</label>
+                    <input 
+                      type="email" 
+                      placeholder="correo@slep.cl"
+                      className="w-full p-2 border rounded text-slate-800"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
 
-                {/* Conditional Fields based on Estamento Selection */}
-                {estamento === 'P01_Administrativo' ? (
-                  <>
+                  {/* Conditional Fields based on Estamento Selection */}
+                  {estamento === 'P01_Administrativo' ? (
                     <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 col-span-full grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-slate-600 font-bold mb-1">Calidad Jurídica P01</label>
                         <select 
-                          className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800"
+                          className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800 cursor-pointer"
                           value={calidadP01}
                           onChange={(e) => setCalidadP01(e.target.value as any)}
                         >
@@ -402,7 +440,7 @@ export default function RRHHPage() {
                       <div>
                         <label className="block text-slate-600 font-bold mb-1">Escalafón Administrativo</label>
                         <select 
-                          className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800"
+                          className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800 cursor-pointer"
                           value={escalafonP01}
                           onChange={(e) => setEscalafonP01(e.target.value as any)}
                         >
@@ -430,14 +468,12 @@ export default function RRHHPage() {
                         </p>
                       </div>
                     </div>
-                  </>
-                ) : (
-                  <>
+                  ) : (
                     <div className="bg-amber-50/40 p-3 rounded-lg border border-amber-100 col-span-full grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-slate-600 font-bold mb-1">Destinación Establecimiento</label>
                         <select 
-                          className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800"
+                          className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800 cursor-pointer"
                           value={rbd}
                           onChange={(e) => setRbd(e.target.value)}
                         >
@@ -449,7 +485,7 @@ export default function RRHHPage() {
                       <div>
                         <label className="block text-slate-600 font-bold mb-1">Calidad Jurídica P02</label>
                         <select 
-                          className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800"
+                          className="w-full p-1.5 bg-white border rounded font-semibold text-slate-800 cursor-pointer"
                           value={calidadP02}
                           onChange={(e) => setCalidadP02(e.target.value as any)}
                         >
@@ -490,249 +526,327 @@ export default function RRHHPage() {
                         />
                       </div>
                     </div>
-                  </>
-                )}
+                  )}
 
-                <div className="col-span-full flex justify-end pt-2">
-                  <button 
-                    type="submit" 
-                    className="bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold px-6 py-2.5 rounded-lg shadow cursor-pointer text-xs"
-                  >
-                    💾 Registrar Contratación
+                  <div className="col-span-full flex justify-end pt-2">
+                    <button 
+                      type="submit" 
+                      className="bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold px-6 py-2.5 rounded-lg shadow cursor-pointer text-xs"
+                    >
+                      💾 Registrar Contratación
                   </button>
-                </div>
-
-              </form>
-            </div>
-
-            {/* Right Column: Licencias Medicas Processing */}
-            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
-              <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                <span>🏥</span> Tramitar Licencia Médica (P02)
-              </h2>
-              
-              <form onSubmit={handleTramitarLicencia} className="space-y-4 text-xs">
-                <div>
-                  <label className="block text-slate-500 font-bold mb-1">Funcionario Docente / Asistente</label>
-                  <select 
-                    value={selectedLicenciaRun} 
-                    onChange={(e) => setSelectedLicenciaRun(e.target.value)}
-                    className="w-full p-2 bg-white border rounded font-semibold text-slate-700"
-                  >
-                    <option value="">Seleccione personal...</option>
-                    {funcionarios.filter(f => f.grupo_estamento === 'P02_Educacion' || !f.grupo_estamento).map(f => (
-                      <option key={f.run} value={f.run}>{f.nombre} ({f.run})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-500 font-bold mb-1">Duración de Licencia (Días)</label>
-                  <input 
-                    type="number" 
-                    className="w-full p-2 border rounded font-bold text-slate-800"
-                    value={licenciaDias}
-                    onChange={(e) => setLicenciaDias(parseInt(e.target.value) || 15)}
-                    min={1}
-                  />
-                </div>
-
-                <button 
-                  type="submit" 
-                  className="w-full bg-slep-blue hover:bg-slep-blue-hover text-white font-bold py-2 rounded shadow cursor-pointer text-xs"
-                >
-                  Registrar Licencia y Alerta de Reemplazo
-                </button>
-              </form>
-
-              {/* Display pending replacement tasks count */}
-              <div className="mt-4 bg-slate-50 p-4 rounded-lg border">
-                <span className="text-[10px] uppercase font-bold text-slate-400">Reemplazos Pendientes en Escuelas</span>
-                <p className="text-lg font-black text-slep-blue mt-1">{tareas.filter(t => t.estado === 'Pendiente').length} tareas</p>
-                <div className="mt-2 space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
-                  {tareas.map(t => (
-                    <div key={t.id} className="text-[10px] bg-white border p-2 rounded flex justify-between items-center">
-                      <div>
-                        <p className="font-bold text-slate-800">{t.funcionario_titular_nombre}</p>
-                        <p className="text-[9px] text-slate-400">RBD: {t.rbd} • {t.horas_a_cubrir} hrs</p>
-                      </div>
-                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
-                        t.estado === 'Pendiente' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
-                      }`}>{t.estado}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Bandeja de Aprobación de Reemplazos */}
-          {(() => {
-            const propuestas = contratos.filter(c => c.estado === 'Pendiente_Aprobacion');
-            if (propuestas.length === 0) return null;
-            return (
-              <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4 animate-fadeIn">
-                <div className="pb-2 border-b flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-red-700 flex items-center gap-2">
-                      <span>🤝</span> Propuestas de Reemplazo Pendientes de Aprobación
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-1">Directores de establecimientos han propuesto a los siguientes candidatos en espejo. Revise y proceda a visar y contratar.</p>
                   </div>
-                  <span className="bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider">
-                    {propuestas.length} Propuestas
-                  </span>
+                </form>
+              </div>
+
+              {/* Staff table list (Fichas) */}
+              <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4 animate-fadeIn">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Maestro Consolidado de Personal</h3>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">Lista de fichas vigentes del personal del servicio local (Alimentada por ingestas escolares y RR.HH. central).</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {selectedFuncs.length > 0 && (
+                      <button
+                        onClick={handleMassDelete}
+                        className="bg-red-600 hover:bg-red-700 text-white font-extrabold px-3 py-1.5 rounded-lg text-xs shadow transition-colors cursor-pointer mr-2 flex items-center gap-1"
+                      >
+                        🗑️ Eliminar Selección ({selectedFuncs.length})
+                      </button>
+                    )}
+                    <input 
+                      type="text" 
+                      placeholder="Buscar por Nombre o RUN..." 
+                      className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    <select
+                      className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 font-bold"
+                      value={filterEstamento}
+                      onChange={(e) => setFilterEstamento(e.target.value as any)}
+                    >
+                      <option value="all">Todos los Estamentos</option>
+                      <option value="P01">Solo P01 (Administrativo)</option>
+                      <option value="P02">Solo P02 (Educación)</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto text-xs">
                   <table className="w-full text-left">
-                    <thead className="bg-slate-50 font-bold text-slate-600">
+                    <thead className="bg-slate-100 font-bold text-slate-600 uppercase border-b">
                       <tr>
-                        <th className="p-3 pl-4">Candidato Propuesto</th>
-                        <th className="p-3">Escuela RBD</th>
-                        <th className="p-3">Función Principal / Horas</th>
-                        <th className="p-3">Docente Titular Reemplazado</th>
-                        <th className="p-3 text-center">Acciones</th>
+                        <th className="p-3 pl-4 w-10 text-center">
+                          <input 
+                            type="checkbox" 
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedFuncs(filteredFuncionarios.map(f => f.run));
+                              } else {
+                                setSelectedFuncs([]);
+                              }
+                            }}
+                            checked={selectedFuncs.length === filteredFuncionarios.length && filteredFuncionarios.length > 0}
+                          />
+                        </th>
+                        <th className="p-3">Funcionario</th>
+                        <th className="p-3">Estamento</th>
+                        <th className="p-3">Detalle EUS / Especialidad</th>
+                        <th className="p-3">Ubicación / RBD</th>
+                        <th className="p-3 text-center">Horas Contrato</th>
+                        <th className="p-3 text-right">Haber Estimado</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {propuestas.map(p => {
-                        const candidateFunc = funcionarios.find(f => f.run === p.funcionario_run);
+                      {filteredFuncionarios.map(f => {
+                        const cont = contratos.find(c => c.funcionario_run === f.run);
+                        const isP01 = f.grupo_estamento === 'P01_Administrativo';
+                        const haberEst = isP01 ? calcularHaberBaseEUS(f.grado_eus || 12) : (cont ? cont.horas_totales * 18500 * 4 : 0);
+
                         return (
-                          <tr key={p.id} className="hover:bg-slate-50">
-                            <td className="p-3 pl-4">
-                              <p className="font-bold text-slate-800">{candidateFunc ? candidateFunc.nombre : 'Candidato Reemplazo'}</p>
-                              <p className="text-[10px] font-mono text-slate-400 mt-0.5">{p.funcionario_run}</p>
+                          <tr key={f.run} className="hover:bg-slate-50">
+                            <td className="p-3 pl-4 text-center">
+                              <input 
+                                type="checkbox"
+                                checked={selectedFuncs.includes(f.run)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedFuncs([...selectedFuncs, f.run]);
+                                  } else {
+                                    setSelectedFuncs(selectedFuncs.filter(run => run !== f.run));
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td className="p-3">
+                              <p className="font-bold text-slate-800">{f.nombre}</p>
+                              <p className="text-[10px] font-mono text-slate-400 mt-0.5">{f.run}</p>
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                isP01 
+                                  ? 'bg-blue-100 text-blue-800' 
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {isP01 ? 'P01 Administrativo' : 'P02 Educación'}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              {isP01 ? (
+                                <div className="text-[10px] text-slate-600 font-medium">
+                                  <p>Escalafón: <span className="font-bold">{f.escalafon_p01}</span></p>
+                                  <p>EUS Grado: <span className="font-bold">{f.grado_eus}</span> ({f.calidad_juridica_p01})</p>
+                                </div>
+                              ) : (
+                                <div className="text-[10px] text-slate-600">
+                                  <p>Título: <span className="font-semibold text-slate-800">{f.titulo || 'No registrado'}</span></p>
+                                  <p>Cargo: <span className="font-semibold">{f.cargo || 'Docente'}</span></p>
+                                </div>
+                              )}
                             </td>
                             <td className="p-3 font-semibold text-slate-700">
-                              🏫 RBD {p.rbd}
+                              {isP01 ? (
+                                <span>🏛️ Nivel Central</span>
+                              ) : (
+                                <span>🏫 RBD {cont?.rbd || 'Desconocido'}</span>
+                              )}
                             </td>
-                            <td className="p-3 font-medium text-slate-600">
-                              {p.funcion_principal} • <span className="font-bold text-slep-blue">{p.horas_totales} hrs</span>
+                            <td className="p-3 text-center font-bold text-slate-800">
+                              {cont ? `${cont.horas_totales} hrs` : '--'}
                             </td>
-                            <td className="p-3 text-slate-500">
-                              👤 RUN: {p.vinculo_titular_id ? p.vinculo_titular_id.replace('c-' + p.rbd + '-', '') : 'N/A'}
-                            </td>
-                            <td className="p-3 text-center">
-                              <button
-                                onClick={() => handleAprobarReemplazo(p.id)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-1.5 rounded shadow text-xs transition-colors cursor-pointer"
-                              >
-                                Aceptar y Contratar ✍️
-                              </button>
+                            <td className="p-3 text-right font-bold font-mono text-slate-700">
+                              ${haberEst.toLocaleString('es-CL')}
                             </td>
                           </tr>
                         );
                       })}
+                      {filteredFuncionarios.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="p-4 text-center text-slate-400 italic">
+                            No hay funcionarios contratados bajo este filtro.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
-            );
-          })()}
 
-          {/* Bottom Table: Staff list */}
-          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b">
-              <div>
-                <h3 className="text-base font-bold text-slate-800">Maestro Consolidado de Personal</h3>
-                <p className="text-xs text-slate-500 mt-1">Lista completa de funcionarios administrativos (P01) y escolares (P02).</p>
+            </div>
+          )}
+
+          {rrhhTab === 'licencias' && (
+            <div className="space-y-6 animate-fadeIn">
+              
+              {/* Direct notifications from school directors (Alerts) */}
+              {(() => {
+                const pendingLicencias = contratos.filter(c => c.estado === 'Licencia Médica');
+                if (pendingLicencias.length === 0) return null;
+                return (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-900 space-y-3 shadow-sm">
+                    <p className="font-black flex items-center gap-1.5 text-red-800 uppercase tracking-wide">
+                      <span>🚨</span> Alertas de Licencias Médicas Activas Notificadas por Directores de Escuela:
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {pendingLicencias.map(c => {
+                        const f = funcionarios.find(func => func.run === c.funcionario_run);
+                        return (
+                          <div key={c.id} className="bg-white border border-red-100 p-3 rounded-lg flex justify-between items-center shadow-sm">
+                            <div>
+                              <p className="font-bold text-slate-800">{f ? f.nombre : c.funcionario_run}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">RBD: {c.rbd} • Contrato: {c.horas_totales} hrs</p>
+                            </div>
+                            <span className="bg-red-150 text-red-700 text-[8px] font-black uppercase px-2 py-0.5 rounded tracking-wide animate-pulse">
+                              Licencia Médica 🩺
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Left Column: Tramitar Licencia Form */}
+                <div className="lg:col-span-1 bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
+                  <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <span>🏥</span> Tramitar Licencia Médica (P02)
+                  </h2>
+                  
+                  <form onSubmit={handleTramitarLicencia} className="space-y-4 text-xs">
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1">Funcionario Docente / Asistente</label>
+                      <select 
+                        value={selectedLicenciaRun} 
+                        onChange={(e) => setSelectedLicenciaRun(e.target.value)}
+                        className="w-full p-2 bg-white border rounded font-semibold text-slate-700 cursor-pointer"
+                      >
+                        <option value="">Seleccione personal...</option>
+                        {funcionarios.filter(f => f.grupo_estamento === 'P02_Educacion' || !f.grupo_estamento).map(f => (
+                          <option key={f.run} value={f.run}>{f.nombre} ({f.run})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1">Duración de Licencia (Días)</label>
+                      <input 
+                        type="number" 
+                        className="w-full p-2 border rounded font-bold text-slate-800 text-center"
+                        value={licenciaDias}
+                        onChange={(e) => setLicenciaDias(parseInt(e.target.value) || 15)}
+                        min={1}
+                      />
+                    </div>
+
+                    <button 
+                      type="submit" 
+                      className="w-full bg-slep-blue hover:bg-slep-blue-hover text-white font-bold py-2 rounded shadow cursor-pointer text-xs transition-colors"
+                    >
+                      Registrar Licencia y Alerta de Reemplazo
+                    </button>
+                  </form>
+                </div>
+
+                {/* Right Column: Pending replacement tasks count */}
+                <div className="lg:col-span-2 bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
+                  <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <span>📋</span> Tareas de Reemplazo Pendientes en Establecimientos
+                  </h2>
+                  <p className="text-xs text-slate-500">Listado de horas críticas de aula que se encuentran vacantes por licencias vigentes y requieren cobertura.</p>
+
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                    {tareas.map(t => (
+                      <div key={t.id} className="text-xs bg-slate-50 border p-3 rounded-xl flex justify-between items-center hover:shadow-sm transition-shadow">
+                        <div>
+                          <p className="font-bold text-slate-800">{t.funcionario_titular_nombre}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">RBD: {t.rbd} • Horas a Cubrir: {t.horas_a_cubrir} hrs</p>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                          t.estado === 'Pendiente' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
+                        }`}>{t.estado === 'Pendiente' ? 'Buscando Reemplazo 🔍' : 'Asignado ✓'}</span>
+                      </div>
+                    ))}
+                    {tareas.length === 0 && (
+                      <p className="text-center py-6 text-slate-400 italic">No hay alertas de reemplazos activas en el territorio.</p>
+                    )}
+                  </div>
+                </div>
+
               </div>
 
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  placeholder="Buscar por Nombre o RUN..." 
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <select
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 font-bold"
-                  value={filterEstamento}
-                  onChange={(e) => setFilterEstamento(e.target.value as any)}
-                >
-                  <option value="all">Todos los Estamentos</option>
-                  <option value="P01">Solo P01 (Administrativo)</option>
-                  <option value="P02">Solo P02 (Educación)</option>
-                </select>
-              </div>
-            </div>
+              {/* Bandeja de Aprobación de Reemplazos */}
+              {(() => {
+                const propuestas = contratos.filter(c => c.estado === 'Pendiente_Aprobacion');
+                if (propuestas.length === 0) return null;
+                return (
+                  <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4 animate-fadeIn">
+                    <div className="pb-2 border-b flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-bold text-red-700 flex items-center gap-2">
+                          <span>🤝</span> Propuestas de Reemplazo Pendientes de Aprobación Central (RR.HH.)
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1">Directores de establecimientos han asignado candidatos. Revise la propuesta de contrato espejo para proceder a visar.</p>
+                      </div>
+                      <span className="bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider">
+                        {propuestas.length} Pendientes
+                      </span>
+                    </div>
 
-            <div className="overflow-x-auto text-xs">
-              <table className="w-full text-left">
-                <thead className="bg-slate-100 font-bold text-slate-600 uppercase">
-                  <tr>
-                    <th className="p-3 pl-4">Funcionario</th>
-                    <th className="p-3">Estamento</th>
-                    <th className="p-3">Detalle EUS / Especialidad</th>
-                    <th className="p-3">Ubicación / RBD</th>
-                    <th className="p-3 text-center">Horas Contrato</th>
-                    <th className="p-3 text-right">Haber Estimado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredFuncionarios.map(f => {
-                    const cont = contratos.find(c => c.funcionario_run === f.run);
-                    const isP01 = f.grupo_estamento === 'P01_Administrativo';
-                    const haberEst = isP01 ? calcularHaberBaseEUS(f.grado_eus || 12) : (cont ? cont.horas_totales * 18500 * 4 : 0);
+                    <div className="overflow-x-auto text-xs">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-50 font-bold text-slate-600 border-b">
+                          <tr>
+                            <th className="p-3 pl-4">Candidato Propuesto</th>
+                            <th className="p-3">Escuela RBD</th>
+                            <th className="p-3">Función Principal / Horas</th>
+                            <th className="p-3">Docente Titular Reemplazado</th>
+                            <th className="p-3 text-center">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {propuestas.map(p => {
+                            const candidateFunc = funcionarios.find(f => f.run === p.funcionario_run);
+                            return (
+                              <tr key={p.id} className="hover:bg-slate-50">
+                                <td className="p-3 pl-4">
+                                  <p className="font-bold text-slate-800">{candidateFunc ? candidateFunc.nombre : 'Candidato Reemplazo'}</p>
+                                  <p className="text-[10px] font-mono text-slate-400 mt-0.5">{p.funcionario_run}</p>
+                                </td>
+                                <td className="p-3 font-semibold text-slate-700">
+                                  🏫 RBD {p.rbd}
+                                </td>
+                                <td className="p-3 font-medium text-slate-600">
+                                  {p.funcion_principal} • <span className="font-bold text-slep-blue">{p.horas_totales} hrs</span>
+                                </td>
+                                <td className="p-3 text-slate-500">
+                                  👤 RUN: {p.vinculo_titular_id ? p.vinculo_titular_id.replace('c-' + p.rbd + '-', '') : 'N/A'}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <button
+                                    onClick={() => handleAprobarReemplazo(p.id)}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-1.5 rounded shadow text-xs transition-colors cursor-pointer"
+                                  >
+                                    Aceptar y Contratar ✍️
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
 
-                    return (
-                      <tr key={f.run} className="hover:bg-slate-50">
-                        <td className="p-3 pl-4">
-                          <p className="font-bold text-slate-800">{f.nombre}</p>
-                          <p className="text-[10px] font-mono text-slate-400 mt-0.5">{f.run}</p>
-                        </td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            isP01 
-                              ? 'bg-blue-100 text-blue-800' 
-                              : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {isP01 ? 'P01 Administrativo' : 'P02 Educación'}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          {isP01 ? (
-                            <div className="text-[10px] text-slate-600 font-medium">
-                              <p>Escalafón: <span className="font-bold">{f.escalafon_p01}</span></p>
-                              <p>EUS Grado: <span className="font-bold">{f.grado_eus}</span> ({f.calidad_juridica_p01})</p>
-                            </div>
-                          ) : (
-                            <div className="text-[10px] text-slate-600">
-                              <p>Título: <span className="font-semibold text-slate-800">{f.titulo || 'No registrado'}</span></p>
-                              <p>Cargo: <span className="font-semibold">{f.cargo || 'Docente'}</span></p>
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-3 font-semibold text-slate-700">
-                          {isP01 ? (
-                            <span>🏛️ Nivel Central</span>
-                          ) : (
-                            <span>🏫 RBD {cont?.rbd || 'Desconocido'}</span>
-                          )}
-                        </td>
-                        <td className="p-3 text-center font-bold text-slate-800">
-                          {cont ? `${cont.horas_totales} hrs` : '--'}
-                        </td>
-                        <td className="p-3 text-right font-bold font-mono text-slate-700">
-                          ${haberEst.toLocaleString('es-CL')}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filteredFuncionarios.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="p-4 text-center text-slate-400 italic">
-                        No hay funcionarios contratados bajo este filtro.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
             </div>
-          </div>
+          )}
 
         </div>
       </main>
