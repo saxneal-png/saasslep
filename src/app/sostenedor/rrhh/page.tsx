@@ -12,10 +12,12 @@ import {
   TareaReemplazo, 
   OrigenFondo,
   CalidadJuridica,
-  CARGOS_DOCENTES_LIST
+  CARGOS_DOCENTES_LIST,
+  ReemplazoDetalle,
+  Establecimiento
 } from '@/lib/types';
 import { normalizarRun } from '@/lib/csvParser';
-import { calcularHaberBaseEUS } from '@/lib/rulesEngine';
+import { calcularHaberBaseEUS, validarCargaDocente } from '@/lib/rulesEngine';
 
 export default function RRHHPage() {
   const router = useRouter();
@@ -25,7 +27,7 @@ export default function RRHHPage() {
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [tareas, setTareas] = useState<TareaReemplazo[]>([]);
   const [comunas, setComunas] = useState<string[]>([]);
-  const [escuelas, setEscuelas] = useState<{ rbd: string; nombre: string }[]>([]);
+  const [escuelas, setEscuelas] = useState<Establecimiento[]>([]);
 
   // Search/Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,6 +55,19 @@ export default function RRHHPage() {
   // Licencias Medicas State
   const [selectedLicenciaRun, setSelectedLicenciaRun] = useState('');
   const [licenciaDias, setLicenciaDias] = useState(15);
+  const [fechaInicioLicencia, setFechaInicioLicencia] = useState('');
+  const [fechaTerminoLicencia, setFechaTerminoLicencia] = useState('');
+  
+  // Viewing Ficha Modal
+  const [viewingFuncionario, setViewingFuncionario] = useState<Funcionario | null>(null);
+
+  // Replacement Form State
+  const [addingReemplazoContratoId, setAddingReemplazoContratoId] = useState<string | null>(null);
+  const [reemplazoRun, setReemplazoRun] = useState('');
+  const [reemplazoHoras, setReemplazoHoras] = useState(44);
+  const [reemplazoFInicio, setReemplazoFInicio] = useState('');
+  const [reemplazoFTermino, setReemplazoFTermino] = useState('');
+  const [reemplazosList, setReemplazosList] = useState<ReemplazoDetalle[]>([]);
 
   // Bulk deletion & Tab state
   const [selectedFuncs, setSelectedFuncs] = useState<string[]>([]);
@@ -89,6 +104,8 @@ export default function RRHHPage() {
     setComunas(coms);
     const ests = await api.getEstablecimientos();
     setEscuelas(ests);
+    const reemps = await api.getReemplazosLicencias();
+    setReemplazosList(reemps);
     if (ests.length > 0) {
       setRbd(ests[0].rbd);
     }
@@ -187,10 +204,23 @@ export default function RRHHPage() {
 
     const func = funcionarios.find(f => f.run === selectedLicenciaRun);
 
-    // Update contract status to 'Licencia Médica'
+    const start = fechaInicioLicencia || new Date().toISOString().split('T')[0];
+    let end = fechaTerminoLicencia;
+    if (!end) {
+      const startDate = new Date(start + 'T12:00:00');
+      startDate.setDate(startDate.getDate() + (licenciaDias || 15));
+      end = startDate.toISOString().split('T')[0];
+    }
+
+    // Update contract status to 'Licencia Médica' and set dates
     const updatedConts = dbLocal.contratos.map(c => {
       if (c.funcionario_run === selectedLicenciaRun && c.rbd !== '99999') {
-        return { ...c, estado: 'Licencia Médica' as const };
+        return { 
+          ...c, 
+          estado: 'Licencia Médica' as const,
+          fecha_inicio_licencia: start,
+          fecha_termino_licencia: end
+        };
       }
       return c;
     });
@@ -201,17 +231,69 @@ export default function RRHHPage() {
       const nuevaTarea: TareaReemplazo = {
         id: `reemplazo-task-${Date.now()}-${c.id}`,
         rbd: c.rbd,
+        funcionario_run: selectedLicenciaRun, // Just to be safe
         funcionario_titular_run: selectedLicenciaRun,
         funcionario_titular_nombre: func ? func.nombre : selectedLicenciaRun,
         horas_a_cubrir: c.horas_totales,
         estado: 'Pendiente'
-      };
+      } as any;
       await api.crearTareaReemplazo(nuevaTarea);
     }
 
     setSelectedLicenciaRun('');
+    setFechaInicioLicencia('');
+    setFechaTerminoLicencia('');
+    setLicenciaDias(15);
     await loadData();
     alert('✅ Licencia médica registrada. Se ha notificado al Director de la escuela para la designación de reemplazo.');
+  };
+
+  const handleAddReemplazo = async (contratoId: string) => {
+    if (!reemplazoRun) {
+      alert('⚠️ Seleccione un reemplazante.');
+      return;
+    }
+    if (reemplazoHoras <= 0) {
+      alert('⚠️ Ingrese un número válido de horas.');
+      return;
+    }
+    if (!reemplazoFInicio || !reemplazoFTermino) {
+      alert('⚠️ Ingrese las fechas de inicio y término del reemplazo.');
+      return;
+    }
+
+    const reempFunc = funcionarios.find(f => f.run === reemplazoRun);
+    const titularContrato = contratos.find(c => c.id === contratoId);
+    if (!titularContrato) return;
+
+    const nuevoReemplazo: ReemplazoDetalle = {
+      id: `reemp-${Date.now()}`,
+      contrato_titular_id: contratoId,
+      reemplazo_run: reemplazoRun,
+      reemplazo_nombre: reempFunc ? reempFunc.nombre : reemplazoRun,
+      rbd: titularContrato.rbd,
+      horas: reemplazoHoras,
+      fecha_inicio: reemplazoFInicio,
+      fecha_termino: reemplazoFTermino
+    };
+
+    await api.saveReemplazoLicencia(nuevoReemplazo);
+    
+    // Reset state
+    setAddingReemplazoContratoId(null);
+    setReemplazoRun('');
+    setReemplazoHoras(44);
+    setReemplazoFInicio('');
+    setReemplazoFTermino('');
+    await loadData();
+    alert('✅ Reemplazante agregado exitosamente.');
+  };
+
+  const handleDeleteReemplazo = async (id: string) => {
+    if (confirm('¿Está seguro de eliminar este reemplazo?')) {
+      await api.deleteReemplazoLicencia(id);
+      await loadData();
+    }
   };
 
   const handleAprobarReemplazo = async (contratoId: string) => {
@@ -645,7 +727,39 @@ export default function RRHHPage() {
                               />
                             </td>
                             <td className="p-3">
-                              <p className="font-bold text-slate-800">{f.nombre}</p>
+                              <button
+                                onClick={() => setViewingFuncionario(f)}
+                                className="font-bold text-slate-800 underline hover:text-slep-blue text-left"
+                              >
+                                {f.nombre}
+                              </button>
+                              {(() => {
+                                if (cont) {
+                                  if (cont.estado === 'Licencia Médica') {
+                                    const reemps = reemplazosList.filter(r => r.contrato_titular_id === cont.id);
+                                    const totalCubierto = reemps.reduce((acc, curr) => acc + curr.horas, 0);
+                                    if (totalCubierto < cont.horas_totales) {
+                                      return (
+                                        <span className="bg-rose-105 text-rose-700 px-2 py-0.5 rounded text-[9px] font-black border border-rose-300 ml-2 animate-pulse whitespace-nowrap" title={`Licencia médica sin cobertura total (${totalCubierto}/${cont.horas_totales} hrs cubiertas).`}>
+                                          ⚠️ Licencia sin Cobertura
+                                        </span>
+                                      );
+                                    }
+                                  } else if (cont.estado === 'Activo') {
+                                    const esc = escuelas.find(e => e.rbd === cont.rbd);
+                                    const asigs = dbLocal.asignacionesAula.filter(a => a.contrato_id === cont.id);
+                                    const leyCalculo = esc ? validarCargaDocente(cont, esc, asigs, []) : null;
+                                    if (leyCalculo && !leyCalculo.cumpleLey20903) {
+                                      return (
+                                        <span className="bg-rose-105 text-rose-700 px-2 py-0.5 rounded text-[9px] font-black border border-rose-300 ml-2 animate-pulse whitespace-nowrap" title={`Exceso detectado en proporción de aula (Ley 20.903).`}>
+                                          ⚠️ Sobrecarga Ley 20.903
+                                        </span>
+                                      );
+                                    }
+                                  }
+                                }
+                                return null;
+                              })()}
                               <p className="text-[10px] font-mono text-slate-400 mt-0.5">{f.run}</p>
                             </td>
                             <td className="p-3">
@@ -719,7 +833,12 @@ export default function RRHHPage() {
                         return (
                           <div key={c.id} className="bg-white border border-red-100 p-3 rounded-lg flex justify-between items-center shadow-sm">
                             <div>
-                              <p className="font-bold text-slate-800">{f ? f.nombre : c.funcionario_run}</p>
+                              <button
+                                onClick={() => f && setViewingFuncionario(f)}
+                                className="font-bold text-slate-800 underline hover:text-slep-blue text-left"
+                              >
+                                {f ? f.nombre : c.funcionario_run}
+                              </button>
                               <p className="text-[10px] text-slate-400 mt-0.5">RBD: {c.rbd} • Contrato: {c.horas_totales} hrs</p>
                             </div>
                             <span className="bg-red-150 text-red-700 text-[8px] font-black uppercase px-2 py-0.5 rounded tracking-wide animate-pulse">
@@ -756,8 +875,29 @@ export default function RRHHPage() {
                       </select>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-slate-500 font-bold mb-1">Fecha Inicio</label>
+                        <input 
+                          type="date"
+                          className="w-full p-1.5 border rounded text-slate-800 text-xs font-semibold"
+                          value={fechaInicioLicencia}
+                          onChange={(e) => setFechaInicioLicencia(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 font-bold mb-1">Fecha Término</label>
+                        <input 
+                          type="date"
+                          className="w-full p-1.5 border rounded text-slate-800 text-xs font-semibold"
+                          value={fechaTerminoLicencia}
+                          onChange={(e) => setFechaTerminoLicencia(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
                     <div>
-                      <label className="block text-slate-500 font-bold mb-1">Duración de Licencia (Días)</label>
+                      <label className="block text-slate-500 font-bold mb-1">O especifique Duración (Días)</label>
                       <input 
                         type="number" 
                         className="w-full p-2 border rounded font-bold text-slate-800 text-center"
@@ -784,17 +924,25 @@ export default function RRHHPage() {
                   <p className="text-xs text-slate-500">Listado de horas críticas de aula que se encuentran vacantes por licencias vigentes y requieren cobertura.</p>
 
                   <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                    {tareas.map(t => (
-                      <div key={t.id} className="text-xs bg-slate-50 border p-3 rounded-xl flex justify-between items-center hover:shadow-sm transition-shadow">
-                        <div>
-                          <p className="font-bold text-slate-800">{t.funcionario_titular_nombre}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">RBD: {t.rbd} • Horas a Cubrir: {t.horas_a_cubrir} hrs</p>
+                    {tareas.map(t => {
+                      const f = funcionarios.find(func => func.run === t.funcionario_titular_run);
+                      return (
+                        <div key={t.id} className="text-xs bg-slate-50 border p-3 rounded-xl flex justify-between items-center hover:shadow-sm transition-shadow">
+                          <div>
+                            <button
+                              onClick={() => f && setViewingFuncionario(f)}
+                              className="font-bold text-slate-800 underline hover:text-slep-blue text-left"
+                            >
+                              {t.funcionario_titular_nombre}
+                            </button>
+                            <p className="text-[10px] text-slate-400 mt-0.5">RBD: {t.rbd} • Horas a Cubrir: {t.horas_a_cubrir} hrs</p>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                            t.estado === 'Pendiente' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
+                          }`}>{t.estado === 'Pendiente' ? 'Buscando Reemplazo 🔍' : 'Asignado ✓'}</span>
                         </div>
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                          t.estado === 'Pendiente' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
-                        }`}>{t.estado === 'Pendiente' ? 'Buscando Reemplazo 🔍' : 'Asignado ✓'}</span>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {tareas.length === 0 && (
                       <p className="text-center py-6 text-slate-400 italic">No hay alertas de reemplazos activas en el territorio.</p>
                     )}
@@ -802,6 +950,220 @@ export default function RRHHPage() {
                 </div>
 
               </div>
+
+              {/* Sección: Personal en Licencia Médica Activa y Cobertura de Reemplazos */}
+              {(() => {
+                const activeLicencias = contratos.filter(c => c.estado === 'Licencia Médica');
+                return (
+                  <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4 animate-fadeIn">
+                    <div className="pb-2 border-b flex justify-between items-center">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                          <span>🏥</span> Personal en Licencia Médica Activa
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Solo se muestran los funcionarios que actualmente poseen licencias médicas vigentes en sus respectivos colegios.
+                        </p>
+                      </div>
+                      <span className="bg-red-100 text-red-800 font-bold px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono">
+                        {activeLicencias.length} En Licencia
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto text-xs">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-50 font-bold text-slate-600 border-b">
+                          <tr>
+                            <th className="p-3 pl-4">Funcionario Licenciado</th>
+                            <th className="p-3">Establecimiento</th>
+                            <th className="p-3">Periodo de Reposo</th>
+                            <th className="p-3">Horas / Cobertura</th>
+                            <th className="p-3">Reemplazos Asignados</th>
+                            <th className="p-3 text-right">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {activeLicencias.map(c => {
+                            const f = funcionarios.find(func => func.run === c.funcionario_run);
+                            const esc = escuelas.find(e => e.rbd === c.rbd);
+                            const reemps = reemplazosList.filter(r => r.contrato_titular_id === c.id);
+                            const totalCubierto = reemps.reduce((acc, curr) => acc + curr.horas, 0);
+                            const cubiertoCompletamente = totalCubierto >= c.horas_totales;
+
+                            return (
+                              <tr key={c.id} className="hover:bg-slate-50/50 align-top">
+                                <td className="p-3 pl-4">
+                                  <button
+                                    onClick={() => f && setViewingFuncionario(f)}
+                                    className="font-bold text-slate-800 underline hover:text-slep-blue text-left"
+                                  >
+                                    {f ? f.nombre : c.funcionario_run}
+                                  </button>
+                                  <p className="text-[10px] font-mono text-slate-400 mt-0.5">{c.funcionario_run}</p>
+                                </td>
+                                <td className="p-3">
+                                  <p className="font-semibold text-slate-700">RBD {c.rbd}</p>
+                                  <p className="text-[10px] text-slate-500 mt-0.5">{esc ? esc.nombre : 'Colegio'}</p>
+                                </td>
+                                <td className="p-3 font-medium text-slate-600">
+                                  <div className="space-y-1">
+                                    <p>📅 Inicio: <span className="font-bold text-slate-750">{c.fecha_inicio_licencia || 'No especificada'}</span></p>
+                                    <p>📅 Término: <span className="font-bold text-slate-750">{c.fecha_termino_licencia || 'No especificada'}</span></p>
+                                  </div>
+                                </td>
+                                <td className="p-3">
+                                  <div className="space-y-1">
+                                    <p>Contrato: <span className="font-bold">{c.horas_totales} hrs</span></p>
+                                    <p>Cubierto: <span className={`font-bold ${cubiertoCompletamente ? 'text-green-600' : 'text-amber-600'}`}>{totalCubierto} hrs</span></p>
+                                    {!cubiertoCompletamente && (
+                                      <span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[8px] font-bold border border-rose-250 animate-pulse uppercase tracking-wider block text-center mt-1">
+                                        ⚠️ Por Cubrir
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-3">
+                                  <div className="space-y-2 max-w-xs">
+                                    {reemps.map(r => (
+                                      <div key={r.id} className="bg-slate-50 border p-2 rounded-lg text-[10px] flex justify-between items-start">
+                                        <div>
+                                          <p className="font-bold text-slate-800">{r.reemplazo_nombre}</p>
+                                          <p className="text-[9px] text-slate-500 mt-0.5">Horas: <span className="font-semibold text-slep-blue">{r.horas} hrs</span></p>
+                                          <p className="text-[9px] text-slate-500">Periodo: {r.fecha_inicio} al {r.fecha_termino}</p>
+                                        </div>
+                                        <button
+                                          onClick={() => handleDeleteReemplazo(r.id)}
+                                          className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer"
+                                          title="Eliminar Reemplazante"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    ))}
+
+                                    {reemps.length === 0 && (
+                                      <p className="italic text-[10px] text-slate-400">Sin reemplazos asignados</p>
+                                    )}
+
+                                    {addingReemplazoContratoId === c.id ? (
+                                      <div className="bg-amber-50/50 border border-amber-200 p-3 rounded-lg space-y-2 mt-2">
+                                        <p className="font-bold text-[10px] text-amber-800">Agregar Reemplazo</p>
+                                        <div>
+                                          <label className="block text-[9px] text-slate-500 font-bold">Docente Reemplazante</label>
+                                          <select
+                                            value={reemplazoRun}
+                                            onChange={(e) => setReemplazoRun(e.target.value)}
+                                            className="w-full p-1 border rounded text-[10px] bg-white cursor-pointer"
+                                          >
+                                            <option value="">Seleccione...</option>
+                                            {funcionarios.filter(func => func.run !== c.funcionario_run).map(func => (
+                                              <option key={func.run} value={func.run}>{func.nombre}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-1.5">
+                                          <div>
+                                            <label className="block text-[9px] text-slate-500 font-bold">Horas</label>
+                                            <input
+                                              type="number"
+                                              className="w-full p-1 border rounded text-[10px] text-center"
+                                              value={reemplazoHoras}
+                                              onChange={(e) => setReemplazoHoras(parseInt(e.target.value) || 0)}
+                                              max={c.horas_totales - totalCubierto}
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-[9px] text-slate-500 font-bold">Max Disp</label>
+                                            <p className="text-[10px] pt-1.5 font-bold text-slate-650">{c.horas_totales - totalCubierto} hrs</p>
+                                          </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-1.5">
+                                          <div>
+                                            <label className="block text-[9px] text-slate-500 font-bold">Inicio</label>
+                                            <input
+                                              type="date"
+                                              className="w-full p-1 border rounded text-[9px]"
+                                              value={reemplazoFInicio}
+                                              onChange={(e) => setReemplazoFInicio(e.target.value)}
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-[9px] text-slate-500 font-bold">Término</label>
+                                            <input
+                                              type="date"
+                                              className="w-full p-1 border rounded text-[9px]"
+                                              value={reemplazoFTermino}
+                                              onChange={(e) => setReemplazoFTermino(e.target.value)}
+                                            />
+                                          </div>
+                                        </div>
+                                        <div className="flex justify-end gap-1.5 pt-1">
+                                          <button
+                                            onClick={() => setAddingReemplazoContratoId(null)}
+                                            className="px-2 py-1 bg-white border rounded text-[9px] font-bold text-slate-600"
+                                          >
+                                            Cancelar
+                                          </button>
+                                          <button
+                                            onClick={() => handleAddReemplazo(c.id)}
+                                            className="px-2 py-1 bg-slep-blue text-white rounded text-[9px] font-bold"
+                                          >
+                                            Guardar
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => {
+                                          setAddingReemplazoContratoId(c.id);
+                                          setReemplazoRun('');
+                                          setReemplazoHoras(c.horas_totales - totalCubierto);
+                                          setReemplazoFInicio(c.fecha_inicio_licencia || '');
+                                          setReemplazoFTermino(c.fecha_termino_licencia || '');
+                                        }}
+                                        className="text-[10px] text-slep-blue hover:underline font-bold flex items-center gap-1 mt-1.5 cursor-pointer text-left"
+                                      >
+                                        ➕ Agregar Reemplazante
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right">
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm('¿Desea finalizar el estado de Licencia de este contrato?')) {
+                                        const updated = dbLocal.contratos.map(x => {
+                                          if (x.id === c.id) {
+                                            return { ...x, estado: 'Activo' as const, fecha_inicio_licencia: undefined, fecha_termino_licencia: undefined };
+                                          }
+                                          return x;
+                                        });
+                                        dbLocal.contratos = updated;
+                                        await loadData();
+                                      }
+                                    }}
+                                    className="bg-slate-100 hover:bg-slate-200 border text-slate-700 px-2 py-1 rounded text-[10px] font-bold transition-all cursor-pointer"
+                                  >
+                                    Finalizar Licencia ✓
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {activeLicencias.length === 0 && (
+                            <tr>
+                              <td colSpan={6} className="p-6 text-center text-slate-400 italic">
+                                No hay funcionarios en estado de Licencia Médica activa.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+
 
               {/* Bandeja de Aprobación de Reemplazos */}
               {(() => {
@@ -838,7 +1200,12 @@ export default function RRHHPage() {
                             return (
                               <tr key={p.id} className="hover:bg-slate-50">
                                 <td className="p-3 pl-4">
-                                  <p className="font-bold text-slate-800">{candidateFunc ? candidateFunc.nombre : 'Candidato Reemplazo'}</p>
+                                  <button
+                                    onClick={() => candidateFunc && setViewingFuncionario(candidateFunc)}
+                                    className="font-bold text-slate-800 underline hover:text-slep-blue text-left"
+                                  >
+                                    {candidateFunc ? candidateFunc.nombre : 'Candidato Reemplazo'}
+                                  </button>
                                   <p className="text-[10px] font-mono text-slate-400 mt-0.5">{p.funcionario_run}</p>
                                 </td>
                                 <td className="p-3 font-semibold text-slate-700">
@@ -848,7 +1215,21 @@ export default function RRHHPage() {
                                   {p.funcion_principal} • <span className="font-bold text-slep-blue">{p.horas_totales} hrs</span>
                                 </td>
                                 <td className="p-3 text-slate-500">
-                                  👤 RUN: {p.vinculo_titular_id ? p.vinculo_titular_id.replace('c-' + p.rbd + '-', '') : 'N/A'}
+                                  {(() => {
+                                    const titularRun = p.vinculo_titular_id ? p.vinculo_titular_id.replace('c-' + p.rbd + '-', '') : '';
+                                    const titularFunc = funcionarios.find(f => f.run === titularRun);
+                                    if (titularFunc) {
+                                      return (
+                                        <button
+                                          onClick={() => setViewingFuncionario(titularFunc)}
+                                          className="font-semibold text-slate-800 underline hover:text-slep-blue text-left"
+                                        >
+                                          👤 {titularFunc.nombre}
+                                        </button>
+                                      );
+                                    }
+                                    return <span>👤 RUN: {titularRun || 'N/A'}</span>;
+                                  })()}
                                 </td>
                                 <td className="p-3 text-center">
                                   <button
@@ -873,6 +1254,144 @@ export default function RRHHPage() {
 
         </div>
       </main>
+
+      {/* viewingFuncionario detailed Ficha modal */}
+      {viewingFuncionario && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full max-h-[90vh] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400 font-mono">Ficha Oficial del Funcionario</p>
+                <h3 className="text-lg font-black text-slate-800">{viewingFuncionario.nombre}</h3>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">{viewingFuncionario.run}</p>
+              </div>
+              <button 
+                onClick={() => setViewingFuncionario(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6 text-xs text-slate-700">
+              {/* Personal Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-150">
+                <div>
+                  <p className="text-slate-400 font-bold uppercase text-[9px]">Correo Electrónico</p>
+                  <p className="font-semibold text-slate-800 mt-0.5">{viewingFuncionario.email || 'No registrado'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-bold uppercase text-[9px]">Teléfono</p>
+                  <p className="font-semibold text-slate-800 mt-0.5">{viewingFuncionario.telefono || 'No registrado'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-bold uppercase text-[9px]">Estamento / Clasificación</p>
+                  <p className="font-semibold text-slate-800 mt-0.5">
+                    {viewingFuncionario.grupo_estamento === 'P01_Administrativo' ? 'P01 - Estatuto Administrativo (Nivel Central)' : 'P02 - Educación (Establecimientos)'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-bold uppercase text-[9px]">Cargo / Título</p>
+                  <p className="font-semibold text-slate-800 mt-0.5">
+                    {viewingFuncionario.cargo || 'Docente'} {viewingFuncionario.titulo ? `(${viewingFuncionario.titulo})` : ''}
+                  </p>
+                </div>
+              </div>
+
+              {/* Contracts Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-slate-800 border-b pb-1 flex items-center gap-1.5">
+                  <span>📄</span> Contratos y Relación de Cargas Horarias
+                </h4>
+
+                {(() => {
+                  const relatedConts = contratos.filter(c => c.funcionario_run === viewingFuncionario.run);
+                  if (relatedConts.length === 0) {
+                    return <p className="italic text-slate-400">No tiene contratos vigentes registrados.</p>;
+                  }
+                  return (
+                    <div className="space-y-4">
+                      {relatedConts.map(c => {
+                        const asigs = dbLocal.asignacionesAula.filter(a => a.contrato_id === c.id);
+                        const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+                        const esc = escuelas.find(e => e.rbd === c.rbd);
+                        return (
+                          <div key={c.id} className="border border-slate-200 rounded-xl p-4 space-y-3 bg-white hover:shadow-sm transition-shadow">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="font-bold text-slate-800 text-sm">
+                                  {c.rbd === '99999' ? '🏛️ Nivel Central (SLEP)' : `🏫 Establecimiento: ${esc ? esc.nombre : `RBD ${c.rbd}`}`}
+                                </p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                  Calidad: {c.calidad_juridica} • Función: {c.funcion_principal} • Estado: <span className={`font-bold uppercase ${
+                                    c.estado === 'Licencia Médica' ? 'text-red-600' : c.estado === 'Reemplazo' ? 'text-blue-600' : 'text-green-600'
+                                  }`}>{c.estado}</span>
+                                </p>
+                              </div>
+                              <span className="bg-slep-blue/10 text-slep-blue font-black px-2 py-0.5 rounded text-[10px]">
+                                {c.horas_totales} Horas
+                              </span>
+                            </div>
+
+                            {/* Funding sources */}
+                            {fins.length > 0 && (
+                              <div className="pt-2 border-t border-slate-100">
+                                <p className="text-[9px] uppercase font-bold text-slate-400">Financiamiento por Fondos</p>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {fins.map(f => (
+                                    <span key={f.id} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-medium border border-slate-200">
+                                      {f.origen_fondo}: <span className="font-bold text-slep-blue">{f.horas} hrs</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Course assignments */}
+                            {c.rbd !== '99999' && (
+                              <div className="pt-2 border-t border-slate-100">
+                                <p className="text-[9px] uppercase font-bold text-slate-400 mb-1">Cursos y Asignaturas Asignadas</p>
+                                {asigs.length > 0 ? (
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
+                                    {asigs.map(a => (
+                                      <div key={a.id} className="bg-slate-50 p-2 rounded border border-slate-150 flex justify-between items-center text-[10px]">
+                                        <div>
+                                          <span className="font-bold text-slate-700">{a.curso}</span>
+                                          <span className="text-slate-400 mx-1">•</span>
+                                          <span className="text-slate-600 font-medium">{a.asignatura}</span>
+                                        </div>
+                                        <span className="font-bold text-slate-800">{a.horas} hrs</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="italic text-[10px] text-slate-400">No hay asignaciones de aula registradas para este contrato.</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end rounded-b-2xl">
+              <button 
+                onClick={() => setViewingFuncionario(null)}
+                className="bg-white hover:bg-slate-100 text-slate-600 font-bold px-6 py-2 rounded-xl border transition-all cursor-pointer text-xs"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

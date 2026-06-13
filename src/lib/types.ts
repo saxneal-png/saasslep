@@ -45,6 +45,8 @@ export interface Contrato {
   horas_directivas?: number;
   horas_aula?: number;
   horas_tecnico_pedagogicas?: number;
+  fecha_inicio_licencia?: string;
+  fecha_termino_licencia?: string;
 }
 
 export type OrigenFondo = 'Subvención Regular' | 'SEP' | 'PIE' | 'Reforzamiento' | 'Pro-retención' | 'Liceos Bicentenarios' | 'Otro';
@@ -210,4 +212,15 @@ export function normalizarCargoDocente(rawCargo: string): string {
   
   // Return the original clean uppercase version if it doesn't match, or return rawCargo
   return rawCargo;
+}
+
+export interface ReemplazoDetalle {
+  id: string;
+  contrato_titular_id: string;
+  reemplazo_run: string;
+  reemplazo_nombre: string;
+  rbd: string;
+  horas: number;
+  fecha_inicio: string;
+  fecha_termino: string;
 }

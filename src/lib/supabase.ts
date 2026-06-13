@@ -13,7 +13,8 @@ import {
   PlanEstudioNorm,
   Supervisor,
   RegistroRemuneracion,
-  TareaReemplazo
+  TareaReemplazo,
+  ReemplazoDetalle
 } from './types';
 
 // Comunas in Diguillín/Valle Diguillín area
@@ -344,6 +345,14 @@ class DatabaseLocal {
   set tareasReemplazo(val: TareaReemplazo[]) {
     this.setStorageItem('tareas_reemplazo', val);
   }
+
+  get reemplazosLicencias(): ReemplazoDetalle[] {
+    return this.getStorageItem('reemplazos_licencias', []);
+  }
+
+  set reemplazosLicencias(val: ReemplazoDetalle[]) {
+    this.setStorageItem('reemplazos_licencias', val);
+  }
 }
 
 export const dbLocal = new DatabaseLocal();
@@ -648,5 +657,18 @@ export const api = {
       return t;
     });
     dbLocal.tareasReemplazo = list;
+  },
+
+  getReemplazosLicencias: async (): Promise<ReemplazoDetalle[]> => {
+    return dbLocal.reemplazosLicencias;
+  },
+
+  saveReemplazoLicencia: async (r: ReemplazoDetalle): Promise<void> => {
+    const list = [...dbLocal.reemplazosLicencias, r];
+    dbLocal.reemplazosLicencias = list;
+  },
+
+  deleteReemplazoLicencia: async (id: string): Promise<void> => {
+    dbLocal.reemplazosLicencias = dbLocal.reemplazosLicencias.filter(r => r.id !== id);
   }
 };

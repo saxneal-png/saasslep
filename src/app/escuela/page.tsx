@@ -1251,7 +1251,19 @@ export default function EscuelaDashboard() {
                         {pendingTasks.map(t => (
                           <div key={t.id} className="bg-white border rounded-lg p-3 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
                             <div>
-                              <p className="font-bold text-slate-800">Docente Licenciado: {t.funcionario_titular_nombre}</p>
+                              <p className="font-bold text-slate-800">
+                                Docente Licenciado:{' '}
+                                <button 
+                                  onClick={() => {
+                                    const titularFunc = funcionarios.find(f => f.run === t.funcionario_titular_run);
+                                    if (titularFunc) setEditingFuncionario(titularFunc);
+                                  }}
+                                  className="underline hover:text-slep-blue text-left font-bold"
+                                  title="Ver Ficha Oficial"
+                                >
+                                  {t.funcionario_titular_nombre}
+                                </button>
+                              </p>
                               <p className="text-[10px] text-slate-500 mt-0.5">RUN: {t.funcionario_titular_run} | Horas a Cubrir: <span className="font-bold text-slep-blue">{t.horas_a_cubrir} hrs</span></p>
                             </div>
                             {(() => {
@@ -1374,6 +1386,20 @@ export default function EscuelaDashboard() {
                               >
                                 👤 {f.nombre}
                               </button>
+                              {(() => {
+                                if (hasCont && hasCont.estado === 'Activo') {
+                                  const teacherAsigs = asignaciones.filter(a => a.contrato_id === hasCont.id);
+                                  const leyCalculo = colegio ? validarCargaDocente(hasCont, colegio, teacherAsigs, cargosPersonalizados) : null;
+                                  if (leyCalculo && !leyCalculo.cumpleLey20903) {
+                                    return (
+                                      <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[9px] font-black border border-rose-300 ml-2 animate-pulse whitespace-nowrap" title={`Exceso detectado en proporción de aula. Se asignan ${leyCalculo.horasLectivasAsignadas} hrs vs max legal de ${leyCalculo.horasLectivasMaximas} hrs.`}>
+                                        ⚠️ Sobrecarga Ley 20.903
+                                      </span>
+                                    );
+                                  }
+                                }
+                                return null;
+                              })()}
                             </td>
                             <td className="p-3 font-mono text-slate-500">{f.run}</td>
                             <td className="p-3 text-slate-700">{f.cargo || 'Docente'}</td>
@@ -1381,12 +1407,19 @@ export default function EscuelaDashboard() {
                               {hasCont ? (
                                 <div className="space-y-1">
                                   <div className="font-bold text-slate-700">{hasCont.horas_totales} hrs</div>
-                                  <div>
+                                  <div className="flex flex-col items-center gap-1 mt-1">
                                     {hasCont.estado === 'Activo' && (
                                       <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Activo</span>
                                     )}
                                     {hasCont.estado === 'Licencia Médica' && (
-                                      <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Licencia Médica 🩺</span>
+                                      <>
+                                        <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Licencia Médica 🩺</span>
+                                        {tareasReemplazo.some(t => t.funcionario_titular_run === f.run && t.estado === 'Pendiente') ? (
+                                          <span className="bg-red-100 text-red-800 px-2.5 py-0.5 rounded text-[8px] font-black border border-red-300 animate-pulse uppercase tracking-wide">⚠️ Sin Reemplazo</span>
+                                        ) : (
+                                          <span className="bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded text-[8px] font-black border border-emerald-300 uppercase tracking-wide">✓ Cubierto</span>
+                                        )}
+                                      </>
                                     )}
                                     {hasCont.estado === 'Reemplazo' && (
                                       <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Reemplazo</span>
@@ -1642,25 +1675,43 @@ export default function EscuelaDashboard() {
                   <div className="mb-6 pb-6 border-b border-slate-100">
                     <p className="text-xs font-bold text-slate-500 uppercase mb-3">Cursos Registrados (Haz clic para ver, editar e imprimir asignaturas y docentes)</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                      {cursosDinamicos.map(c => (
-                        <div key={c.nombre} className="relative group">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditCurso(c)}
-                            className="w-full p-3.5 bg-slate-50 hover:bg-slep-blue hover:text-white border border-slate-200 hover:border-slep-blue rounded-xl text-xs font-bold text-center transition-all shadow-sm flex flex-col items-center justify-center gap-1 cursor-pointer"
-                          >
-                            <span className="text-xl group-hover:scale-110 transition-transform">🏫</span>
-                            <span className="text-slate-800 group-hover:text-white transition-colors">{c.nombre}</span>
-                            <span className="text-[9px] text-slate-400 group-hover:text-white/80 font-normal">{c.nivel}</span>
-                            {c.profesor_jefe_run && (
-                              <span className="text-[9px] text-emerald-600 group-hover:text-amber-200 font-bold">
-                                🧑‍🏫 {(() => {
-                                  const f = funcionarios.find(func => func.run === c.profesor_jefe_run);
-                                  return f ? f.nombre.split(' ')[0] + ' ' + (f.nombre.split(' ')[2] || '') : 'Jefe';
-                                })()}
-                              </span>
-                            )}
-                          </button>
+                      {cursosDinamicos.map(c => {
+                        const basePlan = planesEstudio.find(p => p.nivel === c.nivel && p.regimen === c.regimen);
+                        const assignedHrs = asignaciones.filter(a => a.curso === c.nombre).reduce((sum, a) => sum + a.horas, 0);
+                        const baseOblig = basePlan?.horasObligatorias || 38;
+                        const horasInsuficientes = assignedHrs < baseOblig;
+                        return (
+                          <div key={c.nombre} className="relative group">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditCurso(c)}
+                              className={`w-full p-3.5 border rounded-xl text-xs font-bold text-center transition-all shadow-sm flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                                horasInsuficientes 
+                                  ? 'bg-rose-50/70 border-rose-300 hover:bg-rose-100' 
+                                  : 'bg-slate-50 hover:bg-slep-blue hover:text-white border-slate-200 hover:border-slep-blue'
+                              }`}
+                            >
+                              <span className="text-xl group-hover:scale-110 transition-transform">🏫</span>
+                              <span className={`transition-colors ${horasInsuficientes ? 'text-rose-800' : 'text-slate-800 group-hover:text-white'}`}>{c.nombre}</span>
+                              <span className={`text-[9px] font-normal ${horasInsuficientes ? 'text-rose-600' : 'text-slate-400 group-hover:text-white/80'}`}>{c.nivel}</span>
+                              {horasInsuficientes ? (
+                                <span className="text-[8px] bg-red-600 text-white font-black px-1.5 py-0.5 rounded tracking-wide animate-pulse uppercase mt-1">
+                                  ⚠️ Faltan {baseOblig - assignedHrs} hrs
+                                </span>
+                              ) : (
+                                <span className="text-[8px] bg-green-700 text-white font-bold px-1.5 py-0.5 rounded tracking-wide uppercase mt-1">
+                                  ✓ {assignedHrs} hrs
+                                </span>
+                              )}
+                              {c.profesor_jefe_run && (
+                                <span className="text-[9px] text-emerald-600 group-hover:text-amber-200 font-bold">
+                                  🧑‍🏫 {(() => {
+                                    const f = funcionarios.find(func => func.run === c.profesor_jefe_run);
+                                    return f ? f.nombre.split(' ')[0] + ' ' + (f.nombre.split(' ')[2] || '') : 'Jefe';
+                                  })()}
+                                </span>
+                              )}
+                            </button>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1673,7 +1724,8 @@ export default function EscuelaDashboard() {
                             ✕
                           </button>
                         </div>
-                      ))}
+                      );
+                    })}
                       {cursosDinamicos.length === 0 && (
                         <p className="col-span-full py-4 text-center text-slate-400 italic">No hay cursos creados aún.</p>
                       )}
