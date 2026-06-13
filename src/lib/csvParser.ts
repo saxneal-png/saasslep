@@ -1,6 +1,6 @@
 // @ts-ignore
 import Papa from 'papaparse';
-import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion } from './types';
+import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion, CalidadJuridica } from './types';
 
 // Normalization function for RUN
 export function normalizarRun(runRaw: any): string {
@@ -109,11 +109,42 @@ export function parsearNominaCsv(
     }
 
     const rbd = String(row.RBD || row.rbd || rbdContext).trim();
-    const calidad_juridica = ((row.CalidadJuridica || row.calidad_juridica || row.CALIDAD_JURIDICA) === 'Titular' ? 'Titular' : 'Contrata');
+    
+    // Quality mapping logic: map to expanded CalidadJuridica
+    const rawCal = String(row.CalidadJuridica || row.calidad_juridica || row.CALIDAD_JURIDICA || 'A contrata').trim();
+    let calidad_juridica: CalidadJuridica = 'A contrata';
+    if (rawCal.toLowerCase().includes('titular')) {
+      calidad_juridica = 'Titular';
+    } else if (rawCal.toLowerCase().includes('plazo fijo') || rawCal.toLowerCase().includes('plazofijo')) {
+      calidad_juridica = 'Plazo fijo';
+    } else if (rawCal.toLowerCase().includes('indefinido')) {
+      calidad_juridica = 'Indefinido';
+    } else if (rawCal.toLowerCase().includes('reemplazo')) {
+      calidad_juridica = 'Reemplazo';
+    } else if (rawCal.toLowerCase().includes('habilitacion') || rawCal.toLowerCase().includes('habilitación')) {
+      calidad_juridica = 'Habilitación especial';
+    } else {
+      calidad_juridica = 'A contrata';
+    }
+
     const funcion_principal = (row.Funcion || row.funcion || row.FUNCION_PRINCIPAL || row.funcion_principal || 'Docente de Aula').trim();
     const estamento = forceEstamento || (row.Estamento || row.estamento || (funcion_principal.toLowerCase().includes('docente') || funcion_principal.toLowerCase().includes('profesor') ? 'Docente' : 'Asistente de la Educación'));
     
     const horas_totales = parseDecimalHours(row.HorasTotales || row.horas_totales || row.HORAS_CONTRATO || row.horas_contrato);
+
+    const dias_trabajados = row.dias_trabajados || row.DiasTrabajados || row.DIAS_TRABAJADOS ? parseInt(row.dias_trabajados || row.DiasTrabajados || row.DIAS_TRABAJADOS, 10) : undefined;
+    const dias_licencia_medica = row.dias_licencia_medica || row.DiasLicenciaMedica || row.DIAS_LICENCIA_MEDICA ? parseInt(row.dias_licencia_medica || row.DiasLicenciaMedica || row.DIAS_LICENCIA_MEDICA, 10) : undefined;
+    const inasistencias = row.inasistencias || row.Inasistencias || row.INASISTENCIAS ? parseInt(row.inasistencias || row.Inasistencias || row.INASISTENCIAS, 10) : undefined;
+    
+    let legislacion_laboral: any = undefined;
+    const legRaw = String(row.legislacion_laboral || row.LegislacionLaboral || row.LEGISLACION_LABORAL || '').trim().toLowerCase();
+    if (legRaw) {
+      if (legRaw.includes('docente')) {
+        legislacion_laboral = 'Estatuto docente';
+      } else if (legRaw.includes('asistente')) {
+        legislacion_laboral = 'Asistentes de la educación';
+      }
+    }
 
     // Sum subvenciones using float (parseFloat representation)
     let regular = parseDecimalHours(row.SubvencionRegular || row.subvencion_regular || row.Regular || row.regular);
@@ -152,7 +183,11 @@ export function parsearNominaCsv(
       calidad_juridica,
       funcion_principal,
       estado: 'Activo',
-      horas_totales
+      horas_totales,
+      dias_trabajados,
+      dias_licencia_medica,
+      inasistencias,
+      legislacion_laboral
     };
     contratos.push(nuevoContrato);
 
@@ -261,6 +296,18 @@ export function parsearRemuneracionesCsv(csvContent: string): RegistroRemuneraci
       ? 'P01_Administrativo' 
       : 'P02_Educacion';
 
+    // Parse Real-world payroll columns
+    const dias_trabajados = row.DiasTrabajados || row.dias_trabajados || row.dias_trab || row.DiasTrab ? parseInt(row.DiasTrabajados || row.dias_trabajados || row.dias_trab || row.DiasTrab, 10) : undefined;
+    const dias_licencia_medica = row.DiasLicenciaMedica || row.dias_licencia_medica || row.dias_lic_medica || row['Dias Lic. Médica'] || row.dias_lic ? parseInt(row.DiasLicenciaMedica || row.dias_licencia_medica || row.dias_lic_medica || row['Dias Lic. Médica'] || row.dias_lic, 10) : undefined;
+    const inasistencias = row.Inasistencias || row.inasistencias || row.Inasist ? parseInt(row.Inasistencias || row.inasistencias || row.Inasist, 10) : undefined;
+
+    const aplicaArt5Raw = String(row.AplicaLey20903Art5 || row.aplica_ley_20903_art5 || row['Aplica Ley 20903 Artículo 5'] || '').trim().toLowerCase();
+    const aplica_ley_20903_art5 = aplicaArt5Raw === 'sí' || aplicaArt5Raw === 'si' || aplicaArt5Raw === 'yes' || aplicaArt5Raw === '1' ? 'Sí' : 'No';
+
+    const planilla_complementaria_ley_20903 = parseInt(row.PlanillaComplementariaLey20903 || row.planilla_complementaria_ley_20903 || row['Planilla Complementaria Ley 20.903'] || '0', 10) || 0;
+    const asignacion_res_director = parseInt(row.AsignacionResDirector || row.asignacion_res_director || row['Asig. Res. Director'] || '0', 10) || 0;
+    const asignacion_resp_tec_ped = parseInt(row.AsignacionRespTecPed || row.asignacion_resp_tec_ped || row['DFL1/97 art.51 Asig. Resp. Téc-Ped'] || '0', 10) || 0;
+
     result.push({
       id: `rem-${run.replace(/[^a-zA-Z0-9]/g, '')}-${idx}`,
       funcionario_run: run,
@@ -268,7 +315,14 @@ export function parsearRemuneracionesCsv(csvContent: string): RegistroRemuneraci
       horas_pagadas,
       total_haberes,
       mes_pago,
-      grupo_estamento
+      grupo_estamento,
+      dias_trabajados,
+      dias_licencia_medica,
+      inasistencias,
+      aplica_ley_20903_art5,
+      planilla_complementaria_ley_20903,
+      asignacion_res_director,
+      asignacion_resp_tec_ped
     });
   });
 

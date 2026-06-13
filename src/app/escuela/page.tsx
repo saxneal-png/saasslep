@@ -189,7 +189,7 @@ export default function EscuelaDashboard() {
       id: newContId,
       funcionario_run: cleanRun,
       rbd: selectedRbd,
-      calidad_juridica: 'Contrata',
+      calidad_juridica: 'A contrata',
       funcion_principal: `Reemplazo Docente (${tarea.funcionario_titular_nombre})`,
       estado: 'Pendiente_Aprobacion',
       horas_totales: tarea.horas_a_cubrir,
@@ -262,7 +262,7 @@ export default function EscuelaDashboard() {
       id: newContId,
       funcionario_run: run,
       rbd: selectedRbd,
-      calidad_juridica: 'Contrata',
+      calidad_juridica: 'A contrata',
       funcion_principal: newCargo,
       estado: 'Activo',
       horas_totales: 44
@@ -482,7 +482,7 @@ export default function EscuelaDashboard() {
       id: replacementId,
       funcionario_run: cleanRun,
       rbd: selectedRbd,
-      calidad_juridica: 'Contrata',
+      calidad_juridica: 'A contrata',
       funcion_principal: 'Reemplazo Docente',
       estado: 'Reemplazo',
       horas_totales: titularContrato.horas_totales,
@@ -727,7 +727,7 @@ export default function EscuelaDashboard() {
               </div>
               <div class="field">
                 <div class="label">Calidad Jurídica</div>
-                <div class="value">${contrato?.calidad_juridica || 'Contrata'}</div>
+                <div class="value">${contrato?.calidad_juridica || 'A contrata'}</div>
               </div>
               <div class="field">
                 <div class="label">Estado de Licencia / Reemplazo</div>

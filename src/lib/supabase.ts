@@ -154,10 +154,10 @@ const SUPERVISORES_INICIAL: Supervisor[] = [
 
 const CONTRATOS_MOCK_INICIAL: Contrato[] = [
   { id: 'c1', funcionario_run: '12.345.678-9', rbd: '10201', calidad_juridica: 'Titular', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 44 },
-  { id: 'c2', funcionario_run: '15.432.987-K', rbd: '10202', calidad_juridica: 'Contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 38 },
+  { id: 'c2', funcionario_run: '15.432.987-K', rbd: '10202', calidad_juridica: 'A contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 38 },
   { id: 'c3', funcionario_run: '16.789.012-3', rbd: '10202', calidad_juridica: 'Titular', funcion_principal: 'Docente PIE', estado: 'Licencia Médica', horas_totales: 44 },
-  { id: 'c4', funcionario_run: '10.876.543-2', rbd: '10202', calidad_juridica: 'Contrata', funcion_principal: 'Docente de Aula', estado: 'Reemplazo', horas_totales: 44, vinculo_titular_id: 'c3' },
-  { id: 'c5', funcionario_run: '15.432.987-K', rbd: '10201', calidad_juridica: 'Contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 10 },
+  { id: 'c4', funcionario_run: '10.876.543-2', rbd: '10202', calidad_juridica: 'A contrata', funcion_principal: 'Docente de Aula', estado: 'Reemplazo', horas_totales: 44, vinculo_titular_id: 'c3' },
+  { id: 'c5', funcionario_run: '15.432.987-K', rbd: '10201', calidad_juridica: 'A contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 10 },
   { id: 'c6', funcionario_run: '17.654.321-0', rbd: '10204', calidad_juridica: 'Titular', funcion_principal: 'Auxiliar de Servicios', estado: 'Activo', horas_totales: 44 }
 ];
 

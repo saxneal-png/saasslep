@@ -410,6 +410,37 @@ export function conciliarFuncionario(
     } else if (!isLicencia && totalAula > totalContratadas) {
       discrepancia = true;
       mensaje = `Sobrecarga de Aula: Registradas ${totalAula} hrs en aula vs Contratadas ${totalContratadas} hrs.`;
+    } else {
+      // 1. Ley 20.903 Art 5 Cross-check
+      // If any of the pay records for this user has aplica_ley_20903_art5 === 'Sí'
+      const aplicaArt5 = remuns.some(r => r.aplica_ley_20903_art5 === 'Sí');
+      if (aplicaArt5) {
+        const totalComplementaria = remuns.reduce((sum, r) => sum + (r.planilla_complementaria_ley_20903 || 0), 0);
+        if (totalComplementaria === 0) {
+          discrepancia = true;
+          mensaje = `Infracción Art. 5 Ley 20903: Indica que aplica pero Planilla Complementaria es $0.`;
+        }
+      }
+
+      // 2. Leadership Allowance Checks
+      if (!discrepancia) {
+        const esDirector = contrs.some(c => c.funcion_principal.toLowerCase().includes('director'));
+        const esUTP = contrs.some(c => c.funcion_principal.toLowerCase().includes('utp') || c.funcion_principal.toLowerCase().includes('pedagógica') || c.funcion_principal.toLowerCase().includes('pedagógico'));
+        
+        if (esDirector) {
+          const totalAsigDirector = remuns.reduce((sum, r) => sum + (r.asignacion_res_director || 0), 0);
+          if (totalAsigDirector === 0) {
+            discrepancia = true;
+            mensaje = `Falta asignación directiva: Director/a registra $0 en Asig. Res. Director.`;
+          }
+        } else if (esUTP) {
+          const totalAsigUTP = remuns.reduce((sum, r) => sum + (r.asignacion_resp_tec_ped || 0), 0);
+          if (totalAsigUTP === 0) {
+            discrepancia = true;
+            mensaje = `Falta asignación técnico-pedagógica: Jefe UTP registra $0 en asignación Resp. Téc-Ped.`;
+          }
+        }
+      }
     }
   } else if (totalPagadas > 0) {
     discrepancia = true;

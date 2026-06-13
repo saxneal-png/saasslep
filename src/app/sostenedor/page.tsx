@@ -675,7 +675,7 @@ export default function SostenedorDashboard() {
               </div>
               <div class="field">
                 <div class="label">Calidad Jurídica</div>
-                <div class="value">${contrato?.calidad_juridica || 'Contrata'}</div>
+                <div class="value">${contrato?.calidad_juridica || 'A contrata'}</div>
               </div>
               <div class="field">
                 <div class="label">Estado de Licencia / Reemplazo</div>

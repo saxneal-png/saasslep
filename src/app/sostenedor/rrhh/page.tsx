@@ -10,7 +10,8 @@ import {
   Contrato, 
   GrupoEstamento, 
   TareaReemplazo, 
-  OrigenFondo 
+  OrigenFondo,
+  CalidadJuridica
 } from '@/lib/types';
 import { normalizarRun } from '@/lib/csvParser';
 import { calcularHaberBaseEUS } from '@/lib/rulesEngine';
@@ -43,7 +44,7 @@ export default function RRHHPage() {
 
   // P02 Fields
   const [rbd, setRbd] = useState('');
-  const [calidadP02, setCalidadP02] = useState<'Titular' | 'Contrata'>('Contrata');
+  const [calidadP02, setCalidadP02] = useState<CalidadJuridica>('A contrata');
   const [funcionPrincipal, setFuncionPrincipal] = useState('Docente de Aula');
   const [horasContrato, setHorasContrato] = useState(44);
   const [titulo, setTitulo] = useState('');
@@ -147,7 +148,7 @@ export default function RRHHPage() {
         id: `rrhh-cont-p01-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-central`,
         funcionario_run: cleanRun,
         rbd: '99999', // Central Level code
-        calidad_juridica: calidadP01 === 'Planta' ? 'Titular' : 'Contrata',
+        calidad_juridica: calidadP01 === 'Planta' ? 'Titular' : 'A contrata',
         funcion_principal: escalafonP01,
         estado: 'Activo',
         horas_totales: 44
@@ -453,7 +454,11 @@ export default function RRHHPage() {
                           onChange={(e) => setCalidadP02(e.target.value as any)}
                         >
                           <option value="Titular">Titular</option>
-                          <option value="Contrata">Contrata</option>
+                          <option value="A contrata">A contrata</option>
+                          <option value="Plazo fijo">Plazo fijo</option>
+                          <option value="Indefinido">Indefinido</option>
+                          <option value="Reemplazo">Reemplazo</option>
+                          <option value="Habilitación especial">Habilitación especial</option>
                         </select>
                       </div>
                       <div>

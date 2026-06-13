@@ -6,9 +6,10 @@ export interface Establecimiento {
   regimen: 'JEC' | 'No JEC';
 }
 
-export type CalidadJuridica = 'Titular' | 'Contrata';
+export type CalidadJuridica = 'Titular' | 'A contrata' | 'Plazo fijo' | 'Indefinido' | 'Reemplazo' | 'Habilitación especial';
 export type EstadoContrato = 'Activo' | 'Licencia Médica' | 'Reemplazo' | 'Pendiente_Aprobacion';
 export type EstamentoType = 'Docente' | 'Asistente de la Educación';
+export type LegislacionLaboral = 'Estatuto docente' | 'Asistentes de la educación';
 
 export type GrupoEstamento = 'P01_Administrativo' | 'P02_Educacion';
 
@@ -35,6 +36,10 @@ export interface Contrato {
   estado: EstadoContrato;
   horas_totales: number;
   vinculo_titular_id?: string | null; // For replacements to link to titular contracts
+  dias_trabajados?: number;
+  dias_licencia_medica?: number;
+  inasistencias?: number;
+  legislacion_laboral?: LegislacionLaboral;
 }
 
 export type OrigenFondo = 'Subvención Regular' | 'SEP' | 'PIE' | 'Reforzamiento' | 'Pro-retención' | 'Otro';
@@ -122,6 +127,13 @@ export interface RegistroRemuneracion {
   total_haberes: number;
   mes_pago: string; // e.g. "2026-06"
   grupo_estamento: GrupoEstamento;
+  dias_trabajados?: number;
+  dias_licencia_medica?: number;
+  inasistencias?: number;
+  aplica_ley_20903_art5?: 'Sí' | 'No';
+  planilla_complementaria_ley_20903?: number;
+  asignacion_res_director?: number;
+  asignacion_resp_tec_ped?: number;
 }
 
 export interface TareaReemplazo {

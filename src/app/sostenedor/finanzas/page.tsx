@@ -169,7 +169,46 @@ export default function FinanzasPage() {
                           const parsed = parsearRemuneracionesCsv(text);
                           await api.cargarRemuneraciones(parsed);
                           setRemuneraciones(parsed);
-                          setUploadRemunLogs(`✅ Éxito: Se procesaron ${parsed.length} registros del libro de remuneraciones.`);
+                          
+                          // Automated Medical License Audits
+                          let alertsCreated = 0;
+                          for (const rem of parsed) {
+                            if (rem.dias_licencia_medica && rem.dias_licencia_medica > 0) {
+                              // Find corresponding contract
+                              const conts = await api.getContratos();
+                              const userConts = conts.filter(c => c.funcionario_run === rem.funcionario_run);
+                              if (userConts.length > 0) {
+                                // Check if any of their contracts is in 'Licencia Médica' status
+                                const tieneLicenciaRegistrada = userConts.some(c => c.estado === 'Licencia Médica');
+                                if (!tieneLicenciaRegistrada) {
+                                  // Auto-generate a Coral critical alert
+                                  const funcionario = funcionarios.find(f => f.run === rem.funcionario_run);
+                                  const nombre = funcionario ? funcionario.nombre : 'Funcionario';
+                                  const mainCont = userConts[0];
+                                  
+                                  await api.crearAlerta({
+                                    id: `al-licencia-no-registrada-${rem.id}`,
+                                    run: rem.funcionario_run,
+                                    nombre_funcionario: nombre,
+                                    rbd: mainCont.rbd,
+                                    tipo: 'descalce_horas',
+                                    nivel_alerta: 'critica',
+                                    mensaje: 'Licencia Médica no registrada en RR.HH.',
+                                    detalle: `El libro de remuneraciones registra ${rem.dias_licencia_medica} días de licencia médica, pero el estado del contrato en RR.HH. figura como "${mainCont.estado}" en lugar de "Licencia Médica".`,
+                                    resuelta: false
+                                  });
+                                  alertsCreated++;
+                                }
+                              }
+                            }
+                          }
+
+                          let successMsg = `✅ Éxito: Se procesaron ${parsed.length} registros del libro de remuneraciones.`;
+                          if (alertsCreated > 0) {
+                            successMsg += ` Se generaron ${alertsCreated} alertas críticas de licencia médica no registrada en RR.HH.`;
+                          }
+                          setUploadRemunLogs(successMsg);
+                          loadAllData();
                         } catch (err: any) {
                           setUploadRemunLogs(`❌ Error al procesar archivo: ${err.message}`);
                         }
