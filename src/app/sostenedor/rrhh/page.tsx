@@ -85,7 +85,8 @@ export default function RRHHPage() {
 
   // Bulk deletion & Tab state
   const [selectedFuncs, setSelectedFuncs] = useState<string[]>([]);
-  const [rrhhTab, setRrhhTab] = useState<'fichas' | 'licencias'>('fichas');
+  const [rrhhTab, setRrhhTab] = useState<'fichas' | 'licencias' | 'banco'>('fichas');
+  const [csvBulkInput, setCsvBulkInput] = useState('');
 
   const [authorized, setAuthorized] = useState(false);
 
@@ -382,6 +383,56 @@ export default function RRHHPage() {
     alert('✅ Postulante agregado exitosamente al Banco de Reemplazos.');
   };
 
+  const handleBulkIngestPool = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!csvBulkInput.trim()) {
+      alert('⚠️ Ingrese texto CSV para procesar.');
+      return;
+    }
+
+    const lines = csvBulkInput.split('\n');
+    let addedCount = 0;
+    const currentFuncs = [...dbLocal.funcionarios];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      const parts = trimmed.split(',');
+      if (parts.length < 2) continue; // Must have at least RUN and Name
+
+      const rawRun = parts[0].trim();
+      const rawName = parts[1].trim();
+      if (!rawRun || !rawName) continue;
+
+      const cleanRun = normalizarRun(rawRun);
+      if (currentFuncs.some(f => f.run === cleanRun)) continue; // Skip existing
+
+      const title = parts[2] ? parts[2].trim() : '';
+      const email = parts[3] ? parts[3].trim() : '';
+      const phone = parts[4] ? parts[4].trim() : '';
+
+      const nuevoPostulante: Funcionario = {
+        run: cleanRun,
+        nombre: rawName.toUpperCase(),
+        email: email || undefined,
+        telefono: phone || undefined,
+        titulo: title || undefined,
+        cargo: 'Postulante Reemplazo',
+        estamento: 'Docente',
+        grupo_estamento: 'P02_Educacion'
+      };
+
+      currentFuncs.push(nuevoPostulante);
+      addedCount++;
+    }
+
+    dbLocal.funcionarios = currentFuncs;
+    setCsvBulkInput('');
+    await loadData();
+    alert(`✅ Ingesta finalizada. Se registraron ${addedCount} postulantes en el Banco de Reemplazos.`);
+  };
+
   const handleDeleteReemplazo = async (id: string) => {
     if (confirm('¿Está seguro de eliminar este reemplazo?')) {
       await api.deleteReemplazoLicencia(id);
@@ -539,6 +590,16 @@ export default function RRHHPage() {
               }`}
             >
               🏥 Licencias y Reemplazos
+            </button>
+            <button 
+              onClick={() => { setRrhhTab('banco'); setSelectedFuncs([]); }}
+              className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                rrhhTab === 'banco' 
+                  ? 'bg-slep-blue text-white shadow-sm' 
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              📁 Banco de Reemplazos
             </button>
           </div>
 
@@ -1061,163 +1122,6 @@ export default function RRHHPage() {
 
               </div>
 
-              {/* Banco de Reemplazos Disponibles Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn">
-                {/* Left Column: Form to Add Pool Candidate */}
-                <div className="lg:col-span-1 bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                    <span>📁</span> Registrar Postulante al Banco de Reemplazos
-                  </h3>
-                  <p className="text-[11px] text-slate-500">Registre candidatos externos calificados disponibles para cubrir reemplazos temporales.</p>
-                  
-                  <form onSubmit={handleAddToPool} className="space-y-3 text-xs">
-                    <div>
-                      <label className="block text-slate-500 font-bold mb-1">RUN Postulante</label>
-                      <input 
-                        type="text" 
-                        placeholder="Ej: 18.765.432-1"
-                        className="w-full p-2 border rounded font-semibold text-slate-800"
-                        value={newPoolRun}
-                        onChange={(e) => setNewPoolRun(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-500 font-bold mb-1">Nombre Completo</label>
-                      <input 
-                        type="text" 
-                        placeholder="Ej: MARÍA ESTHER JARA TAPIA"
-                        className="w-full p-2 border rounded font-semibold text-slate-800"
-                        value={newPoolNombre}
-                        onChange={(e) => setNewPoolNombre(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-500 font-bold mb-1">Título / Especialidad</label>
-                      <input 
-                        type="text" 
-                        placeholder="Ej: Profesora de Educación General Básica"
-                        className="w-full p-2 border rounded text-slate-800"
-                        value={newPoolTitulo}
-                        onChange={(e) => setNewPoolTitulo(e.target.value)}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-slate-500 font-bold mb-1">Email</label>
-                        <input 
-                          type="email" 
-                          placeholder="correo@ejemplo.com"
-                          className="w-full p-2 border rounded text-slate-800"
-                          value={newPoolEmail}
-                          onChange={(e) => setNewPoolEmail(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-500 font-bold mb-1">Teléfono</label>
-                        <input 
-                          type="text" 
-                          placeholder="+569..."
-                          className="w-full p-2 border rounded text-slate-800"
-                          value={newPoolTelefono}
-                          onChange={(e) => setNewPoolTelefono(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <button 
-                      type="submit" 
-                      className="w-full bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold py-2 rounded shadow cursor-pointer text-xs transition-colors"
-                    >
-                      💾 Registrar en el Banco
-                    </button>
-                  </form>
-                </div>
-
-                {/* Right Column: List of candidates in substitute pool */}
-                <div className="lg:col-span-2 bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                    <span>👥</span> Banco de Reemplazos Activos en el Territorio
-                  </h3>
-                  <p className="text-xs text-slate-500">Candidatos inscritos en Gestión de Personas listos para ser designados a establecimientos educacionales.</p>
-                  
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 font-bold text-slate-600 border-b">
-                        <tr>
-                          <th className="p-3 pl-4">Postulante</th>
-                          <th className="p-3">Título / Especialidad</th>
-                          <th className="p-3">Contacto</th>
-                          <th className="p-3 text-center">Estado</th>
-                          <th className="p-3 text-right">Acción</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {(() => {
-                          const poolCandidates = funcionarios.filter(f => f.cargo === 'Postulante Reemplazo');
-                          if (poolCandidates.length === 0) {
-                            return (
-                              <tr>
-                                <td colSpan={5} className="p-6 text-center text-slate-400 italic">
-                                  No hay postulantes registrados en el banco de reemplazos. Use el formulario lateral para añadir candidatos.
-                                </td>
-                              </tr>
-                            );
-                          }
-                          return poolCandidates.map(cand => {
-                            const isAssigned = reemplazosList.some(r => r.reemplazo_run === cand.run);
-                            return (
-                              <tr key={cand.run} className="hover:bg-slate-50/50">
-                                <td className="p-3 pl-4">
-                                  <button
-                                    onClick={() => setViewingFuncionario(cand)}
-                                    className="font-bold text-slate-800 underline hover:text-slep-blue text-left"
-                                  >
-                                    {cand.nombre}
-                                  </button>
-                                  <p className="text-[10px] font-mono text-slate-400 mt-0.5">{cand.run}</p>
-                                </td>
-                                <td className="p-3 font-medium text-slate-700">
-                                  {cand.titulo || 'Docente'}
-                                </td>
-                                <td className="p-3 text-slate-650">
-                                  <p>{cand.email || 'Sin correo'}</p>
-                                  <p className="text-[10px] text-slate-400 mt-0.5">{cand.telefono || 'Sin teléfono'}</p>
-                                </td>
-                                <td className="p-3 text-center">
-                                  {isAssigned ? (
-                                    <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-[10px] font-bold">
-                                      Asignado ✓
-                                    </span>
-                                  ) : (
-                                    <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded text-[10px] font-bold">
-                                      Disponible 🔍
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="p-3 text-right">
-                                  <button
-                                    onClick={async () => {
-                                      if (confirm(`¿Desea eliminar a ${cand.nombre} del banco de reemplazos?`)) {
-                                        dbLocal.funcionarios = dbLocal.funcionarios.filter(x => x.run !== cand.run);
-                                        await loadData();
-                                      }
-                                    }}
-                                    className="text-red-650 hover:text-red-800 font-bold cursor-pointer"
-                                  >
-                                    Eliminar
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          });
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
               {/* Sección: Personal en Licencia Médica Activa y Cobertura de Reemplazos */}
               {(() => {
                 const activeLicencias = contratos.filter(c => c.estado === 'Licencia Médica');
@@ -1562,6 +1466,227 @@ export default function RRHHPage() {
                   </div>
                 );
               })()}
+
+            </div>
+          )}
+
+          {rrhhTab === 'banco' && (
+            <div className="space-y-6 animate-fadeIn">
+              
+              {/* Ingesta Masiva and Individual Registration Forms */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Left Column 1: Form to Add Pool Candidate Individual */}
+                <div className="lg:col-span-1 bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
+                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <span>📁</span> Registrar Postulante Individual
+                  </h3>
+                  <p className="text-[11px] text-slate-500">Registre un candidato externo individual disponible para cubrir reemplazos temporales.</p>
+                  
+                  <form onSubmit={handleAddToPool} className="space-y-3 text-xs">
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1">RUN Postulante</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: 18.765.432-1"
+                        className="w-full p-2 border rounded font-semibold text-slate-800"
+                        value={newPoolRun}
+                        onChange={(e) => setNewPoolRun(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1">Nombre Completo</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: MARÍA ESTHER JARA TAPIA"
+                        className="w-full p-2 border rounded font-semibold text-slate-800"
+                        value={newPoolNombre}
+                        onChange={(e) => setNewPoolNombre(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1">Título / Especialidad</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: Profesora de Educación General Básica"
+                        className="w-full p-2 border rounded text-slate-800"
+                        value={newPoolTitulo}
+                        onChange={(e) => setNewPoolTitulo(e.target.value)}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-slate-500 font-bold mb-1">Email</label>
+                        <input 
+                          type="email" 
+                          placeholder="correo@ejemplo.com"
+                          className="w-full p-2 border rounded text-slate-800"
+                          value={newPoolEmail}
+                          onChange={(e) => setNewPoolEmail(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 font-bold mb-1">Teléfono</label>
+                        <input 
+                          type="text" 
+                          placeholder="+569..."
+                          className="w-full p-2 border rounded text-slate-800"
+                          value={newPoolTelefono}
+                          onChange={(e) => setNewPoolTelefono(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <button 
+                      type="submit" 
+                      className="w-full bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold py-2 rounded shadow cursor-pointer text-xs transition-colors"
+                    >
+                      💾 Registrar en el Banco
+                    </button>
+                  </form>
+                </div>
+
+                {/* Left Column 2: Ingesta Masiva de Postulantes CSV form */}
+                <div className="lg:col-span-1 bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
+                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <span>📥</span> Ingesta Masiva de Postulantes
+                  </h3>
+                  <p className="text-[11px] text-slate-500">Copie y pegue filas en formato CSV para ingresar candidatos en lote.</p>
+                  
+                  <form onSubmit={handleBulkIngestPool} className="space-y-3 text-xs">
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1">Listado CSV (Formato: RUN, Nombre, Título, Email, Teléfono)</label>
+                      <textarea
+                        rows={8}
+                        className="w-full p-2 border rounded font-mono text-[10px] text-slate-800 bg-slate-50"
+                        placeholder="Ejemplo:&#10;18.765.432-1, MARIA TAPIA, Docente Matematica, mtapia@correo.com, +56912345678&#10;19.543.210-K, PEDRO SOTO, Profesor Ingles, psoto@correo.com, +56987654321"
+                        value={csvBulkInput}
+                        onChange={(e) => setCsvBulkInput(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      className="w-full bg-slep-blue hover:bg-slep-blue-hover text-white font-bold py-2 rounded shadow cursor-pointer text-xs transition-colors"
+                    >
+                      🚀 Ingestar Postulantes en Lote
+                    </button>
+                  </form>
+                </div>
+
+                {/* Right Column: List of candidates in substitute pool */}
+                <div className="lg:col-span-1 bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
+                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <span>👥</span> Resumen de Disponibilidad
+                  </h3>
+                  <p className="text-xs text-slate-500">Visualización de postulantes en el Banco de Reemplazos.</p>
+                  
+                  {(() => {
+                    const poolCandidates = funcionarios.filter(f => f.cargo === 'Postulante Reemplazo');
+                    const disponibles = poolCandidates.filter(c => !reemplazosList.some(r => r.reemplazo_run === c.run));
+                    const asignados = poolCandidates.filter(c => reemplazosList.some(r => r.reemplazo_run === c.run));
+                    return (
+                      <div className="space-y-3 pt-2 text-xs">
+                        <div className="bg-slate-50 border p-3 rounded-lg flex justify-between">
+                          <span className="font-semibold text-slate-700">Total Postulantes Registrados:</span>
+                          <span className="font-black text-slate-900">{poolCandidates.length}</span>
+                        </div>
+                        <div className="bg-green-50 border border-green-200 p-3 rounded-lg flex justify-between text-green-900">
+                          <span className="font-semibold">Candidatos Disponibles:</span>
+                          <span className="font-black">{disponibles.length}</span>
+                        </div>
+                        <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg flex justify-between text-blue-900">
+                          <span className="font-semibold">Candidatos Asignados en Reemplazo:</span>
+                          <span className="font-black">{asignados.length}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+              </div>
+
+              {/* Candidates detailed list table */}
+              <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4 animate-fadeIn">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 pb-2 border-b">
+                  <span>📋</span> Nómina Completa del Banco de Reemplazos Activos en el Territorio
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 font-bold text-slate-600 border-b">
+                      <tr>
+                        <th className="p-3 pl-4">Postulante</th>
+                        <th className="p-3">Título / Especialidad</th>
+                        <th className="p-3">Contacto</th>
+                        <th className="p-3 text-center">Estado</th>
+                        <th className="p-3 text-right">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(() => {
+                        const poolCandidates = funcionarios.filter(f => f.cargo === 'Postulante Reemplazo');
+                        if (poolCandidates.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={5} className="p-6 text-center text-slate-400 italic">
+                                No hay postulantes registrados en el banco de reemplazos. Registre candidatos individuales o use la ingesta masiva.
+                              </td>
+                            </tr>
+                          );
+                        }
+                        return poolCandidates.map(cand => {
+                          const isAssigned = reemplazosList.some(r => r.reemplazo_run === cand.run);
+                          return (
+                            <tr key={cand.run} className="hover:bg-slate-50/50">
+                              <td className="p-3 pl-4">
+                                <button
+                                  onClick={() => setViewingFuncionario(cand)}
+                                  className="font-bold text-slate-800 underline hover:text-slep-blue text-left"
+                                >
+                                  {cand.nombre}
+                                </button>
+                                <p className="text-[10px] font-mono text-slate-400 mt-0.5">{cand.run}</p>
+                              </td>
+                              <td className="p-3 font-medium text-slate-700">
+                                {cand.titulo || 'Docente'}
+                              </td>
+                              <td className="p-3 text-slate-650">
+                                <p>{cand.email || 'Sin correo'}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">{cand.telefono || 'Sin teléfono'}</p>
+                              </td>
+                              <td className="p-3 text-center">
+                                {isAssigned ? (
+                                  <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-[10px] font-bold">
+                                    Asignado ✓
+                                  </span>
+                                ) : (
+                                  <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded text-[10px] font-bold">
+                                    Disponible 🔍
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 text-right">
+                                <button
+                                  onClick={async () => {
+                                    if (confirm(`¿Desea eliminar a ${cand.nombre} del banco de reemplazos?`)) {
+                                      dbLocal.funcionarios = dbLocal.funcionarios.filter(x => x.run !== cand.run);
+                                      await loadData();
+                                    }
+                                  }}
+                                  className="text-red-655 hover:text-red-800 font-bold cursor-pointer"
+                                >
+                                  Eliminar
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
             </div>
           )}
