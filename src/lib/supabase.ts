@@ -518,10 +518,13 @@ export const api = {
 
   crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
     const list = dbLocal.cursosDinamicos;
-    if (!list.some(c => c.rbd === curso.rbd && c.nombre === curso.nombre)) {
+    const index = list.findIndex(c => c.rbd === curso.rbd && c.nombre === curso.nombre);
+    if (index >= 0) {
+      list[index] = curso;
+    } else {
       list.push(curso);
-      dbLocal.cursosDinamicos = list;
     }
+    dbLocal.cursosDinamicos = list;
   },
 
   eliminarCursoDinamico: async (rbd: string, nombre: string): Promise<void> => {

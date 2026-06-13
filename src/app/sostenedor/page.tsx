@@ -771,6 +771,84 @@ export default function SostenedorDashboard() {
     printWindow.document.close();
   };
 
+  // Territory-wide hours calculations
+  const getEstamentoTerritorial = (c: Contrato) => {
+    const f = funcionarios.find(func => func.run === c.funcionario_run);
+    if (f?.estamento) return f.estamento;
+    if (c.legislacion_laboral === 'Asistentes de la educación') return 'Asistente de la Educación';
+    if (c.legislacion_laboral === 'Estatuto docente') return 'Docente';
+    return 'Docente';
+  };
+
+  const asistenteContsTerr = contratos.filter(c => getEstamentoTerritorial(c) === 'Asistente de la Educación');
+  const docenteContsTerr = contratos.filter(c => getEstamentoTerritorial(c) === 'Docente');
+
+  const totalAsistentesTerr = asistenteContsTerr.reduce((sum, c) => sum + c.horas_totales, 0);
+  const totalDocentesTerr = docenteContsTerr.reduce((sum, c) => sum + c.horas_totales, 0);
+
+  // Docente hours by function territory-wide
+  let horasDirectivasTerr = 0;
+  let horasTecPedTerr = 0;
+  let horasCoordUTPTerr = 0;
+  let horasApoyoUTPTerr = 0;
+  let horasAulaOtrasTerr = 0;
+
+  docenteContsTerr.forEach(c => {
+    const funcLower = (c.funcion_principal || '').toLowerCase();
+    const isDirectiva = funcLower.includes('director') || funcLower.includes('rector') || funcLower.includes('directiva') || funcLower.includes('subdirector') || funcLower.includes('inspector');
+    const isCoordinacionUTP = funcLower.includes('utp') && (funcLower.includes('coordinad') || funcLower.includes('jefe'));
+    const isApoyoUTP = funcLower.includes('utp') && !isCoordinacionUTP;
+    const isTecnicoPedagogica = !isDirectiva && !isCoordinacionUTP && !isApoyoUTP && (
+      funcLower.includes('técnico') || funcLower.includes('tecnico') || 
+      funcLower.includes('pedagóg') || funcLower.includes('pedagog') || 
+      funcLower.includes('curricular') || funcLower.includes('evaluad') || 
+      funcLower.includes('orientad')
+    );
+
+    if (isDirectiva) {
+      horasDirectivasTerr += c.horas_totales;
+    } else if (isCoordinacionUTP) {
+      horasCoordUTPTerr += c.horas_totales;
+    } else if (isApoyoUTP) {
+      horasApoyoUTPTerr += c.horas_totales;
+    } else if (isTecnicoPedagogica) {
+      horasTecPedTerr += c.horas_totales;
+    } else {
+      horasAulaOtrasTerr += c.horas_totales;
+    }
+  });
+
+  // Docente hours by funding source territory-wide
+  let regularTerr = 0;
+  let sepTerr = 0;
+  let pieTerr = 0;
+  let proRetencionTerr = 0;
+  let liceoBicTerr = 0;
+  let otrasFondoTerr = 0;
+
+  docenteContsTerr.forEach(c => {
+    const fins = financiamientos.filter(f => f.contrato_id === c.id);
+    if (fins.length === 0) {
+      regularTerr += c.horas_totales;
+      return;
+    }
+    fins.forEach(f => {
+      if (f.origen_fondo === 'Subvención Regular') {
+        regularTerr += f.horas;
+      } else if (f.origen_fondo === 'SEP') {
+        sepTerr += f.horas;
+      } else if (f.origen_fondo === 'PIE') {
+        pieTerr += f.horas;
+      } else if (f.origen_fondo === 'Pro-retención') {
+        proRetencionTerr += f.horas;
+      } else if (f.origen_fondo === 'Liceos Bicentenarios') {
+        liceoBicTerr += f.horas;
+      } else {
+        otrasFondoTerr += f.horas;
+      }
+    });
+  });
+
   if (!authorized) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50 text-slate-600 font-bold">
@@ -882,7 +960,70 @@ export default function SostenedorDashboard() {
               </div>
             </div>
 
-            <div className="mt-4 flex gap-2 w-full max-w-md">
+            {/* Territory-wide Hours Distribution Grid Summary */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6 border border-slate-100 rounded-xl p-4 bg-slate-50/50">
+              {/* Column 1: Estamentos */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Territorio: Estamentos</h4>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between font-bold text-slate-700 text-xs mb-0.5">
+                      <span>🍎 Docentes Totales</span>
+                      <span>{totalDocentesTerr} hrs ({((totalDocentesTerr / (totalDocentesTerr + totalAsistentesTerr || 1)) * 100).toFixed(0)}%)</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2">
+                      <div className="bg-slep-blue h-2 rounded-full transition-all" style={{ width: `${(totalDocentesTerr / (totalDocentesTerr + totalAsistentesTerr || 1)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-bold text-slate-700 text-xs mb-0.5">
+                      <span>👥 Asistentes Totales</span>
+                      <span>{totalAsistentesTerr} hrs ({((totalAsistentesTerr / (totalDocentesTerr + totalAsistentesTerr || 1)) * 100).toFixed(0)}%)</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2">
+                      <div className="bg-purple-600 h-2 rounded-full transition-all" style={{ width: `${(totalAsistentesTerr / (totalDocentesTerr + totalAsistentesTerr || 1)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Column 2: Funciones */}
+              <div className="space-y-2 text-[11px]">
+                <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Territorio: Funciones Docentes</h4>
+                {[
+                  { label: '💼 Directivas', value: horasDirectivasTerr, color: 'bg-rose-500' },
+                  { label: '⚙️ Téc. Pedagógicas', value: horasTecPedTerr, color: 'bg-emerald-500' },
+                  { label: '📊 Coord. UTP', value: horasCoordUTPTerr, color: 'bg-amber-500' },
+                  { label: '🔍 Apoyo UTP', value: horasApoyoUTPTerr, color: 'bg-indigo-500' },
+                  { label: '🧑‍🏫 Aula / Otras', value: horasAulaOtrasTerr, color: 'bg-slate-450' }
+                ].map(item => (
+                  <div key={item.label} className="flex justify-between items-center py-0.5">
+                    <span className="font-semibold text-slate-600">{item.label}</span>
+                    <span className="font-bold text-slate-800">{item.value} hrs</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Column 3: Financiamientos */}
+              <div className="space-y-2 text-[11px]">
+                <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Territorio: Financiamiento Docente</h4>
+                {[
+                  { label: 'Subv. Regular', value: regularTerr },
+                  { label: 'Horas SEP', value: sepTerr },
+                  { label: 'Horas PIE', value: pieTerr },
+                  { label: 'Horas Proretención', value: proRetencionTerr },
+                  { label: 'Liceos Bic.', value: liceoBicTerr },
+                  { label: 'Otras Horas/Fondos', value: otrasFondoTerr }
+                ].map(item => (
+                  <div key={item.label} className="flex justify-between items-center py-0.5">
+                    <span className="font-semibold text-slate-600">💰 {item.label}</span>
+                    <span className="font-bold text-slate-800">{item.value} hrs</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-2 w-full max-w-md">
               <input 
                 type="text" 
                 placeholder="Filtrar por RBD o Nombre..." 

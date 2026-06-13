@@ -90,6 +90,7 @@ export interface CursoDinamico {
   nivel: string; // e.g. '1° a 4° Básico'
   regimen: 'JEC' | 'No JEC';
   horasPIE?: number;
+  profesor_jefe_run?: string;
 }
 
 export interface AsignaturaDinamica {

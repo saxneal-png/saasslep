@@ -297,6 +297,85 @@ export default function ProfesionalDashboard() {
   const totalOtro = financiamientos.filter(f => f.origen_fondo === 'Otro').reduce((sum, f) => sum + f.horas, 0);
   const sumFinanciamientos = totalRegular + totalSep + totalPie + totalRef + totalPro + totalOtro;
 
+  // Territory-wide supervised hours calculations
+  const getEstamentoSupervised = (c: Contrato) => {
+    const f = funcionarios.find(func => func.run === c.funcionario_run);
+    if (f?.estamento) return f.estamento;
+    if (c.legislacion_laboral === 'Asistentes de la educación') return 'Asistente de la Educación';
+    if (c.legislacion_laboral === 'Estatuto docente') return 'Docente';
+    return 'Docente';
+  };
+
+  const supervisedConts = contratos.filter(c => escuelasAsignadasRbd.includes(c.rbd));
+  const asistenteSupervised = supervisedConts.filter(c => getEstamentoSupervised(c) === 'Asistente de la Educación');
+  const docenteSupervised = supervisedConts.filter(c => getEstamentoSupervised(c) === 'Docente');
+
+  const totalAsistentesSupervised = asistenteSupervised.reduce((sum, c) => sum + c.horas_totales, 0);
+  const totalDocentesSupervised = docenteSupervised.reduce((sum, c) => sum + c.horas_totales, 0);
+
+  // Docente hours by function territory-wide
+  let horasDirectivasSup = 0;
+  let horasTecPedSup = 0;
+  let horasCoordUTPSup = 0;
+  let horasApoyoUTPSup = 0;
+  let horasAulaOtrasSup = 0;
+
+  docenteSupervised.forEach(c => {
+    const funcLower = (c.funcion_principal || '').toLowerCase();
+    const isDirectiva = funcLower.includes('director') || funcLower.includes('rector') || funcLower.includes('directiva') || funcLower.includes('subdirector') || funcLower.includes('inspector');
+    const isCoordinacionUTP = funcLower.includes('utp') && (funcLower.includes('coordinad') || funcLower.includes('jefe'));
+    const isApoyoUTP = funcLower.includes('utp') && !isCoordinacionUTP;
+    const isTecnicoPedagogica = !isDirectiva && !isCoordinacionUTP && !isApoyoUTP && (
+      funcLower.includes('técnico') || funcLower.includes('tecnico') || 
+      funcLower.includes('pedagóg') || funcLower.includes('pedagog') || 
+      funcLower.includes('curricular') || funcLower.includes('evaluad') || 
+      funcLower.includes('orientad')
+    );
+
+    if (isDirectiva) {
+      horasDirectivasSup += c.horas_totales;
+    } else if (isCoordinacionUTP) {
+      horasCoordUTPSup += c.horas_totales;
+    } else if (isApoyoUTP) {
+      horasApoyoUTPSup += c.horas_totales;
+    } else if (isTecnicoPedagogica) {
+      horasTecPedSup += c.horas_totales;
+    } else {
+      horasAulaOtrasSup += c.horas_totales;
+    }
+  });
+
+  // Docente hours by funding source territory-wide
+  let regularSup = 0;
+  let sepSup = 0;
+  let pieSup = 0;
+  let proRetencionSup = 0;
+  let liceoBicSup = 0;
+  let otrasFondoSup = 0;
+
+  docenteSupervised.forEach(c => {
+    const fins = financiamientos.filter(f => f.contrato_id === c.id);
+    if (fins.length === 0) {
+      regularSup += c.horas_totales;
+      return;
+    }
+    fins.forEach(f => {
+      if (f.origen_fondo === 'Subvención Regular') {
+        regularSup += f.horas;
+      } else if (f.origen_fondo === 'SEP') {
+        sepSup += f.horas;
+      } else if (f.origen_fondo === 'PIE') {
+        pieSup += f.horas;
+      } else if (f.origen_fondo === 'Pro-retención') {
+        proRetencionSup += f.horas;
+      } else if (f.origen_fondo === 'Liceos Bicentenarios') {
+        liceoBicSup += f.horas;
+      } else {
+        otrasFondoSup += f.horas;
+      }
+    });
+  });
+
   if (!authorized) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50 text-slate-600 font-bold">
@@ -419,7 +498,70 @@ export default function ProfesionalDashboard() {
               </div>
             </div>
 
-            <div className="mt-4 flex gap-2 w-full max-w-md">
+            {/* Supervised Hours Distribution Grid Summary */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6 border border-slate-100 rounded-xl p-4 bg-slate-50/50">
+              {/* Column 1: Estamentos */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Tutela: Estamentos</h4>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between font-bold text-slate-700 text-xs mb-0.5">
+                      <span>🍎 Docentes Totales</span>
+                      <span>{totalDocentesSupervised} hrs ({((totalDocentesSupervised / (totalDocentesSupervised + totalAsistentesSupervised || 1)) * 100).toFixed(0)}%)</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2">
+                      <div className="bg-slep-blue h-2 rounded-full transition-all" style={{ width: `${(totalDocentesSupervised / (totalDocentesSupervised + totalAsistentesSupervised || 1)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-bold text-slate-700 text-xs mb-0.5">
+                      <span>👥 Asistentes Totales</span>
+                      <span>{totalAsistentesSupervised} hrs ({((totalAsistentesSupervised / (totalDocentesSupervised + totalAsistentesSupervised || 1)) * 100).toFixed(0)}%)</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2">
+                      <div className="bg-purple-600 h-2 rounded-full transition-all" style={{ width: `${(totalAsistentesSupervised / (totalDocentesSupervised + totalAsistentesSupervised || 1)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Column 2: Funciones */}
+              <div className="space-y-2 text-[11px]">
+                <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Tutela: Funciones Docentes</h4>
+                {[
+                  { label: '💼 Directivas', value: horasDirectivasSup, color: 'bg-rose-500' },
+                  { label: '⚙️ Téc. Pedagógicas', value: horasTecPedSup, color: 'bg-emerald-500' },
+                  { label: '📊 Coord. UTP', value: horasCoordUTPSup, color: 'bg-amber-500' },
+                  { label: '🔍 Apoyo UTP', value: horasApoyoUTPSup, color: 'bg-indigo-500' },
+                  { label: '🧑‍🏫 Aula / Otras', value: horasAulaOtrasSup, color: 'bg-slate-450' }
+                ].map(item => (
+                  <div key={item.label} className="flex justify-between items-center py-0.5">
+                    <span className="font-semibold text-slate-600">{item.label}</span>
+                    <span className="font-bold text-slate-800">{item.value} hrs</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Column 3: Financiamientos */}
+              <div className="space-y-2 text-[11px]">
+                <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Tutela: Financiamiento Docente</h4>
+                {[
+                  { label: 'Subv. Regular', value: regularSup },
+                  { label: 'Horas SEP', value: sepSup },
+                  { label: 'Horas PIE', value: pieSup },
+                  { label: 'Horas Proretención', value: proRetencionSup },
+                  { label: 'Liceos Bic.', value: liceoBicSup },
+                  { label: 'Otras Horas/Fondos', value: otrasFondoSup }
+                ].map(item => (
+                  <div key={item.label} className="flex justify-between items-center py-0.5">
+                    <span className="font-semibold text-slate-600">💰 {item.label}</span>
+                    <span className="font-bold text-slate-800">{item.value} hrs</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-2 w-full max-w-md">
               <input 
                 type="text" 
                 placeholder="Filtrar escuelas por RBD o Nombre..." 

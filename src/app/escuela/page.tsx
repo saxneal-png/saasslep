@@ -1722,6 +1722,14 @@ export default function EscuelaDashboard() {
                             <span className="text-xl group-hover:scale-110 transition-transform">🏫</span>
                             <span className="text-slate-800 group-hover:text-white transition-colors">{c.nombre}</span>
                             <span className="text-[9px] text-slate-400 group-hover:text-white/80 font-normal">{c.nivel}</span>
+                            {c.profesor_jefe_run && (
+                              <span className="text-[9px] text-emerald-600 group-hover:text-amber-200 font-bold">
+                                🧑‍🏫 {(() => {
+                                  const f = funcionarios.find(func => func.run === c.profesor_jefe_run);
+                                  return f ? f.nombre.split(' ')[0] + ' ' + (f.nombre.split(' ')[2] || '') : 'Jefe';
+                                })()}
+                              </span>
+                            )}
                           </button>
                           <button
                             type="button"
@@ -2000,9 +2008,12 @@ export default function EscuelaDashboard() {
                         onChange={(e) => setSelectedDocenteRun(e.target.value)}
                       >
                         <option value="">-- Seleccionar --</option>
-                        {contratos.map(c => {
+                        {contratos.filter(c => {
                           const f = funcionarios.find(func => func.run === c.funcionario_run);
-                          return <option key={c.id} value={c.funcionario_run}>{f ? f.nombre : c.funcionario_run}</option>;
+                          return f?.estamento === 'Docente' || c.legislacion_laboral === 'Estatuto docente';
+                        }).map(c => {
+                          const f = funcionarios.find(func => func.run === c.funcionario_run);
+                          return <option key={c.id} value={c.funcionario_run}>{f ? f.nombre : c.funcionario_run} ({c.horas_totales} hrs)</option>;
                         })}
                       </select>
                     </div>
@@ -2303,6 +2314,69 @@ export default function EscuelaDashboard() {
                 <div>
                   <h3 className="text-base font-bold text-slate-800">Dotación Completa de Personal</h3>
                   <p className="text-xs text-slate-500 mt-1 font-medium">Listado consolidado de docentes y asistentes con sus cargas horarias y cursos asignados.</p>
+                </div>
+
+                {/* Visual Hours Distribution Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border border-slate-100 rounded-xl p-4 bg-slate-50/50">
+                  {/* Column 1: Estamentos */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Estamentos</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex justify-between font-bold text-slate-700 text-xs mb-0.5">
+                          <span>🍎 Docentes</span>
+                          <span>{totalHorasDocentes} hrs ({((totalHorasDocentes / (totalHorasDocentes + totalHorasAsistentes || 1)) * 100).toFixed(0)}%)</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-2">
+                          <div className="bg-slep-blue h-2 rounded-full transition-all" style={{ width: `${(totalHorasDocentes / (totalHorasDocentes + totalHorasAsistentes || 1)) * 100}%` }}></div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between font-bold text-slate-700 text-xs mb-0.5">
+                          <span>👥 Asistentes</span>
+                          <span>{totalHorasAsistentes} hrs ({((totalHorasAsistentes / (totalHorasDocentes + totalHorasAsistentes || 1)) * 100).toFixed(0)}%)</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-2">
+                          <div className="bg-purple-600 h-2 rounded-full transition-all" style={{ width: `${(totalHorasAsistentes / (totalHorasDocentes + totalHorasAsistentes || 1)) * 100}%` }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Column 2: Funciones */}
+                  <div className="space-y-2 text-[11px]">
+                    <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Funciones Docentes</h4>
+                    {[
+                      { label: '💼 Directivas', value: horasDirectivas, color: 'bg-rose-500' },
+                      { label: '⚙️ Téc. Pedagógicas', value: horasTecnicoPedagogicas, color: 'bg-emerald-500' },
+                      { label: '📊 Coord. UTP', value: horasCoordinacionesUTP, color: 'bg-amber-500' },
+                      { label: '🔍 Apoyo UTP', value: horasApoyoUTP, color: 'bg-indigo-500' },
+                      { label: '🧑‍🏫 Aula / Otras', value: horasDocenciaAulaOtras, color: 'bg-slate-405' }
+                    ].map(item => (
+                      <div key={item.label} className="flex justify-between items-center py-0.5">
+                        <span className="font-semibold text-slate-600">{item.label}</span>
+                        <span className="font-bold text-slate-800">{item.value} hrs</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Column 3: Financiamientos */}
+                  <div className="space-y-2 text-[11px]">
+                    <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Financiamiento Docente</h4>
+                    {[
+                      { label: 'Subv. Regular', value: horasSubvencionRegular },
+                      { label: 'Horas SEP', value: horasSEP },
+                      { label: 'Horas PIE', value: horasPIE },
+                      { label: 'Horas Proretención', value: horasProretencion },
+                      { label: 'Liceos Bic.', value: horasLiceosBicentenarios },
+                      { label: 'Otras Horas/Fondos', value: horasOtrasFondo }
+                    ].map(item => (
+                      <div key={item.label} className="flex justify-between items-center py-0.5">
+                        <span className="font-semibold text-slate-600">💰 {item.label}</span>
+                        <span className="font-bold text-slate-800">{item.value} hrs</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto text-xs">
@@ -2781,22 +2855,61 @@ export default function EscuelaDashboard() {
               </div>
 
               {/* Modal Content */}
-              <div className="p-6 space-y-6 flex-1 text-xs">
+              <div className="p-6 space-y-4 flex-1 text-xs">
                 
-                {/* Configurable PIE Hours */}
-                <div className="bg-slate-50 p-4 rounded-xl border flex justify-between items-center gap-4 text-xs">
-                  <div>
-                    <span className="font-bold text-slate-700">Horas de Apoyo / Co-docencia PIE Asociadas al Curso:</span>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Defina la carga horaria semanal reglamentaria de horas SEP/PIE para este curso.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Configurable PIE Hours */}
+                  <div className="bg-slate-50 p-4 rounded-xl border flex justify-between items-center gap-4 text-xs">
+                    <div>
+                      <span className="font-bold text-slate-700 font-black">Horas de Apoyo / Co-docencia PIE:</span>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Carga horaria semanal de apoyo SEP/PIE para este curso.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={editCursoPIE}
+                        onChange={(e) => setEditCursoPIE(parseFloat(e.target.value) || 0)}
+                        className="w-20 p-2 bg-white border rounded text-center font-bold text-slate-800 focus:outline-slep-blue"
+                      />
+                      <span className="font-semibold text-slate-600">hrs</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={editCursoPIE}
-                      onChange={(e) => setEditCursoPIE(parseFloat(e.target.value) || 0)}
-                      className="w-20 p-2 bg-white border rounded text-center font-bold text-slate-800 focus:outline-slep-blue"
-                    />
-                    <span className="font-semibold text-slate-600">hrs/semana</span>
+
+                  {/* Profesor Jefe Selection */}
+                  <div className="bg-slate-50 p-4 rounded-xl border flex justify-between items-center gap-4 text-xs">
+                    <div>
+                      <span className="font-bold text-slate-700 font-black">Profesor Jefe del Curso:</span>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Seleccione el docente responsable de la jefatura.</p>
+                    </div>
+                    <div className="flex-1 max-w-[150px]">
+                      <select
+                        value={editingCurso.profesor_jefe_run || ''}
+                        onChange={async (e) => {
+                          const run = e.target.value;
+                          const updatedCurso = {
+                            ...editingCurso,
+                            profesor_jefe_run: run || undefined
+                          };
+                          setEditingCurso(updatedCurso);
+                          await api.crearCursoDinamico(updatedCurso);
+                          await loadAllSchoolData();
+                        }}
+                        className="w-full p-2 bg-white border rounded font-semibold text-slate-700 focus:outline-slep-blue cursor-pointer"
+                      >
+                        <option value="">-- Sin Asignar --</option>
+                        {contratos.filter(c => {
+                          const f = funcionarios.find(func => func.run === c.funcionario_run);
+                          return f?.estamento === 'Docente' || c.legislacion_laboral === 'Estatuto docente';
+                        }).map(c => {
+                          const f = funcionarios.find(func => func.run === c.funcionario_run);
+                          return (
+                            <option key={c.id} value={c.funcionario_run}>
+                              {f ? f.nombre : c.funcionario_run}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -2884,7 +2997,10 @@ export default function EscuelaDashboard() {
                                 }}
                               >
                                 <option value="">-- Sin Asignar / Vacante --</option>
-                                {contratos.map(c => {
+                                {contratos.filter(c => {
+                                  const f = funcionarios.find(func => func.run === c.funcionario_run);
+                                  return f?.estamento === 'Docente' || c.legislacion_laboral === 'Estatuto docente';
+                                }).map(c => {
                                   const f = funcionarios.find(func => func.run === c.funcionario_run);
                                   return (
                                     <option key={c.id} value={c.id}>
