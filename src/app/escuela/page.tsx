@@ -678,7 +678,7 @@ export default function EscuelaDashboard() {
   const schoolDocentes = funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run));
   const schoolAsistentes = funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run));
 
-  const printFuncionarioDetail = (funcionario: Funcionario, contrato: Contrato | undefined, financiamientos: { origen: OrigenFondo; horas: number }[], leyCalculo: any) => {
+  const printFuncionarioDetail = (funcionario: Funcionario, contrato: Contrato | undefined, financiamientos: { origen: OrigenFondo; horas: number }[], leyCalculo: any, teacherAsigs: AsignacionAula[]) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
     printWindow.document.write(`
@@ -796,6 +796,35 @@ export default function EscuelaDashboard() {
               </tbody>
             </table>
           </div>
+
+          ${funcionario.estamento === 'Docente' ? `
+          <div class="card" style="margin-bottom: 30px;">
+            <h3>Clases y Cursos Asignados (Horas de Aula)</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Curso</th>
+                  <th>Asignatura</th>
+                  <th>Horas Aula Asignadas</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${teacherAsigs.map(a => `
+                  <tr>
+                    <td><strong>${a.curso}</strong></td>
+                    <td>${a.asignatura}</td>
+                    <td>${a.horas} hrs</td>
+                  </tr>
+                `).join('')}
+                ${teacherAsigs.length === 0 ? `
+                  <tr>
+                    <td colspan="3" style="text-align: center; color: #94a3b8; font-style: italic;">No registra asignaciones de clases.</td>
+                  </tr>
+                ` : ''}
+              </tbody>
+            </table>
+          </div>
+          ` : ''}
 
           ${funcionario.estamento === 'Docente' && leyCalculo ? `
           <div class="card">
@@ -2685,6 +2714,24 @@ export default function EscuelaDashboard() {
                     </button>
                   </div>
 
+                  {/* Clases y Cursos Asignados (Horas Lectivas) */}
+                  {editingFuncionario.estamento === 'Docente' && (
+                    <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                      <span className="font-bold text-slate-800 block">Clases y Cursos Asignados (Horas Lectivas)</span>
+                      <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                        {teacherAsigs.map((asig) => (
+                          <div key={asig.id} className="flex justify-between items-center bg-white border border-slate-100 px-3 py-2 rounded-lg text-xs shadow-sm">
+                            <span className="font-bold text-slate-700">🏫 {asig.curso} • <span className="font-normal text-slate-500">{asig.asignatura}</span></span>
+                            <span className="bg-slep-blue/10 text-slep-blue font-bold px-2 py-0.5 rounded text-[10px]">{asig.horas} hrs</span>
+                          </div>
+                        ))}
+                        {teacherAsigs.length === 0 && (
+                          <p className="text-center py-2 text-slate-400 italic text-[11px]">No tiene clases asignadas en el planificador de cursos.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Desglose de Horas en Contrato / Nómina (Ingesta) */}
                   <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-3">
                     <span className="font-bold text-slate-800">Desglose de Horas Declarado en Nómina (Ingesta)</span>
@@ -2773,7 +2820,7 @@ export default function EscuelaDashboard() {
                 {/* Modal Footer */}
                 <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between gap-2 rounded-b-2xl">
                   <button 
-                    onClick={() => printFuncionarioDetail(editingFuncionario, relatedCont, editContFins, leyCalculo)}
+                    onClick={() => printFuncionarioDetail(editingFuncionario, relatedCont, editContFins, leyCalculo, teacherAsigs)}
                     className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer"
                   >
                     🖨️ Imprimir Ficha
