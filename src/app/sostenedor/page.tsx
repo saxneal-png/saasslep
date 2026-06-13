@@ -334,40 +334,49 @@ export default function SostenedorDashboard() {
   };
 
   const processNominaFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      try {
-        const controlPrevioMock = [
-          { run: '12.345.678-9', funcion: 'Docente de Aula', horas: 44 },
-          { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
-        ];
+    // Read first 1000 characters to detect scheme (DOC_RUN vs ASISTENTE_RUN)
+    const tempReader = new FileReader();
+    tempReader.onload = (e) => {
+      const headerSample = e.target?.result as string;
+      const isAsistente = headerSample.includes('ASISTENTE_RUN') || headerSample.includes('asistente_run');
+      const encoding = isAsistente ? 'UTF-8' : 'ISO-8859-1';
 
-        const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts } = parsearNominaCsv(
-          text,
-          '10201',
-          controlPrevioMock,
-          'Docente'
-        );
+      const mainReader = new FileReader();
+      mainReader.onload = async (event) => {
+        const text = event.target?.result as string;
+        try {
+          const controlPrevioMock = [
+            { run: '12.345.678-9', funcion: 'Docente de Aula', horas: 44 },
+            { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
+          ];
 
-        for (const f of newFuncs) {
-          await api.upsertFuncionario(f);
-        }
-        for (const c of newConts) {
-          const cFins = newFins.filter(f => f.contrato_id === c.id);
-          await api.upsertContratoCompleto(c, cFins);
-        }
-        for (const a of newAlts) {
-          await api.crearAlerta(a);
-        }
+          const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts } = parsearNominaCsv(
+            text,
+            '10201',
+            controlPrevioMock,
+            isAsistente ? 'Asistente de la Educación' : 'Docente'
+          );
 
-        await loadAllData();
-        setImportLogs(`✅ Éxito: Se procesaron ${newConts.length} docentes y se generaron ${newAlts.length} alertas.`);
-      } catch (err: any) {
-        setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
-      }
+          for (const f of newFuncs) {
+            await api.upsertFuncionario(f);
+          }
+          for (const c of newConts) {
+            const cFins = newFins.filter(f => f.contrato_id === c.id);
+            await api.upsertContratoCompleto(c, cFins);
+          }
+          for (const a of newAlts) {
+            await api.crearAlerta(a);
+          }
+
+          await loadAllData();
+          setImportLogs(`✅ Éxito: Se procesaron ${newConts.length} registros (${isAsistente ? 'Asistentes' : 'Docentes'}) y se generaron ${newAlts.length} alertas.`);
+        } catch (err: any) {
+          setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
+        }
+      };
+      mainReader.readAsText(file, encoding);
     };
-    reader.readAsText(file, 'ISO-8859-1');
+    tempReader.readAsText(file.slice(0, 1000), 'UTF-8');
   };
 
   const handleDragAsis = (e: React.DragEvent) => {
@@ -397,36 +406,44 @@ export default function SostenedorDashboard() {
   };
 
   const processAsistenteFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      try {
-        const controlPrevioMock: any[] = [];
-        const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts } = parsearNominaCsv(
-          text,
-          '10201',
-          controlPrevioMock,
-          'Asistente de la Educación'
-        );
+    const tempReader = new FileReader();
+    tempReader.onload = (e) => {
+      const headerSample = e.target?.result as string;
+      const isAsistente = headerSample.includes('ASISTENTE_RUN') || headerSample.includes('asistente_run');
+      const encoding = isAsistente ? 'UTF-8' : 'ISO-8859-1';
 
-        for (const f of newFuncs) {
-          await api.upsertFuncionario(f);
-        }
-        for (const c of newConts) {
-          const cFins = newFins.filter(f => f.contrato_id === c.id);
-          await api.upsertContratoCompleto(c, cFins);
-        }
-        for (const a of newAlts) {
-          await api.crearAlerta(a);
-        }
+      const mainReader = new FileReader();
+      mainReader.onload = async (event) => {
+        const text = event.target?.result as string;
+        try {
+          const controlPrevioMock: any[] = [];
+          const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts } = parsearNominaCsv(
+            text,
+            '10201',
+            controlPrevioMock,
+            isAsistente ? 'Asistente de la Educación' : 'Docente'
+          );
 
-        await loadAllData();
-        setImportLogsAsis(`✅ Éxito: Se procesaron ${newConts.length} asistentes y se generaron ${newAlts.length} alertas.`);
-      } catch (err: any) {
-        setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
-      }
+          for (const f of newFuncs) {
+            await api.upsertFuncionario(f);
+          }
+          for (const c of newConts) {
+            const cFins = newFins.filter(f => f.contrato_id === c.id);
+            await api.upsertContratoCompleto(c, cFins);
+          }
+          for (const a of newAlts) {
+            await api.crearAlerta(a);
+          }
+
+          await loadAllData();
+          setImportLogsAsis(`✅ Éxito: Se procesaron ${newConts.length} registros (${isAsistente ? 'Asistentes' : 'Docentes'}) y se generaron ${newAlts.length} alertas.`);
+        } catch (err: any) {
+          setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
+        }
+      };
+      mainReader.readAsText(file, encoding);
     };
-    reader.readAsText(file, 'ISO-8859-1');
+    tempReader.readAsText(file.slice(0, 1000), 'UTF-8');
   };
 
   // Drag-and-drop Plan Estudio JSON

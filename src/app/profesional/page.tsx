@@ -156,49 +156,57 @@ export default function ProfesionalDashboard() {
   };
 
   const processNominaFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      try {
-        const controlPrevioMock = [
-          { run: '12.345.678-9', funcion: 'Docente de Aula', horas: 44 },
-          { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
-        ];
+    const tempReader = new FileReader();
+    tempReader.onload = (e) => {
+      const headerSample = e.target?.result as string;
+      const isAsistente = headerSample.includes('ASISTENTE_RUN') || headerSample.includes('asistente_run');
+      const encoding = isAsistente ? 'UTF-8' : 'ISO-8859-1';
 
-        const parsed = parsearNominaCsv(text, escuelasAsignadasRbd[0] || '10202', controlPrevioMock, 'Docente');
+      const mainReader = new FileReader();
+      mainReader.onload = async (event) => {
+        const text = event.target?.result as string;
+        try {
+          const controlPrevioMock = [
+            { run: '12.345.678-9', funcion: 'Docente de Aula', horas: 44 },
+            { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
+          ];
 
-        const invalidRows = parsed.contratos.filter(c => !escuelasAsignadasRbd.includes(c.rbd));
-        if (invalidRows.length > 0) {
-          const badRbds = Array.from(new Set(invalidRows.map(c => c.rbd)));
-          alert(`❌ Error de Permiso: No tiene autorización para subir nóminas de los establecimientos con RBD: ${badRbds.join(', ')}. Solo puede administrar las escuelas asignadas a su tutela.`);
-          return;
+          const parsed = parsearNominaCsv(text, escuelasAsignadasRbd[0] || '10202', controlPrevioMock, isAsistente ? 'Asistente de la Educación' : 'Docente');
+
+          const invalidRows = parsed.contratos.filter(c => !escuelasAsignadasRbd.includes(c.rbd));
+          if (invalidRows.length > 0) {
+            const badRbds = Array.from(new Set(invalidRows.map(c => c.rbd)));
+            alert(`❌ Error de Permiso: No tiene autorización para subir nóminas de los establecimientos con RBD: ${badRbds.join(', ')}. Solo puede administrar las escuelas asignadas a su tutela.`);
+            return;
+          }
+
+          for (const f of parsed.funcionarios) {
+            await api.upsertFuncionario(f);
+          }
+          for (const c of parsed.contratos) {
+            const cFins = parsed.financiamientos.filter(f => f.contrato_id === c.id);
+            await api.upsertContratoCompleto(c, cFins);
+          }
+          for (const a of parsed.alertas) {
+            await api.crearAlerta(a);
+          }
+
+          const allConts = await api.getContratos();
+          const filteredConts = allConts.filter(c => escuelasAsignadasRbd.includes(c.rbd));
+          setContratos(filteredConts);
+
+          const allAlts = await api.getAlertas();
+          const filteredAlts = allAlts.filter(a => escuelasAsignadasRbd.includes(a.rbd));
+          setAlertas(filteredAlts);
+
+          setImportLogs(`✅ Éxito: Se procesaron ${parsed.contratos.length} registros (${isAsistente ? 'Asistentes' : 'Docentes'}) para tus escuelas supervisadas.`);
+        } catch (err: any) {
+          setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
         }
-
-        for (const f of parsed.funcionarios) {
-          await api.upsertFuncionario(f);
-        }
-        for (const c of parsed.contratos) {
-          const cFins = parsed.financiamientos.filter(f => f.contrato_id === c.id);
-          await api.upsertContratoCompleto(c, cFins);
-        }
-        for (const a of parsed.alertas) {
-          await api.crearAlerta(a);
-        }
-
-        const allConts = await api.getContratos();
-        const filteredConts = allConts.filter(c => escuelasAsignadasRbd.includes(c.rbd));
-        setContratos(filteredConts);
-
-        const allAlts = await api.getAlertas();
-        const filteredAlts = allAlts.filter(a => escuelasAsignadasRbd.includes(a.rbd));
-        setAlertas(filteredAlts);
-
-        setImportLogs(`✅ Éxito: Se procesaron ${parsed.contratos.length} docentes para tus escuelas supervisadas.`);
-      } catch (err: any) {
-        setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
-      }
+      };
+      mainReader.readAsText(file, encoding);
     };
-    reader.readAsText(file, 'ISO-8859-1');
+    tempReader.readAsText(file.slice(0, 1000), 'UTF-8');
   };
 
   const handleDragAsis = (e: React.DragEvent) => {
@@ -228,45 +236,53 @@ export default function ProfesionalDashboard() {
   };
 
   const processAsistenteFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      try {
-        const controlPrevioMock: any[] = [];
-        const parsed = parsearNominaCsv(text, escuelasAsignadasRbd[0] || '10202', controlPrevioMock, 'Asistente de la Educación');
+    const tempReader = new FileReader();
+    tempReader.onload = (e) => {
+      const headerSample = e.target?.result as string;
+      const isAsistente = headerSample.includes('ASISTENTE_RUN') || headerSample.includes('asistente_run');
+      const encoding = isAsistente ? 'UTF-8' : 'ISO-8859-1';
 
-        const invalidRows = parsed.contratos.filter(c => !escuelasAsignadasRbd.includes(c.rbd));
-        if (invalidRows.length > 0) {
-          const badRbds = Array.from(new Set(invalidRows.map(c => c.rbd)));
-          alert(`❌ Error de Permiso: No tiene autorización para subir nóminas de los establecimientos con RBD: ${badRbds.join(', ')}.`);
-          return;
+      const mainReader = new FileReader();
+      mainReader.onload = async (event) => {
+        const text = event.target?.result as string;
+        try {
+          const controlPrevioMock: any[] = [];
+          const parsed = parsearNominaCsv(text, escuelasAsignadasRbd[0] || '10202', controlPrevioMock, isAsistente ? 'Asistente de la Educación' : 'Docente');
+
+          const invalidRows = parsed.contratos.filter(c => !escuelasAsignadasRbd.includes(c.rbd));
+          if (invalidRows.length > 0) {
+            const badRbds = Array.from(new Set(invalidRows.map(c => c.rbd)));
+            alert(`❌ Error de Permiso: No tiene autorización para subir nóminas de los establecimientos con RBD: ${badRbds.join(', ')}.`);
+            return;
+          }
+
+          for (const f of parsed.funcionarios) {
+            await api.upsertFuncionario(f);
+          }
+          for (const c of parsed.contratos) {
+            const cFins = parsed.financiamientos.filter(f => f.contrato_id === c.id);
+            await api.upsertContratoCompleto(c, cFins);
+          }
+          for (const a of parsed.alertas) {
+            await api.crearAlerta(a);
+          }
+
+          const allConts = await api.getContratos();
+          const filteredConts = allConts.filter(c => escuelasAsignadasRbd.includes(c.rbd));
+          setContratos(filteredConts);
+
+          const allAlts = await api.getAlertas();
+          const filteredAlts = allAlts.filter(a => escuelasAsignadasRbd.includes(a.rbd));
+          setAlertas(filteredAlts);
+
+          setImportLogsAsis(`✅ Éxito: Se procesaron ${parsed.contratos.length} registros (${isAsistente ? 'Asistentes' : 'Docentes'}) para tus escuelas supervisadas.`);
+        } catch (err: any) {
+          setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
         }
-
-        for (const f of parsed.funcionarios) {
-          await api.upsertFuncionario(f);
-        }
-        for (const c of parsed.contratos) {
-          const cFins = parsed.financiamientos.filter(f => f.contrato_id === c.id);
-          await api.upsertContratoCompleto(c, cFins);
-        }
-        for (const a of parsed.alertas) {
-          await api.crearAlerta(a);
-        }
-
-        const allConts = await api.getContratos();
-        const filteredConts = allConts.filter(c => escuelasAsignadasRbd.includes(c.rbd));
-        setContratos(filteredConts);
-
-        const allAlts = await api.getAlertas();
-        const filteredAlts = allAlts.filter(a => escuelasAsignadasRbd.includes(a.rbd));
-        setAlertas(filteredAlts);
-
-        setImportLogsAsis(`✅ Éxito: Se procesaron ${parsed.contratos.length} asistentes para tus escuelas supervisadas.`);
-      } catch (err: any) {
-        setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
-      }
+      };
+      mainReader.readAsText(file, encoding);
     };
-    reader.readAsText(file, 'ISO-8859-1');
+    tempReader.readAsText(file.slice(0, 1000), 'UTF-8');
   };
 
   const filteredEsts = establecimientos.filter(e => 

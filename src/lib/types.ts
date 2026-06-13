@@ -25,6 +25,8 @@ export interface Funcionario {
   calidad_juridica_p01?: 'Planta' | 'Contrata';
   escalafon_p01?: 'Directivo' | 'Profesional' | 'Técnico' | 'Administrativo' | 'Auxiliar';
   grado_eus?: number;
+  genero?: string;
+  fecha_nacimiento?: string;
 }
 
 export interface Contrato {

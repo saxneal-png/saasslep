@@ -92,6 +92,10 @@ export function parsearNominaCsv(
       const docRun = row.DOC_RUN || row.doc_run;
       const docDv = row.DOC_DV || row.doc_dv || '';
       runRaw = `${docRun}-${docDv}`;
+    } else if (!runRaw && (row.ASISTENTE_RUN || row.asistente_run)) {
+      const asisRun = row.ASISTENTE_RUN || row.asistente_run;
+      const asisDv = row.ASISTENTE_DV || row.asistente_dv || '';
+      runRaw = `${asisRun}-${asisDv}`;
     }
 
     if (!runRaw) return;
@@ -105,6 +109,11 @@ export function parsearNominaCsv(
       const nom = (row.DOC_NOMBRE || row.doc_nombre || '').trim();
       const pat = (row.DOC_PATERNO || row.doc_paterno || '').trim();
       const mat = (row.DOC_MATERNO || row.doc_materno || '').trim();
+      nombre = `${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim();
+    } else if (row.ASISTENTE_NOMBRE || row.asistente_nombre) {
+      const nom = (row.ASISTENTE_NOMBRE || row.asistente_nombre || '').trim();
+      const pat = (row.ASISTENTE_PATERNO || row.asistente_paterno || '').trim();
+      const mat = (row.ASISTENTE_MATERNO || row.asistente_materno || '').trim();
       nombre = `${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim();
     }
 
@@ -127,13 +136,23 @@ export function parsearNominaCsv(
       calidad_juridica = 'A contrata';
     }
 
-    const funcion_principal = (row.Funcion || row.funcion || row.FUNCION_PRINCIPAL || row.funcion_principal || 'Auxiliar de Servicios').trim();
+    const funcion_principal = (
+      row.Funcion || 
+      row.funcion || 
+      row.FUNCION_PRINCIPAL || 
+      row.funcion_principal || 
+      row.FUNCION_UNO || 
+      row.funcion_uno || 
+      'Auxiliar de Servicios'
+    ).trim();
+
     let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
     if (forceEstamento) {
       estamento = forceEstamento === 'Docente' ? 'Docente' : 'Asistente de la Educación';
     } else {
+      const isAsisHeader = row.ASISTENTE_RUN !== undefined || row.asistente_run !== undefined;
       const rawEst = String(row.Estamento || row.estamento || '').trim().toLowerCase();
-      if (rawEst.includes('docente') || rawEst.includes('profesor') || funcion_principal.toLowerCase().includes('docente') || funcion_principal.toLowerCase().includes('profesor')) {
+      if (!isAsisHeader && (rawEst.includes('docente') || rawEst.includes('profesor') || funcion_principal.toLowerCase().includes('docente') || funcion_principal.toLowerCase().includes('profesor'))) {
         estamento = 'Docente';
       }
     }
@@ -144,7 +163,7 @@ export function parsearNominaCsv(
     const dias_licencia_medica = row.dias_licencia_medica || row.DiasLicenciaMedica || row.DIAS_LICENCIA_MEDICA ? parseInt(row.dias_licencia_medica || row.DiasLicenciaMedica || row.DIAS_LICENCIA_MEDICA, 10) : undefined;
     const inasistencias = row.inasistencias || row.Inasistencias || row.INASISTENCIAS ? parseInt(row.inasistencias || row.Inasistencias || row.INASISTENCIAS, 10) : undefined;
     
-    let legislacion_laboral: any = undefined;
+    let legislacion_laboral: any = estamento === 'Docente' ? 'Estatuto docente' : 'Asistentes de la educación';
     const legRaw = String(row.legislacion_laboral || row.LegislacionLaboral || row.LEGISLACION_LABORAL || '').trim().toLowerCase();
     if (legRaw) {
       if (legRaw.includes('docente')) {
@@ -171,15 +190,40 @@ export function parsearNominaCsv(
     // Create unique ID for contract
     const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
 
+    // Discard values map to null logic
+    const cleanDiscardValue = (val: any): string | undefined => {
+      if (val === undefined || val === null) return undefined;
+      const clean = String(val).trim();
+      const lower = clean.toLowerCase();
+      if (lower === 'sin dato / agregar' || lower === 'no tiene' || lower === '--' || lower === '-') return undefined;
+      return clean;
+    };
+
     // Add unique Funcionario with estamento
-    const titulo = String(row.Titulo || row.titulo || row.TITULO || row.DOC_TITULO || row.doc_titulo || row.TituloProfesional || row.titulo_profesional || '').trim();
+    const titulo = cleanDiscardValue(
+      row.Titulo || 
+      row.titulo || 
+      row.TITULO || 
+      row.DOC_TITULO || 
+      row.doc_titulo || 
+      row.ASISTENTE_TITULO || 
+      row.asistente_titulo || 
+      row.TituloProfesional || 
+      row.titulo_profesional
+    );
+
+    const genero = cleanDiscardValue(row.ASISTENTE_GENERO || row.asistente_genero || row.Genero || row.genero);
+    const fecha_nacimiento = cleanDiscardValue(row.FECHA_NACIMIENTO || row.fecha_nacimiento || row.FechaNacimiento || row.fecha_nac);
+
     if (!funcionarios.some(f => f.run === run)) {
       funcionarios.push({ 
         run, 
         nombre, 
-        estamento: estamento === 'Docente' ? 'Docente' : 'Asistente de la Educación',
+        estamento,
         cargo: funcion_principal,
-        titulo: titulo || undefined
+        titulo: titulo || undefined,
+        genero,
+        fecha_nacimiento
       });
     }
 
@@ -236,9 +280,6 @@ export function parsearNominaCsv(
     // Dynamic classroom load assignment auto-precarga
     if (horasAula > 0 && (sector1 || subSector1)) {
       // Direct push to local in-memory DB or mocked allocations lists returned to page.tsx
-      // We push a mock classroom assignment to ensure page uploader saves it.
-      // We will also structure it in a way that Page saves them.
-      // (Page parses and calls api.upsertContratoCompleto. We can add a custom array to ParseResult)
     }
 
     // 1. Alerta de Descalce Horario (Suma de subvenciones no coincide con horas del contrato)
@@ -258,11 +299,6 @@ export function parsearNominaCsv(
 
     // 2. Control de Proporción Ley 20.903 (Semáforo Normativo)
     if (estamento === 'Docente' && horas_totales > 0 && horasAula > 0) {
-      // Look up establishment IVM. Since dbLocal might not be populated or is loaded via page,
-      // we can do a default check or try to import dbLocal.
-      // We'll calculate standard 65/35 limit first, and 60/40 if we estimate special IVM.
-      // For precision, we estimate: if Horas Aula exceeds 65% (or 60% if ivm > 80)
-      // We default to standard 65% unless context establishes otherwise.
       const pctLectivo = (horasAula / horas_totales) * 100;
       const maxStandardPct = 65; // Standard 65% classroom hours
       const maxSpecialPct = 60;  // Special 60% classroom hours
