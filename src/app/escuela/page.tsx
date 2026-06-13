@@ -265,6 +265,18 @@ export default function EscuelaDashboard() {
       dbLocal.contratos = [...dbLocal.contratos, newCont];
     }
 
+    // Mark matching pending tasks as resolved in database
+    const matchingTask = dbLocal.tareasReemplazo.find(t => 
+      t.rbd === selectedRbd && 
+      t.estado === 'Pendiente' && 
+      (match.contrato_titular_id.includes(t.funcionario_titular_run) || t.funcionario_titular_run === match.contrato_titular_id || 
+       dbLocal.contratos.find(c => c.id === match.contrato_titular_id)?.funcionario_run === t.funcionario_titular_run)
+    );
+
+    if (matchingTask) {
+      await api.resolverTareaReemplazo(matchingTask.id, cleanRun);
+    }
+
     // Refresh UI
     setValidatingReemplazoId(null);
     setFechaIngresoReal('');
@@ -1327,6 +1339,24 @@ export default function EscuelaDashboard() {
                               <p className="text-[10px] text-slate-500 mt-0.5">RUN: {t.funcionario_titular_run} | Horas a Cubrir: <span className="font-bold text-slep-blue">{t.horas_a_cubrir} hrs</span></p>
                             </div>
                             {(() => {
+                              // Check if there is a validated replacement already accepted for this license
+                              const reempMatch = reemplazosList.find(r => 
+                                r.rbd === selectedRbd && 
+                                r.validado_por_director && 
+                                (r.contrato_titular_id.includes(t.funcionario_titular_run) || 
+                                 r.contrato_titular_id === t.id ||
+                                 dbLocal.contratos.find(c => c.id === r.contrato_titular_id)?.funcionario_run === t.funcionario_titular_run)
+                              );
+
+                              if (reempMatch) {
+                                return (
+                                  <div className="bg-emerald-100 text-emerald-800 border border-emerald-300 rounded px-3 py-1.5 font-bold flex items-center gap-1.5">
+                                    <span>✓ Cubierto:</span>
+                                    <span>{reempMatch.reemplazo_nombre} (Ingreso Confirmado)</span>
+                                  </div>
+                                );
+                              }
+
                               const propContrato = contratos.find(c => 
                                 c.estado === 'Pendiente_Aprobacion' && 
                                 (c.vinculo_titular_id?.includes(t.funcionario_titular_run) || c.vinculo_titular_id === t.funcionario_titular_run)
