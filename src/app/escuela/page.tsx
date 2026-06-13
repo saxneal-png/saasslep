@@ -94,6 +94,10 @@ export default function EscuelaDashboard() {
   const [fechaIngresoReal, setFechaIngresoReal] = useState('');
 
   // View/Edit Modal States
+  const [showDocenteActionsDropdown, setShowDocenteActionsDropdown] = useState(false);
+  const [showAsistenteActionsDropdown, setShowAsistenteActionsDropdown] = useState(false);
+  const [openAddFuncionarioModal, setOpenAddFuncionarioModal] = useState<EstamentoType | null>(null);
+  const [openCreateCargoModal, setOpenCreateCargoModal] = useState(false);
   const [editingFuncionario, setEditingFuncionario] = useState<Funcionario | null>(null);
   const [editFuncNombre, setEditFuncNombre] = useState('');
   const [editFuncCargo, setEditFuncCargo] = useState('');
@@ -1331,14 +1335,25 @@ export default function EscuelaDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Main Area based on active tab */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-3 space-y-6">
             
             {activeTab === 'docentes' && (
               <div className="space-y-6 w-full">
                 
                 {/* Tareas de Reemplazo Pendientes Panel */}
                 {(() => {
-                  const pendingTasks = tareasReemplazo.filter(t => t.rbd === selectedRbd && t.estado === 'Pendiente');
+                  const pendingTasks = tareasReemplazo.filter(t => {
+                    if (t.rbd !== selectedRbd || t.estado !== 'Pendiente') return false;
+                    // Check if there is already a validated replacement for this license
+                    const hasValidatedReemp = reemplazosList.some(r => 
+                      r.rbd === selectedRbd && 
+                      r.validado_por_director && 
+                      (r.contrato_titular_id.includes(t.funcionario_titular_run) || 
+                       r.contrato_titular_id === t.id ||
+                       dbLocal.contratos.find(c => c.id === r.contrato_titular_id)?.funcionario_run === t.funcionario_titular_run)
+                    );
+                    return !hasValidatedReemp;
+                  });
                   if (pendingTasks.length === 0) return null;
                   return (
                     <div className="bg-red-50/50 border border-slep-coral/30 rounded-xl p-5 animate-fadeIn">
@@ -1528,14 +1543,48 @@ export default function EscuelaDashboard() {
                     <h3 className="text-base font-bold text-slate-800">Docentes del Establecimiento</h3>
                     <p className="text-xs text-slate-500 mt-1">Gestión individual e inmediata de la dotación docente.</p>
                   </div>
-                  {selectedDocentes.length > 0 && (
-                    <button 
-                      onClick={handleBulkDeleteDocentes}
-                      className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5"
+                  <div className="flex items-center gap-2 relative">
+                    {selectedDocentes.length > 0 && (
+                      <button 
+                        onClick={handleBulkDeleteDocentes}
+                        className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5 cursor-pointer"
+                      >
+                        🗑️ Desvincular Seleccionados ({selectedDocentes.length})
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowDocenteActionsDropdown(!showDocenteActionsDropdown)}
+                      className="bg-slep-blue hover:bg-slep-blue-hover text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5 cursor-pointer"
                     >
-                      🗑️ Desvincular Seleccionados ({selectedDocentes.length})
+                      ➕ Agregar / Asignar ▾
                     </button>
-                  )}
+                    {showDocenteActionsDropdown && (
+                      <div className="absolute right-0 top-full mt-1 w-60 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-xs text-slate-700">
+                        <button
+                          onClick={() => {
+                            setShowDocenteActionsDropdown(false);
+                            setNewEstamento('Docente');
+                            setNewCargo('DOCENTE DE AULA');
+                            setOpenAddFuncionarioModal('Docente');
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-slate-50 font-semibold flex items-center gap-2 cursor-pointer"
+                        >
+                          <span>👤</span> Agregar Docente Individual
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowDocenteActionsDropdown(false);
+                            setCustomCargoDocente('');
+                            setCustomCargoNombre('');
+                            setOpenCreateCargoModal(true);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-slate-50 font-semibold flex items-center gap-2 cursor-pointer"
+                        >
+                          <span>🎖️</span> Crear Cargo Especial Asignado
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="mt-4 border border-slate-100 rounded-lg overflow-hidden text-xs">
@@ -1670,36 +1719,47 @@ export default function EscuelaDashboard() {
 
                                 {hasCont && hasCont.estado === 'Licencia Médica' && (
                                   <div className="mt-2 bg-slate-50 p-2 rounded border border-slate-200 inline-block text-left w-full max-w-xs">
-                                    {contratos.some(c => c.vinculo_titular_id === hasCont.id) ? (
-                                      (() => {
-                                        const rpl = contratos.find(c => c.vinculo_titular_id === hasCont.id);
-                                        const rplFunc = rpl ? funcionarios.find(func => func.run === rpl.funcionario_run) : null;
+                                    {(() => {
+                                      const matchedReemp = reemplazosList.find(r => 
+                                        r.rbd === selectedRbd && 
+                                        r.validado_por_director && 
+                                        (r.contrato_titular_id.includes(f.run) || r.contrato_titular_id === hasCont.id)
+                                      );
+                                      const hasReempContract = contratos.find(c => c.vinculo_titular_id === hasCont.id);
+                                      const hasReplacement = !!matchedReemp || !!hasReempContract;
+
+                                      if (hasReplacement) {
+                                        const rplFunc = hasReempContract ? funcionarios.find(func => func.run === hasReempContract.funcionario_run) : null;
+                                        const rplName = rplFunc ? rplFunc.nombre : (matchedReemp ? matchedReemp.reemplazo_nombre : hasReempContract?.funcionario_run || 'Asignado');
+                                        const rplRun = hasReempContract ? hasReempContract.funcionario_run : (matchedReemp ? matchedReemp.reemplazo_run : '');
                                         return (
                                           <div className="text-slate-600 font-medium text-[10px] text-center">
-                                            👤 Reemplazo: <strong>{rplFunc ? rplFunc.nombre : rpl?.funcionario_run}</strong> ({rpl?.funcionario_run})
+                                            👤 Reemplazo: <strong>{rplName}</strong> ({rplRun})
                                           </div>
                                         );
-                                      })()
-                                    ) : (
-                                      <div className="flex items-center justify-between gap-1.5">
-                                        <input 
-                                          type="text" 
-                                          placeholder="RUT Reemplazo (Ej: 11.222.333-4)"
-                                          className="p-1 border rounded bg-white w-2/3 text-[10px]"
-                                          value={reemplazoRunMap[hasCont.id] || ''}
-                                          onChange={(e) => setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: e.target.value})}
-                                        />
-                                        <button 
-                                          onClick={() => {
-                                            handleAddReemplazo(hasCont, reemplazoRunMap[hasCont.id] || '');
-                                            setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: ''});
-                                          }}
-                                          className="bg-slep-blue text-white px-2 py-1 rounded font-bold hover:bg-slep-blue-hover text-[10px]"
-                                        >
-                                          Asignar
-                                        </button>
-                                      </div>
-                                    )}
+                                      } else {
+                                        return (
+                                          <div className="flex items-center justify-between gap-1.5">
+                                            <input 
+                                              type="text" 
+                                              placeholder="RUT Reemplazo (Ej: 11.222.333-4)"
+                                              className="p-1 border rounded bg-white w-2/3 text-[10px]"
+                                              value={reemplazoRunMap[hasCont.id] || ''}
+                                              onChange={(e) => setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: e.target.value})}
+                                            />
+                                            <button 
+                                              onClick={() => {
+                                                handleAddReemplazo(hasCont, reemplazoRunMap[hasCont.id] || '');
+                                                setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: ''});
+                                              }}
+                                              className="bg-slep-blue text-white px-2 py-1 rounded font-bold hover:bg-slep-blue-hover text-[10px]"
+                                            >
+                                              Asignar
+                                            </button>
+                                          </div>
+                                        );
+                                      }
+                                    })()}
                                   </div>
                                 )}
                               </div>
@@ -1709,6 +1769,41 @@ export default function EscuelaDashboard() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              </div>
+
+              {/* Ley 20.903 compliance alerts */}
+              <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+                <h3 className="text-sm font-bold text-slate-800">Semáforo de Ley 20.903</h3>
+                <p className="text-xs text-slate-500 mt-1">Monitoreo automático de la proporción de horas lectivas de aula por contrato.</p>
+                
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  {contratos
+                    .filter(c => c.rbd === selectedRbd && funcionarios.find(func => func.run === c.funcionario_run)?.estamento === 'Docente')
+                    .map(c => {
+                      const f = funcionarios.find(func => func.run === c.funcionario_run);
+                      const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
+                      const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs, cargosPersonalizados) : null;
+                      
+                      if (!metrics) return null;
+                      const isOk = metrics.cumpleLey20903;
+                      
+                      return (
+                        <div key={c.id} className={`p-2.5 rounded border flex justify-between items-center ${
+                          isOk ? 'bg-emerald-50 border-emerald-200 text-emerald-950' : 'bg-red-50 border-red-200 text-red-950'
+                        }`}>
+                          <div>
+                            <span className="font-bold">{f ? f.nombre : c.funcionario_run}</span>
+                            <p className="text-[10px] text-slate-500">Lectivas: {metrics.horasLectivasAsignadas} / {metrics.horasLectivasMaximas} hrs ({c.horas_totales} hrs totales)</p>
+                          </div>
+                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                            isOk ? 'bg-emerald-100 text-emerald-800' : 'bg-slep-coral/20 text-red-800'
+                          }`}>
+                            {isOk ? 'OK' : 'Excedido'}
+                          </span>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             </div>
@@ -1721,14 +1816,48 @@ export default function EscuelaDashboard() {
                     <h3 className="text-base font-bold text-slate-800">Asistentes de la Educación</h3>
                     <p className="text-xs text-slate-500 mt-1">Gestión individual de profesionales técnicos, psicólogos, administrativos y auxiliares.</p>
                   </div>
-                  {selectedAsistentes.length > 0 && (
-                    <button 
-                      onClick={handleBulkDeleteAsistentes}
-                      className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5"
+                  <div className="flex items-center gap-2 relative">
+                    {selectedAsistentes.length > 0 && (
+                      <button 
+                        onClick={handleBulkDeleteAsistentes}
+                        className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5 cursor-pointer"
+                      >
+                        🗑️ Desvincular Seleccionados ({selectedAsistentes.length})
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowAsistenteActionsDropdown(!showAsistenteActionsDropdown)}
+                      className="bg-slep-blue hover:bg-slep-blue-hover text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5 cursor-pointer"
                     >
-                      🗑️ Desvincular Seleccionados ({selectedAsistentes.length})
+                      ➕ Agregar / Asignar ▾
                     </button>
-                  )}
+                    {showAsistenteActionsDropdown && (
+                      <div className="absolute right-0 top-full mt-1 w-60 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-xs text-slate-700">
+                        <button
+                          onClick={() => {
+                            setShowAsistenteActionsDropdown(false);
+                            setNewEstamento('Asistente de la Educación');
+                            setNewCargo('Auxiliar de Servicios');
+                            setOpenAddFuncionarioModal('Asistente de la Educación');
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-slate-50 font-semibold flex items-center gap-2 cursor-pointer"
+                        >
+                          <span>👤</span> Agregar Asistente Individual
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowAsistenteActionsDropdown(false);
+                            setCustomCargoDocente('');
+                            setCustomCargoNombre('');
+                            setOpenCreateCargoModal(true);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-slate-50 font-semibold flex items-center gap-2 cursor-pointer"
+                        >
+                          <span>🎖️</span> Crear Cargo Especial Asignado
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-4 border border-slate-100 rounded-lg overflow-hidden text-xs">
@@ -1832,36 +1961,47 @@ export default function EscuelaDashboard() {
 
                                 {hasCont && hasCont.estado === 'Licencia Médica' && (
                                   <div className="mt-2 bg-slate-50 p-2 rounded border border-slate-200 inline-block text-left w-full max-w-xs">
-                                    {contratos.some(c => c.vinculo_titular_id === hasCont.id) ? (
-                                      (() => {
-                                        const rpl = contratos.find(c => c.vinculo_titular_id === hasCont.id);
-                                        const rplFunc = rpl ? funcionarios.find(func => func.run === rpl.funcionario_run) : null;
+                                    {(() => {
+                                      const matchedReemp = reemplazosList.find(r => 
+                                        r.rbd === selectedRbd && 
+                                        r.validado_por_director && 
+                                        (r.contrato_titular_id.includes(f.run) || r.contrato_titular_id === hasCont.id)
+                                      );
+                                      const hasReempContract = contratos.find(c => c.vinculo_titular_id === hasCont.id);
+                                      const hasReplacement = !!matchedReemp || !!hasReempContract;
+
+                                      if (hasReplacement) {
+                                        const rplFunc = hasReempContract ? funcionarios.find(func => func.run === hasReempContract.funcionario_run) : null;
+                                        const rplName = rplFunc ? rplFunc.nombre : (matchedReemp ? matchedReemp.reemplazo_nombre : hasReempContract?.funcionario_run || 'Asignado');
+                                        const rplRun = hasReempContract ? hasReempContract.funcionario_run : (matchedReemp ? matchedReemp.reemplazo_run : '');
                                         return (
                                           <div className="text-slate-600 font-medium text-[10px] text-center">
-                                            👤 Reemplazo: <strong>{rplFunc ? rplFunc.nombre : rpl?.funcionario_run}</strong> ({rpl?.funcionario_run})
+                                            👤 Reemplazo: <strong>{rplName}</strong> ({rplRun})
                                           </div>
                                         );
-                                      })()
-                                    ) : (
-                                      <div className="flex items-center justify-between gap-1.5">
-                                        <input 
-                                          type="text" 
-                                          placeholder="RUT Reemplazo (Ej: 11.222.333-4)"
-                                          className="p-1 border rounded bg-white w-2/3 text-[10px]"
-                                          value={reemplazoRunMap[hasCont.id] || ''}
-                                          onChange={(e) => setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: e.target.value})}
-                                        />
-                                        <button 
-                                          onClick={() => {
-                                            handleAddReemplazo(hasCont, reemplazoRunMap[hasCont.id] || '');
-                                            setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: ''});
-                                          }}
-                                          className="bg-slep-blue text-white px-2 py-1 rounded font-bold hover:bg-slep-blue-hover text-[10px]"
-                                        >
-                                          Asignar
-                                        </button>
-                                      </div>
-                                    )}
+                                      } else {
+                                        return (
+                                          <div className="flex items-center justify-between gap-1.5">
+                                            <input 
+                                              type="text" 
+                                              placeholder="RUT Reemplazo (Ej: 11.222.333-4)"
+                                              className="p-1 border rounded bg-white w-2/3 text-[10px]"
+                                              value={reemplazoRunMap[hasCont.id] || ''}
+                                              onChange={(e) => setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: e.target.value})}
+                                            />
+                                            <button 
+                                              onClick={() => {
+                                                handleAddReemplazo(hasCont, reemplazoRunMap[hasCont.id] || '');
+                                                setReemplazoRunMap({...reemplazoRunMap, [hasCont.id]: ''});
+                                              }}
+                                              className="bg-slep-blue text-white px-2 py-1 rounded font-bold hover:bg-slep-blue-hover text-[10px]"
+                                            >
+                                              Asignar
+                                            </button>
+                                          </div>
+                                        );
+                                      }
+                                    })()}
                                   </div>
                                 )}
                               </div>
@@ -2637,50 +2777,70 @@ export default function EscuelaDashboard() {
 
           </div>
 
-          {/* Right Column: Creation forms (Docente/Asistente) & Custom roles list */}
-          <div className="space-y-6">
-            
-            {/* Form to create individual Staff profile (Tab 1 / Tab 2 context) */}
-            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                <span>➕</span> Agregar Funcionario Individual
-              </h3>
-              
-              <form onSubmit={handleCreateFuncionario} className="mt-4 space-y-3 text-xs">
+        {/* Modals for individual adds and cargo assignments */}
+        {openAddFuncionarioModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
                 <div>
-                  <label className="block text-slate-500 font-bold mb-1">RUN (Cédula de Identidad)</label>
+                  <h3 className="text-base font-bold text-slate-800">➕ Agregar Funcionario Individual</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Estamento: <span className="font-bold text-slep-blue">{openAddFuncionarioModal}</span></p>
+                </div>
+                <button 
+                  onClick={() => setOpenAddFuncionarioModal(null)}
+                  className="text-slate-400 hover:text-slate-600 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-all cursor-pointer font-bold w-8 h-8 flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Form */}
+              <form 
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  await handleCreateFuncionario(e);
+                  setOpenAddFuncionarioModal(null);
+                }} 
+                className="p-6 space-y-4 text-xs"
+              >
+                <div>
+                  <label className="block text-slate-655 font-bold mb-1 uppercase tracking-wider text-[10px]">RUN (Cédula de Identidad)</label>
                   <input 
                     type="text" 
                     placeholder="12.345.678-9" 
-                    className="w-full p-2 border rounded"
+                    className="w-full p-2.5 border rounded bg-white text-slate-800 font-mono text-sm"
                     value={newRun}
                     onChange={(e) => setNewRun(e.target.value)}
+                    required
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-500 font-bold mb-1">Nombre Completo</label>
+                  <label className="block text-slate-655 font-bold mb-1 uppercase tracking-wider text-[10px]">Nombre Completo</label>
                   <input 
                     type="text" 
                     placeholder="Ej: María José Riquelme" 
-                    className="w-full p-2 border rounded"
+                    className="w-full p-2.5 border rounded bg-white text-slate-800 text-sm"
                     value={newNombre}
                     onChange={(e) => setNewNombre(e.target.value)}
+                    required
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-500 font-bold mb-1">Correo Electrónico</label>
+                  <label className="block text-slate-655 font-bold mb-1 uppercase tracking-wider text-[10px]">Correo Electrónico</label>
                   <input 
                     type="email" 
                     placeholder="correo@slep.cl" 
-                    className="w-full p-2 border rounded"
+                    className="w-full p-2.5 border rounded bg-white text-slate-800 text-sm"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
+                    required
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-500 font-bold mb-1">Estamento</label>
+                  <label className="block text-slate-655 font-bold mb-1 uppercase tracking-wider text-[10px]">Estamento</label>
                   <select 
-                    className="w-full p-2 border rounded bg-white"
+                    className="w-full p-2.5 border rounded bg-white text-slate-800 text-sm"
                     value={newEstamento}
                     onChange={(e) => {
                       setNewEstamento(e.target.value as any);
@@ -2693,11 +2853,11 @@ export default function EscuelaDashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-500 font-bold mb-1">Función / Cargo</label>
+                  <label className="block text-slate-655 font-bold mb-1 uppercase tracking-wider text-[10px]">Función / Cargo</label>
                   {newEstamento === 'Docente' ? (
                     <div className="space-y-2">
                       <select 
-                        className="w-full p-2 border rounded bg-white"
+                        className="w-full p-2.5 border rounded bg-white text-slate-800 text-sm"
                         value={CARGOS_DOCENTES_LIST.includes(newCargo as any) ? newCargo : 'OTRO'}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -2717,7 +2877,7 @@ export default function EscuelaDashboard() {
                         <input 
                           type="text" 
                           placeholder="Especifique otro cargo docente..." 
-                          className="w-full p-2 border rounded"
+                          className="w-full p-2.5 border rounded bg-white text-slate-800 text-sm"
                           value={newCargo}
                           onChange={(e) => setNewCargo(e.target.value)}
                         />
@@ -2727,80 +2887,154 @@ export default function EscuelaDashboard() {
                     <input 
                       type="text" 
                       placeholder="Ej: Auxiliar de Servicios, Psicóloga, etc." 
-                      className="w-full p-2 border rounded"
+                      className="w-full p-2.5 border rounded bg-white text-slate-800 text-sm"
                       value={newCargo}
                       onChange={(e) => setNewCargo(e.target.value)}
                     />
                   )}
                 </div>
 
-                <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2.5 rounded shadow">
-                  Agregar Funcionario
-                </button>
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    type="button"
+                    onClick={() => setOpenAddFuncionarioModal(null)}
+                    className="flex-1 bg-white border border-slate-200 text-slate-650 hover:bg-slate-50 font-bold py-2.5 rounded shadow cursor-pointer text-xs"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-1 bg-slep-blue text-white font-bold py-2.5 rounded shadow hover:bg-slep-blue-hover cursor-pointer text-xs"
+                  >
+                    Agregar Funcionario
+                  </button>
+                </div>
               </form>
             </div>
-
-            {/* Custom Roles list */}
-            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-              <h3 className="text-sm font-bold text-slate-800">Cargos Especiales Asignados</h3>
-              <p className="text-xs text-slate-500 mt-1">Lista de roles escolares financiados por subvenciones.</p>
-
-              <div className="mt-4 space-y-2 max-h-[200px] overflow-y-auto pr-1 text-xs">
-                {cargosPersonalizados.map(c => {
-                  const f = funcionarios.find(func => func.run === c.funcionario_run);
-                  return (
-                    <div key={c.id} className="p-3 bg-slate-50 border rounded flex justify-between items-center">
-                      <div>
-                        <p className="font-bold text-slate-800">{c.nombre}</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">
-                          {f ? f.nombre : c.funcionario_run} • <strong>{c.horas} hrs ({c.origen_fondo})</strong>
-                        </p>
-                      </div>
-                      <button onClick={() => handleRemoveCargo(c.id)} className="text-red-500 hover:text-red-700 font-bold">
-                        Eliminar
-                      </button>
-                    </div>
-                  );
-                })}
-                {cargosPersonalizados.length === 0 && (
-                  <p className="text-center py-4 text-slate-400 italic">No hay cargos personalizados creados.</p>
-                )}
-              </div>
-            </div>
-
-            {/* Ley 20.903 compliance alerts */}
-            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-              <h3 className="text-sm font-bold text-slate-800">Semáforo de Ley 20.903</h3>
-              
-              <div className="mt-4 space-y-2 text-xs">
-                {contratos.map(c => {
-                  const f = funcionarios.find(func => func.run === c.funcionario_run);
-                  const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
-                  const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs, cargosPersonalizados) : null;
-                  
-                  if (!metrics) return null;
-                  const isOk = metrics.cumpleLey20903;
-                  
-                  return (
-                    <div key={c.id} className={`p-2.5 rounded border flex justify-between items-center ${
-                      isOk ? 'bg-emerald-50 border-emerald-200 text-emerald-950' : 'bg-red-50 border-red-200 text-red-950'
-                    }`}>
-                      <div>
-                        <span className="font-bold">{f ? f.nombre : c.funcionario_run}</span>
-                        <p className="text-[10px] text-slate-500">Lectivas: {metrics.horasLectivasAsignadas} / {metrics.horasLectivasMaximas} hrs</p>
-                      </div>
-                      <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                        isOk ? 'bg-emerald-100 text-emerald-800' : 'bg-slep-coral/20 text-red-800'
-                      }`}>
-                        {isOk ? 'OK' : 'Excedido'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
           </div>
+        )}
+
+        {openCreateCargoModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[90vh] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">🎖️ Cargos Especiales Asignados</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Asigne roles financiados por subvenciones o visualice la lista actual.</p>
+                </div>
+                <button 
+                  onClick={() => setOpenCreateCargoModal(false)}
+                  className="text-slate-400 hover:text-slate-600 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-all cursor-pointer font-bold w-8 h-8 flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6 text-xs">
+                {/* Form */}
+                <form 
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    await handleCreateCargoPersonalizado(e);
+                  }} 
+                  className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs"
+                >
+                  <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Crear nuevo Cargo Especial</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Nombre del Cargo</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: Encargado Convivencia" 
+                        className="w-full p-2 border rounded bg-white text-slate-800 text-xs"
+                        value={customCargoNombre}
+                        onChange={(e) => setCustomCargoNombre(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Asociar Subvención</label>
+                      <select
+                        className="w-full p-2 bg-white border rounded text-slate-800 text-xs"
+                        value={customCargoFondo}
+                        onChange={(e) => setCustomCargoFondo(e.target.value as any)}
+                      >
+                        <option value="SEP">SEP (Ley SEP)</option>
+                        <option value="PIE">PIE (Programa Integración)</option>
+                        <option value="Subvención Regular">Subvención Regular</option>
+                        <option value="Pro-retención">Pro-retención</option>
+                        <option value="Reforzamiento">Reforzamiento</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Funcionario Asignado</label>
+                      <select
+                        className="w-full p-2 bg-white border rounded text-slate-800 text-xs"
+                        value={customCargoDocente}
+                        onChange={(e) => setCustomCargoDocente(e.target.value)}
+                        required
+                      >
+                        <option value="">-- Seleccionar Funcionario --</option>
+                        {contratos.map(c => {
+                          const f = funcionarios.find(func => func.run === c.funcionario_run);
+                          return <option key={c.id} value={c.funcionario_run}>{f ? f.nombre : c.funcionario_run} ({f?.estamento})</option>;
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-500 mb-1">Horas Cargo</label>
+                      <input 
+                        type="number"
+                        placeholder="10"
+                        className="w-full p-2 border rounded bg-white text-slate-800 text-xs font-bold"
+                        value={customCargoHoras}
+                        onChange={(e) => setCustomCargoHoras(parseFloat(e.target.value) || 0)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    type="submit" 
+                    className="w-full bg-slep-blue hover:bg-slep-blue-hover text-white font-bold py-2 rounded shadow transition-all cursor-pointer text-xs"
+                  >
+                    Asignar Cargo Especial
+                  </button>
+                </form>
+
+                {/* List of custom roles */}
+                <div>
+                  <h4 className="font-bold text-slate-800 mb-2 text-xs uppercase tracking-wider">Cargos Especiales Asignados</h4>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                    {cargosPersonalizados.map(c => {
+                      const f = funcionarios.find(func => func.run === c.funcionario_run);
+                      return (
+                        <div key={c.id} className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center text-xs">
+                          <div>
+                            <p className="font-bold text-slate-800 text-xs">{c.nombre}</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              {f ? f.nombre : c.funcionario_run} • <strong>{c.horas} hrs ({c.origen_fondo})</strong>
+                            </p>
+                          </div>
+                          <button 
+                            onClick={() => handleRemoveCargo(c.id)} 
+                            className="text-red-500 hover:text-red-700 font-bold cursor-pointer text-xs"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      );
+                    })}
+                    {cargosPersonalizados.length === 0 && (
+                      <p className="text-center py-6 text-slate-400 italic bg-slate-50 border rounded-lg text-xs">No hay cargos especiales asignados creados.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         </div>
 
