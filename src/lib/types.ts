@@ -223,4 +223,8 @@ export interface ReemplazoDetalle {
   horas: number;
   fecha_inicio: string;
   fecha_termino: string;
+  validado_por_director?: boolean;
+  fecha_ingreso_real?: string;
+  origen_fondo?: OrigenFondo;
+  calidad_juridica?: CalidadJuridica;
 }

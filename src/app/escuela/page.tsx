@@ -20,7 +20,9 @@ import {
   PlanEstudioNorm,
   FinanciamientoContrato,
   TareaReemplazo,
-  CARGOS_DOCENTES_LIST
+  CARGOS_DOCENTES_LIST,
+  ReemplazoDetalle,
+  CalidadJuridica
 } from '@/lib/types';
 
 import { normalizarRun } from '@/lib/csvParser';
@@ -87,6 +89,9 @@ export default function EscuelaDashboard() {
 
   const [itineranciaAlerta, setItineranciaAlerta] = useState<string | null>(null);
   const [reemplazoRunMap, setReemplazoRunMap] = useState<{[key: string]: string}>({});
+  const [reemplazosList, setReemplazosList] = useState<ReemplazoDetalle[]>([]);
+  const [validatingReemplazoId, setValidatingReemplazoId] = useState<string | null>(null);
+  const [fechaIngresoReal, setFechaIngresoReal] = useState('');
 
   // View/Edit Modal States
   const [editingFuncionario, setEditingFuncionario] = useState<Funcionario | null>(null);
@@ -158,6 +163,9 @@ export default function EscuelaDashboard() {
     const tasks = await api.getTareasReemplazo();
     setTareasReemplazo(tasks);
 
+    const reemps = await api.getReemplazosLicencias();
+    setReemplazosList(reemps);
+
     if (dynCursos.length > 0) {
       setSelectedCursoForAsig(dynCursos[0].nombre);
       setSelectedCursoPlan(dynCursos[0].nombre);
@@ -210,6 +218,58 @@ export default function EscuelaDashboard() {
     // 3. Reload school data
     await loadAllSchoolData();
     alert('✅ Propuesta de reemplazo enviada con éxito. Pendiente de aprobación por RR.HH. Central.');
+  };
+
+  const handleConfirmIngresoReemplazo = async (reempId: string) => {
+    if (!fechaIngresoReal) {
+      alert('⚠️ Por favor especifique el día real de ingreso a trabajar.');
+      return;
+    }
+
+    const reemps = await api.getReemplazosLicencias();
+    const match = reemps.find(r => r.id === reempId);
+    if (!match) return;
+
+    // Update the replacement detail metadata with actual validation details
+    const updatedReemp: ReemplazoDetalle = {
+      ...match,
+      validado_por_director: true,
+      fecha_ingreso_real: fechaIngresoReal
+    };
+
+    // Save modified replacement record
+    dbLocal.reemplazosLicencias = dbLocal.reemplazosLicencias.map(r => r.id === reempId ? updatedReemp : r);
+
+    // Make sure replacement contract status is activated or configured as Reemplazo
+    // Find the replacement's active or pending contract for this RBD
+    const allConts = dbLocal.contratos;
+    const cleanRun = match.reemplazo_run;
+    const targetIdx = allConts.findIndex(c => c.funcionario_run === cleanRun && c.rbd === selectedRbd && (c.estado === 'Reemplazo' || c.estado === 'Pendiente_Aprobacion'));
+    if (targetIdx >= 0) {
+      allConts[targetIdx].estado = 'Reemplazo';
+      allConts[targetIdx].fecha_inicio_licencia = fechaIngresoReal; // Record the day they started working
+      dbLocal.contratos = allConts;
+    } else {
+      // If no contract found, create one on the fly
+      const newContId = `c-reemp-validated-${Date.now()}-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}`;
+      const newCont: Contrato = {
+        id: newContId,
+        funcionario_run: cleanRun,
+        rbd: selectedRbd,
+        calidad_juridica: 'Reemplazo',
+        funcion_principal: 'Docente de Aula',
+        estado: 'Reemplazo',
+        horas_totales: match.horas,
+        fecha_inicio_licencia: fechaIngresoReal
+      };
+      dbLocal.contratos = [...dbLocal.contratos, newCont];
+    }
+
+    // Refresh UI
+    setValidatingReemplazoId(null);
+    setFechaIngresoReal('');
+    await loadAllSchoolData();
+    alert('✅ El ingreso del reemplazante ha sido verificado y su calidad contractual ha sido activada en la nómina.');
   };
 
   // Check for multi-school active contracts when selected teacher changes (itinerancy alert)
@@ -1316,6 +1376,88 @@ export default function EscuelaDashboard() {
                             })()}
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Confirmación de Ingreso de Reemplazos Asignados */}
+                {(() => {
+                  const unvalidatedReemps = reemplazosList.filter(r => r.rbd === selectedRbd && !r.validado_por_director);
+                  if (unvalidatedReemps.length === 0) return null;
+                  return (
+                    <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-5 animate-fadeIn">
+                      <h4 className="text-xs font-bold text-emerald-800 flex items-center gap-1.5 uppercase tracking-wide">
+                        🤝 Validar Ingreso de Reemplazantes ({unvalidatedReemps.length})
+                      </h4>
+                      <p className="text-[11px] text-slate-650 mt-1">
+                        Los siguientes reemplazantes han sido asignados por Gestión de Personas. Confirme que se han presentado a trabajar e ingrese su fecha de ingreso real para activarlos en la nómina oficial:
+                      </p>
+                      <div className="mt-3 space-y-3">
+                        {unvalidatedReemps.map(r => {
+                          const isChecking = validatingReemplazoId === r.id;
+                          return (
+                            <div key={r.id} className="bg-white border rounded-lg p-3 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                              <div>
+                                <p className="font-bold text-slate-800">
+                                  Docente Reemplazante:{' '}
+                                  <button
+                                    onClick={() => {
+                                      const reempFunc = funcionarios.find(f => f.run === r.reemplazo_run);
+                                      if (reempFunc) setEditingFuncionario(reempFunc);
+                                    }}
+                                    className="underline hover:text-slep-blue text-left font-bold"
+                                    title="Ver Ficha Oficial"
+                                  >
+                                    {r.reemplazo_nombre}
+                                  </button>
+                                </p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">
+                                  RUN: {r.reemplazo_run} | Carga: <span className="font-bold text-slep-blue">{r.horas} hrs</span> | Periodo Teórico: {r.fecha_inicio} al {r.fecha_termino}
+                                </p>
+                              </div>
+                              <div>
+                                {isChecking ? (
+                                  <div className="flex items-center gap-2">
+                                    <div>
+                                      <label className="block text-[9px] text-slate-400 font-bold uppercase">Fecha de Ingreso Real</label>
+                                      <input
+                                        type="date"
+                                        className="p-1 border rounded text-xs bg-white text-slate-800"
+                                        value={fechaIngresoReal}
+                                        onChange={(e) => setFechaIngresoReal(e.target.value)}
+                                      />
+                                    </div>
+                                    <div className="flex gap-1 pt-3">
+                                      <button
+                                        onClick={() => setValidatingReemplazoId(null)}
+                                        className="px-2 py-1 bg-white border text-slate-650 rounded font-bold hover:bg-slate-50 text-[10px]"
+                                      >
+                                        Cancelar
+                                      </button>
+                                      <button
+                                        onClick={() => handleConfirmIngresoReemplazo(r.id)}
+                                        className="px-2.5 py-1 bg-emerald-600 text-white rounded font-bold hover:bg-emerald-700 text-[10px]"
+                                      >
+                                        Confirmar Ingreso ✓
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setValidatingReemplazoId(r.id);
+                                      setFechaIngresoReal(r.fecha_inicio);
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3 py-1.5 rounded shadow text-[11px]"
+                                  >
+                                    Confirmar Presentación e Ingreso ✍️
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
