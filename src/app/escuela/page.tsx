@@ -100,7 +100,7 @@ export default function EscuelaDashboard() {
   const [editFuncEmail, setEditFuncEmail] = useState('');
   const [editFuncTitulo, setEditFuncTitulo] = useState('');
   const [editContHoras, setEditContHoras] = useState(44);
-  const [editContFins, setEditContFins] = useState<{ origen: OrigenFondo; horas: number }[]>([]);
+  const [editContFins, setEditContFins] = useState<{ origen: OrigenFondo; calidad: CalidadJuridica; horas: number }[]>([]);
   const [editContHorasDirectivas, setEditContHorasDirectivas] = useState<number | undefined>(undefined);
   const [editContHorasAula, setEditContHorasAula] = useState<number | undefined>(undefined);
   const [editContHorasTecPed, setEditContHorasTecPed] = useState<number | undefined>(undefined);
@@ -611,7 +611,11 @@ export default function EscuelaDashboard() {
       setEditContHorasAula(relatedCont.horas_aula);
       setEditContHorasTecPed(relatedCont.horas_tecnico_pedagogicas);
       const fins = await api.getFinanciamientosPorContrato(relatedCont.id);
-      setEditContFins(fins.map(fi => ({ origen: fi.origen_fondo, horas: fi.horas })));
+      setEditContFins(fins.map(fi => ({ 
+        origen: fi.origen_fondo, 
+        calidad: relatedCont.calidad_juridica, 
+        horas: fi.horas 
+      })));
     } else {
       setEditContHoras(0);
       setEditContHorasDirectivas(undefined);
@@ -634,26 +638,51 @@ export default function EscuelaDashboard() {
     });
  
     // 2. Update contract and finance sources
-    const relatedCont = contratos.find(c => c.funcionario_run === editingFuncionario.run);
-    if (relatedCont) {
-      const updatedCont = {
-        ...relatedCont,
-        horas_totales: editContHoras,
-        funcion_principal: editFuncCargo,
-        horas_directivas: editContHorasDirectivas,
-        horas_aula: editContHorasAula,
-        horas_tecnico_pedagogicas: editContHorasTecPed
-      };
- 
-      // Recalculate financing list
-      const cleanFins: FinanciamientoContrato[] = editContFins.map((f, index) => ({
-        id: `f-${relatedCont.id}-${f.origen}-${index}`,
-        contrato_id: relatedCont.id,
-        origen_fondo: f.origen,
-        horas: f.horas
-      }));
- 
-      await api.upsertContratoCompleto(updatedCont, cleanFins);
+    const cleanRun = editingFuncionario.run;
+    const relatedConts = contratos.filter(c => c.funcionario_run === cleanRun && c.rbd === selectedRbd);
+    
+    if (editContFins.length > 0) {
+      // Delete old contracts and financiamientos for this teacher to rebuild cleanly
+      const allConts = dbLocal.contratos.filter(c => !(c.funcionario_run === cleanRun && c.rbd === selectedRbd));
+      let allFins = dbLocal.financiamientoContratos.filter(f => !relatedConts.map(c => c.id).includes(f.contrato_id));
+
+      const calidadesUnicas = Array.from(new Set(editContFins.map(sl => sl.calidad)));
+      const newContratos: Contrato[] = [];
+
+      calidadesUnicas.forEach((cal, cIdx) => {
+        const linesForCal = editContFins.filter(l => l.calidad === cal);
+        const totalHorasCal = linesForCal.reduce((sum, l) => sum + l.horas, 0);
+
+        // Find primary function/details from previous contract if exists
+        const oldCont = relatedConts[0];
+        
+        const nuevoContrato: Contrato = {
+          id: `c-school-edit-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-${selectedRbd}-${cal.toLowerCase().replace(/[^a-z]/g, '')}-${cIdx}`,
+          funcionario_run: cleanRun,
+          rbd: selectedRbd,
+          calidad_juridica: cal,
+          funcion_principal: editFuncCargo || oldCont?.funcion_principal || 'Docente de Aula',
+          estado: oldCont?.estado || 'Activo',
+          horas_totales: totalHorasCal,
+          horas_directivas: oldCont?.horas_directivas,
+          horas_aula: oldCont?.horas_aula,
+          horas_tecnico_pedagogicas: oldCont?.horas_tecnico_pedagogicas,
+          fecha_inicio_licencia: oldCont?.fecha_inicio_licencia,
+          fecha_termino_licencia: oldCont?.fecha_termino_licencia
+        };
+        newContratos.push(nuevoContrato);
+
+        const newFins = linesForCal.map((l, lIdx) => ({
+          id: `fin-edit-${nuevoContrato.id}-${lIdx}`,
+          contrato_id: nuevoContrato.id,
+          origen_fondo: l.origen,
+          horas: l.horas
+        }));
+        allFins.push(...newFins);
+      });
+
+      dbLocal.contratos = [...allConts, ...newContratos];
+      dbLocal.financiamientoContratos = allFins;
     }
  
     setEditingFuncionario(null);
@@ -1583,16 +1612,26 @@ export default function EscuelaDashboard() {
                                     {hasCont.estado === 'Activo' && (
                                       <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Activo</span>
                                     )}
-                                    {hasCont.estado === 'Licencia Médica' && (
-                                      <>
-                                        <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Licencia Médica 🩺</span>
-                                        {tareasReemplazo.some(t => t.funcionario_titular_run === f.run && t.estado === 'Pendiente') ? (
-                                          <span className="bg-red-100 text-red-800 px-2.5 py-0.5 rounded text-[8px] font-black border border-red-300 animate-pulse uppercase tracking-wide">⚠️ Sin Reemplazo</span>
-                                        ) : (
-                                          <span className="bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded text-[8px] font-black border border-emerald-300 uppercase tracking-wide">✓ Cubierto</span>
-                                        )}
-                                      </>
-                                    )}
+                                    {hasCont.estado === 'Licencia Médica' && (() => {
+                                      const isCoveredAndValidated = reemplazosList.some(r => 
+                                        r.rbd === selectedRbd && 
+                                        r.validado_por_director && 
+                                        (r.contrato_titular_id.includes(f.run) || 
+                                         r.contrato_titular_id === hasCont.id)
+                                      );
+                                      return (
+                                        <>
+                                          <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Licencia Médica 🩺</span>
+                                          {isCoveredAndValidated ? (
+                                            <span className="bg-green-600 text-white px-2.5 py-0.5 rounded text-[8px] font-black border border-green-700 uppercase tracking-wide">✓ Cubierto</span>
+                                          ) : tareasReemplazo.some(t => t.funcionario_titular_run === f.run && t.estado === 'Pendiente') ? (
+                                            <span className="bg-red-100 text-red-800 px-2.5 py-0.5 rounded text-[8px] font-black border border-red-300 animate-pulse uppercase tracking-wide">⚠️ Sin Reemplazo</span>
+                                          ) : (
+                                            <span className="bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded text-[8px] font-black border border-emerald-300 uppercase tracking-wide">✓ Cubierto</span>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
                                     {hasCont.estado === 'Reemplazo' && (
                                       <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-[10px] font-bold">Reemplazo</span>
                                     )}
@@ -2875,9 +2914,9 @@ export default function EscuelaDashboard() {
                     
                     <div className="space-y-2.5 max-h-[160px] overflow-y-auto pr-1">
                       {editContFins.map((f, idx) => (
-                        <div key={idx} className="flex gap-2 items-center">
+                        <div key={idx} className="flex gap-2 items-center text-[11px]">
                           <select 
-                            className="flex-1 p-2 bg-white border rounded font-bold text-slate-700"
+                            className="flex-1 p-1.5 bg-white border rounded font-bold text-slate-700"
                             value={f.origen}
                             onChange={(e) => {
                               const newFins = [...editContFins];
@@ -2892,9 +2931,27 @@ export default function EscuelaDashboard() {
                             <option value="Pro-retención">Pro-retención</option>
                             <option value="Otro">Otro</option>
                           </select>
+
+                          <select 
+                            className="w-28 p-1.5 bg-white border rounded font-semibold text-slate-700"
+                            value={f.calidad}
+                            onChange={(e) => {
+                              const newFins = [...editContFins];
+                              newFins[idx].calidad = e.target.value as CalidadJuridica;
+                              setEditContFins(newFins);
+                            }}
+                          >
+                            <option value="Titular">Titular</option>
+                            <option value="A contrata">A contrata</option>
+                            <option value="Plazo fijo">Plazo fijo</option>
+                            <option value="Indefinido">Indefinido</option>
+                            <option value="Reemplazo">Reemplazo</option>
+                            <option value="Habilitación especial">Habilitación especial</option>
+                          </select>
+
                           <input 
                             type="number"
-                            className="w-24 p-2 bg-white border rounded text-center font-bold text-slate-800"
+                            className="w-16 p-1.5 bg-white border rounded text-center font-bold text-slate-800"
                             value={f.horas}
                             onChange={(e) => {
                               const val = parseFloat(e.target.value) || 0;
@@ -2913,7 +2970,7 @@ export default function EscuelaDashboard() {
                               const sum = newFins.reduce((s, fn) => s + fn.horas, 0);
                               setEditContHoras(sum);
                             }}
-                            className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 px-2 py-2 rounded-lg font-bold cursor-pointer"
+                            className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 px-2 py-1.5 rounded-lg font-bold cursor-pointer"
                           >
                             ✕
                           </button>
@@ -2927,7 +2984,7 @@ export default function EscuelaDashboard() {
                     <button 
                       type="button"
                       onClick={() => {
-                        const newFins = [...editContFins, { origen: 'Subvención Regular' as OrigenFondo, horas: 10 }];
+                        const newFins = [...editContFins, { origen: 'Subvención Regular' as OrigenFondo, calidad: 'A contrata' as CalidadJuridica, horas: 10 }];
                         setEditContFins(newFins);
                         const sum = newFins.reduce((s, fn) => s + fn.horas, 0);
                         setEditContHoras(sum);
