@@ -1778,32 +1778,42 @@ export default function EscuelaDashboard() {
                 <p className="text-xs text-slate-500 mt-1">Monitoreo automático de la proporción de horas lectivas de aula por contrato.</p>
                 
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                  {contratos
-                    .filter(c => c.rbd === selectedRbd && funcionarios.find(func => func.run === c.funcionario_run)?.estamento === 'Docente')
-                    .map(c => {
+                  {(() => {
+                    const docentesAlertados = contratos
+                      .filter(c => c.rbd === selectedRbd && funcionarios.find(func => func.run === c.funcionario_run)?.estamento === 'Docente')
+                      .filter(c => {
+                        const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
+                        const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs, cargosPersonalizados) : null;
+                        return metrics ? !metrics.cumpleLey20903 : false;
+                      });
+
+                    if (docentesAlertados.length === 0) {
+                      return (
+                        <div className="col-span-full bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-emerald-800 font-semibold text-center flex items-center justify-center gap-2">
+                          <span>✅</span> Todos los docentes del establecimiento cumplen con la proporción de la Ley 20.903.
+                        </div>
+                      );
+                    }
+
+                    return docentesAlertados.map(c => {
                       const f = funcionarios.find(func => func.run === c.funcionario_run);
                       const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
                       const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs, cargosPersonalizados) : null;
-                      
                       if (!metrics) return null;
-                      const isOk = metrics.cumpleLey20903;
                       
                       return (
-                        <div key={c.id} className={`p-2.5 rounded border flex justify-between items-center ${
-                          isOk ? 'bg-emerald-50 border-emerald-200 text-emerald-950' : 'bg-red-50 border-red-200 text-red-950'
-                        }`}>
+                        <div key={c.id} className="p-2.5 rounded border flex justify-between items-center bg-red-50 border-red-200 text-red-950">
                           <div>
                             <span className="font-bold">{f ? f.nombre : c.funcionario_run}</span>
-                            <p className="text-[10px] text-slate-500">Lectivas: {metrics.horasLectivasAsignadas} / {metrics.horasLectivasMaximas} hrs ({c.horas_totales} hrs totales)</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Lectivas: <span className="font-bold text-red-650">{metrics.horasLectivasAsignadas} hrs</span> / Max legal: {metrics.horasLectivasMaximas} hrs ({c.horas_totales} hrs totales)</p>
                           </div>
-                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                            isOk ? 'bg-emerald-100 text-emerald-800' : 'bg-slep-coral/20 text-red-800'
-                          }`}>
-                            {isOk ? 'OK' : 'Excedido'}
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-black bg-slep-coral/20 text-red-800 uppercase tracking-wider animate-pulse">
+                            ⚠️ Excedido
                           </span>
                         </div>
                       );
-                    })}
+                    });
+                  })()}
                 </div>
               </div>
             </div>

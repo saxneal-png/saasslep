@@ -1068,7 +1068,13 @@ export default function RRHHPage() {
               
               {/* Direct notifications from school directors (Alerts) */}
               {(() => {
-                const pendingLicencias = contratos.filter(c => c.estado === 'Licencia Médica');
+                const pendingLicencias = contratos.filter(c => {
+                  if (c.estado !== 'Licencia Médica') return false;
+                  const reemps = reemplazosList.filter(r => r.contrato_titular_id === c.id || r.contrato_titular_id === c.funcionario_run);
+                  const totalCubierto = reemps.reduce((acc, curr) => acc + curr.horas, 0);
+                  const cubiertoCompletamente = totalCubierto >= c.horas_totales;
+                  return !cubiertoCompletamente;
+                });
                 if (pendingLicencias.length === 0) return null;
                 return (
                   <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-900 space-y-3 shadow-sm">
