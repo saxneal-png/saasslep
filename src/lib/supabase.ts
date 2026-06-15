@@ -227,140 +227,15 @@ class DatabaseLocal {
   }
 
   public scheduleCloudSync(): void {
-    if (typeof window === 'undefined') return;
-    const clave = 'slep_global_prod_db_v1';
-
-    if ((window as any).slepSyncTimeout) {
-      clearTimeout((window as any).slepSyncTimeout);
-    }
-
-    (window as any).slepSyncTimeout = setTimeout(async () => {
-      try {
-        const keys = [
-          'establecimientos', 'funcionarios', 'contratos', 'financiamientos',
-          'asignaciones', 'alertas', 'tutelas', 'cursos_dinamicos',
-          'asignaturas_dinamicas', 'supervisores', 'cargos_personalizados',
-          'planes_estudio_json', 'comunas', 'libro_remuneraciones',
-          'tareas_reemplazo', 'reemplazos_licencias'
-        ];
-        const backup: Record<string, any> = {};
-        keys.forEach(k => {
-          const item = localStorage.getItem(`slep_db_${k}`);
-          if (item) {
-            backup[k] = JSON.parse(item);
-          }
-        });
-        backup._timestamp = Date.now();
-        localStorage.setItem('slep_db__timestamp', backup._timestamp.toString());
-
-        await fetch(`https://kvdb.io/slep_bucket_${clave}/slep_sync_db`, {
-          method: 'POST',
-          body: JSON.stringify(backup),
-          headers: { 'Content-Type': 'application/json' }
-        });
-        console.log('☁️ Sincronización en la nube global exitosa.');
-      } catch (err) {
-        console.error('Error al sincronizar con la nube global:', err);
-      }
-    }, 1000);
+    // Obsolete: All sync goes directly to Supabase production
   }
 
   public async pushCloudSyncForce(): Promise<void> {
-    if (typeof window === 'undefined') return;
-    const clave = 'slep_global_prod_db_v1';
-    try {
-      const keys = [
-        'establecimientos', 'funcionarios', 'contratos', 'financiamientos',
-        'asignaciones', 'alertas', 'tutelas', 'cursos_dinamicos',
-        'asignaturas_dinamicas', 'supervisores', 'cargos_personalizados',
-        'planes_estudio_json', 'comunas', 'libro_remuneraciones',
-        'tareas_reemplazo', 'reemplazos_licencias'
-      ];
-      const backup: Record<string, any> = {};
-      keys.forEach(k => {
-        backup[k] = (this as any)[k];
-      });
-      backup._timestamp = Date.now();
-      localStorage.setItem('slep_db__timestamp', backup._timestamp.toString());
-
-      await fetch(`https://kvdb.io/slep_bucket_${clave}/slep_sync_db`, {
-        method: 'POST',
-        body: JSON.stringify(backup),
-        headers: { 'Content-Type': 'application/json' }
-      });
-      localStorage.setItem('slep_db_initialized', 'true');
-      console.log('☁️ Base de datos global inicializada en la nube.');
-    } catch (err) {
-      console.error('Error al inicializar la nube:', err);
-    }
+    // Obsolete: All sync goes directly to Supabase production
   }
 
   public async pullCloudSync(): Promise<boolean> {
-    if (typeof window === 'undefined') return false;
-    const clave = 'slep_global_prod_db_v1';
-
-    try {
-      const res = await fetch(`https://kvdb.io/slep_bucket_${clave}/slep_sync_db`);
-      if (res.ok) {
-        const backup = await res.json();
-        const localTimestamp = parseInt(localStorage.getItem('slep_db__timestamp') || '0', 10);
-        const remoteTimestamp = backup._timestamp || 0;
-
-        if (remoteTimestamp !== localTimestamp || !localStorage.getItem('slep_db_initialized')) {
-          const oldContratos = [...this.contratos];
-          const oldAsignaciones = [...this.asignacionesAula];
-          const oldAlertas = [...this.alertas];
-
-          Object.keys(backup).forEach(k => {
-            if (k === '_timestamp') {
-              localStorage.setItem('slep_db__timestamp', backup[k].toString());
-            } else {
-              localStorage.setItem(`slep_db_${k}`, JSON.stringify(backup[k]));
-            }
-          });
-          localStorage.setItem('slep_db_initialized', 'true');
-          console.log('☁️ Datos actualizados desde la nube global.');
-
-          // Dispatch Postgres simulation diff events
-          const newContratos = this.contratos;
-          const newAsignaciones = this.asignacionesAula;
-          const newAlertas = this.alertas;
-
-          const dispatchDiffs = (table: string, oldArr: any[], newArr: any[], idKey = 'id') => {
-            newArr.forEach(newItem => {
-              const oldItem = oldArr.find(o => o[idKey] === newItem[idKey]);
-              if (!oldItem) {
-                window.dispatchEvent(new CustomEvent('supabase_postgres_changes', {
-                  detail: { table, eventType: 'INSERT', new: newItem }
-                }));
-              } else if (JSON.stringify(oldItem) !== JSON.stringify(newItem)) {
-                window.dispatchEvent(new CustomEvent('supabase_postgres_changes', {
-                  detail: { table, eventType: 'UPDATE', new: newItem }
-                }));
-              }
-            });
-            oldArr.forEach(oldItem => {
-              const newItem = newArr.find(n => n[idKey] === oldItem[idKey]);
-              if (!newItem) {
-                window.dispatchEvent(new CustomEvent('supabase_postgres_changes', {
-                  detail: { table, eventType: 'DELETE', old: oldItem }
-                }));
-              }
-            });
-          };
-
-          dispatchDiffs('contratos', oldContratos, newContratos, 'id');
-          dispatchDiffs('asignaciones_aula', oldAsignaciones, newAsignaciones, 'id');
-          dispatchDiffs('alertas_conciliacion', oldAlertas, newAlertas, 'id');
-
-          return true;
-        }
-      } else if (res.status === 404) {
-        await this.pushCloudSyncForce();
-      }
-    } catch (err) {
-      console.error('Error al descargar datos de la nube:', err);
-    }
+    // Obsolete: All sync goes directly to Supabase production
     return false;
   }
 
