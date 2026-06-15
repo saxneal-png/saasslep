@@ -329,31 +329,25 @@ export default function RRHHPage() {
       end = startDate.toISOString().split('T')[0];
     }
 
-    // Update contract status to 'Licencia Médica' and set dates
-    const updatedConts = dbLocal.contratos.map(c => {
-      if (c.funcionario_run === selectedLicenciaRun && c.rbd !== '99999') {
-        return { 
-          ...c, 
-          estado: 'Licencia Médica' as const,
-          fecha_inicio_licencia: start,
-          fecha_termino_licencia: end
-        };
-      }
-      return c;
-    });
-    dbLocal.contratos = updatedConts;
+    // Update contract status to 'Licencia Médica' and set dates in Supabase
+    for (const c of funcConts) {
+      await api.updateContratoEstado(c.id, 'Licencia Médica', null, start, end);
+    }
 
     // Dispatch pending replacement tasks for all school contracts of this teacher
     for (const c of funcConts) {
       const nuevaTarea: TareaReemplazo = {
         id: `reemplazo-task-${Date.now()}-${c.id}`,
         rbd: c.rbd,
-        funcionario_run: selectedLicenciaRun, // Just to be safe
         funcionario_titular_run: selectedLicenciaRun,
         funcionario_titular_nombre: func ? func.nombre : selectedLicenciaRun,
         horas_a_cubrir: c.horas_totales,
         estado: 'Pendiente'
-      } as any;
+      };
+      (nuevaTarea as any).motivo = 'Licencia Médica';
+      (nuevaTarea as any).fecha_inicio = start;
+      (nuevaTarea as any).fecha_termino = end;
+
       await api.crearTareaReemplazo(nuevaTarea);
     }
 

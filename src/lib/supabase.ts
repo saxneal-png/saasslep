@@ -529,9 +529,15 @@ export const api = {
   updateContratoEstado: async (
     contratoId: string, 
     estado: EstadoContrato, 
-    vinculoTitularId: string | null = null
+    vinculoTitularId: string | null = null,
+    fechaInicioLicencia?: string | null,
+    fechaTerminoLicencia?: string | null
   ): Promise<void> => {
-    const { error } = await supabase.from('contratos').update({ estado, vinculo_titular_id: vinculoTitularId }).eq('id', contratoId);
+    const updateObj: any = { estado, vinculo_titular_id: vinculoTitularId };
+    if (fechaInicioLicencia !== undefined) updateObj.fecha_inicio_licencia = fechaInicioLicencia;
+    if (fechaTerminoLicencia !== undefined) updateObj.fecha_termino_licencia = fechaTerminoLicencia;
+
+    const { error } = await supabase.from('contratos').update(updateObj).eq('id', contratoId);
     if (error) {
       console.warn("⚠️ Error en Supabase, actualizando estado de contrato en local:", error);
       const contratos = dbLocal.contratos;
@@ -539,6 +545,8 @@ export const api = {
       if (idx >= 0) {
         contratos[idx].estado = estado;
         contratos[idx].vinculo_titular_id = vinculoTitularId;
+        if (fechaInicioLicencia !== undefined) contratos[idx].fecha_inicio_licencia = fechaInicioLicencia || undefined;
+        if (fechaTerminoLicencia !== undefined) contratos[idx].fecha_termino_licencia = fechaTerminoLicencia || undefined;
         dbLocal.contratos = contratos;
       }
     }
@@ -843,11 +851,31 @@ export const api = {
   getTareasReemplazo: async (): Promise<TareaReemplazo[]> => {
     const { data, error } = await supabase.from('tareas_reemplazo').select('*');
     if (error) return handleFallback(error, dbLocal.tareasReemplazo, 'tareas_reemplazo');
-    return data || [];
+    return (data || []).map(row => ({
+      id: row.id,
+      rbd: row.rbd,
+      funcionario_titular_run: row.funcionario_titular_run,
+      funcionario_titular_nombre: row.nombre_titular,
+      horas_a_cubrir: Number(row.horas_reemplazo),
+      estado: row.estado,
+      reemplazo_run: row.reemplazo_run || undefined
+    }));
   },
 
   crearTareaReemplazo: async (tarea: TareaReemplazo): Promise<void> => {
-    const { error } = await supabase.from('tareas_reemplazo').insert(tarea);
+    const dbRow = {
+      id: tarea.id,
+      rbd: tarea.rbd,
+      funcionario_titular_run: tarea.funcionario_titular_run,
+      nombre_titular: tarea.funcionario_titular_nombre,
+      horas_reemplazo: tarea.horas_a_cubrir,
+      estado: tarea.estado,
+      reemplazo_run: tarea.reemplazo_run || null,
+      motivo: (tarea as any).motivo || 'Licencia Médica',
+      fecha_inicio: (tarea as any).fecha_inicio || new Date().toISOString().split('T')[0],
+      fecha_termino: (tarea as any).fecha_termino || new Date().toISOString().split('T')[0]
+    };
+    const { error } = await supabase.from('tareas_reemplazo').insert(dbRow);
     if (error) {
       console.warn("⚠️ Error en Supabase, creando tarea de reemplazo en local:", error);
       const list = [...dbLocal.tareasReemplazo, tarea];
