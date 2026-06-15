@@ -892,6 +892,30 @@ export const api = {
     }
   },
 
+  getTodasLasAsignaciones: async (): Promise<AsignacionAula[]> => {
+    const { data, error } = await supabase.from('asignaciones_aula').select('*');
+    if (error) return handleFallback(error, dbLocal.asignacionesAula, 'asignaciones_aula');
+    return data || [];
+  },
+
+  getTodosLosCursosDinamicos: async (): Promise<CursoDinamico[]> => {
+    const { data, error } = await supabase.from('cursos_dinamicos').select('*');
+    if (error) return handleFallback(error, dbLocal.cursosDinamicos, 'cursos_dinamicos');
+    return data || [];
+  },
+
+  getTodasLasAsignaturasDinamicas: async (): Promise<AsignaturaDinamica[]> => {
+    const { data, error } = await supabase.from('asignaturas_dinamicas').select('*');
+    if (error) return handleFallback(error, dbLocal.asignaturasDinamicas, 'asignaturas_dinamicas');
+    return data || [];
+  },
+
+  getTodosLosCargosPersonalizados: async (): Promise<CargoPersonalizado[]> => {
+    const { data, error } = await supabase.from('cargos_personalizados').select('*');
+    if (error) return handleFallback(error, dbLocal.cargosPersonalizados, 'cargos_personalizados');
+    return data || [];
+  },
+
   scheduleCloudSync: async (): Promise<void> => {},
   pullCloudSync: async (): Promise<boolean> => { return false; },
   pushCloudSyncForce: async (): Promise<void> => {}

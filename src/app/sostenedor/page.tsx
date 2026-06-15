@@ -18,7 +18,9 @@ import {
   AsignacionAula,
   CargoPersonalizado,
   OrigenFondo,
-  RegistroRemuneracion
+  RegistroRemuneracion,
+  CursoDinamico,
+  AsignaturaDinamica
 } from '@/lib/types';
 import { validarCargaDocente, conciliarFuncionario } from '@/lib/rulesEngine';
 
@@ -48,7 +50,10 @@ export default function SostenedorDashboard() {
   const [editContHoras, setEditContHoras] = useState(0);
   const [editContFins, setEditContFins] = useState<{ origen: OrigenFondo; horas: number }[]>([]);
   
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio' | 'resumenes'>('dashboard');
+  const [todosLosCursos, setTodosLosCursos] = useState<CursoDinamico[]>([]);
+  const [todasLasAsignaturas, setTodasLasAsignaturas] = useState<AsignaturaDinamica[]>([]);
+  const [resumenSubTab, setResumenSubTab] = useState<'territorio' | 'asignaturas' | 'disponibilidad' | 'alertas'>('territorio');
   const [authorized, setAuthorized] = useState(false);
   const [exportModal, setExportModal] = useState<{
     isOpen: boolean;
@@ -1964,6 +1969,419 @@ export default function SostenedorDashboard() {
             );
           })()}
 
+        </main>
+      )}
+
+      {activeTab === 'resumenes' && (
+        <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full text-xs">
+          {(() => {
+            const totalEstablecimientos = establecimientos.length;
+            const totalContratosDocentes = contratos.filter(c => {
+              const f = funcionarios.find(fn => fn.run === c.funcionario_run);
+              return f && f.estamento === 'Docente';
+            });
+            const totalHorasContratadasDocentes = totalContratosDocentes.reduce((sum, c) => sum + c.horas_totales, 0);
+            const totalHorasAsignadas = asignaciones.reduce((sum, a) => sum + a.horas, 0);
+
+            // Funding Sources Breakdown
+            const totalHorasSEP = financiamientos.filter(f => f.origen_fondo === 'SEP').reduce((sum, f) => sum + f.horas, 0);
+            const totalHorasPIE = financiamientos.filter(f => f.origen_fondo === 'PIE').reduce((sum, f) => sum + f.horas, 0);
+            const totalHorasRegular = financiamientos.filter(f => f.origen_fondo === 'Subvención Regular').reduce((sum, f) => sum + f.horas, 0);
+            const totalHorasProretencion = financiamientos.filter(f => f.origen_fondo === 'Pro-retención').reduce((sum, f) => sum + f.horas, 0);
+            const totalHorasOtros = financiamientos.filter(f => !['SEP', 'PIE', 'Subvención Regular', 'Pro-retención'].includes(f.origen_fondo)).reduce((sum, f) => sum + f.horas, 0);
+
+            // Comunas Breakdown
+            const comunasSummary = comunasList.map(comName => {
+              const comunaEsts = establecimientos.filter(e => e.comuna === comName);
+              const rbds = comunaEsts.map(e => e.rbd);
+              
+              const comunaConts = contratos.filter(c => rbds.includes(c.rbd));
+              const comunaContIds = comunaConts.map(c => c.id);
+              const totalContHours = comunaConts.reduce((sum, c) => sum + c.horas_totales, 0);
+              
+              const comunaAsigs = asignaciones.filter(a => comunaContIds.includes(a.contrato_id));
+              const totalAsigHours = comunaAsigs.reduce((sum, a) => sum + a.horas, 0);
+              
+              const comunaFins = financiamientos.filter(f => comunaContIds.includes(f.contrato_id));
+              const sepHours = comunaFins.filter(f => f.origen_fondo === 'SEP').reduce((sum, f) => sum + f.horas, 0);
+              const pieHours = comunaFins.filter(f => f.origen_fondo === 'PIE').reduce((sum, f) => sum + f.horas, 0);
+              const regularHours = comunaFins.filter(f => f.origen_fondo === 'Subvención Regular').reduce((sum, f) => sum + f.horas, 0);
+              const otherHours = comunaFins.filter(f => !['SEP', 'PIE', 'Subvención Regular'].includes(f.origen_fondo)).reduce((sum, f) => sum + f.horas, 0);
+
+              return {
+                comuna: comName,
+                establecimientos: comunaEsts.length,
+                horasContrato: totalContHours,
+                horasAsignadas: totalAsigHours,
+                sepHours,
+                pieHours,
+                regularHours,
+                otherHours
+              };
+            });
+
+            // Subject-wise breakdown (Horas por Asignatura)
+            const subjectsMap: { [key: string]: number } = {};
+            asignaciones.forEach(a => {
+              subjectsMap[a.asignatura] = (subjectsMap[a.asignatura] || 0) + a.horas;
+            });
+            const subjectsSorted = Object.entries(subjectsMap)
+              .map(([nombre, horas]) => ({ nombre, horas }))
+              .sort((a, b) => b.horas - a.horas);
+
+            // Spare Hours (Docentes con horas de contrato sobrantes)
+            const teachersWithSpare = funcionarios
+              .filter(f => f.estamento === 'Docente')
+              .map(f => {
+                const teacherConts = contratos.filter(c => c.funcionario_run === f.run);
+                const contractIds = teacherConts.map(c => c.id);
+                const totalCont = teacherConts.reduce((sum, c) => sum + c.horas_totales, 0);
+                
+                const totalAsig = asignaciones.filter(a => contractIds.includes(a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
+                const totalCargs = cargosPersonalizados.filter(cg => cg.funcionario_run === f.run).reduce((sum, cg) => sum + cg.horas, 0);
+                
+                const spareHours = totalCont - (totalAsig + totalCargs);
+                const mainRbd = teacherConts.length > 0 ? teacherConts[0].rbd : 'Desconocido';
+                const schoolName = establecimientos.find(e => e.rbd === mainRbd)?.nombre || `RBD ${mainRbd}`;
+                
+                return {
+                  run: f.run,
+                  nombre: f.nombre,
+                  escuela: schoolName,
+                  horasContrato: totalCont,
+                  horasAsignadas: totalAsig,
+                  horasCargos: totalCargs,
+                  horasSobrantes: spareHours > 0 ? Number(spareHours.toFixed(1)) : 0
+                };
+              })
+              .filter(t => t.horasSobrantes > 0.1)
+              .sort((a, b) => b.horasSobrantes - a.horasSobrantes);
+
+            const totalSobrantesTerritorio = teachersWithSpare.reduce((sum, t) => sum + t.horasSobrantes, 0);
+
+            // Course study plan overflow alerts
+            const courseAlerts = todosLosCursos.map(curso => {
+              const plan = planesEstudio.find(p => p.nivel === curso.nivel && p.regimen === curso.regimen);
+              const limit = plan ? plan.horasObligatorias : 38;
+              
+              const school = establecimientos.find(e => e.rbd === curso.rbd);
+              
+              const schoolConts = contratos.filter(c => c.rbd === curso.rbd);
+              const schoolContIds = schoolConts.map(c => c.id);
+              const courseAsigs = asignaciones.filter(a => schoolContIds.includes(a.contrato_id) && a.curso === curso.nombre);
+              const assignedHours = courseAsigs.reduce((sum, a) => sum + a.horas, 0);
+              
+              const delta = assignedHours - limit;
+              return {
+                rbd: curso.rbd,
+                escuela: school ? school.nombre : `RBD ${curso.rbd}`,
+                curso: curso.nombre,
+                nivel: curso.nivel,
+                regimen: curso.regimen,
+                limitePlan: limit,
+                horasAsignadas: assignedHours,
+                diferencia: delta,
+                esExceso: delta > 0.1
+              };
+            }).filter(c => c.esExceso);
+
+            return (
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="bg-white rounded-xl border border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-800">📊 Panel de Resúmenes y Análisis Consolidado</h2>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">Reportes agregados territoriales por comunas, asignaturas y auditorías horarias.</p>
+                  </div>
+                  
+                  {/* Local Tabs Selection */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl border self-start md:self-center">
+                    <button
+                      onClick={() => setResumenSubTab('territorio')}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                        resumenSubTab === 'territorio' ? 'bg-white text-slep-blue shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      🗺️ Territorio & Comunas
+                    </button>
+                    <button
+                      onClick={() => setResumenSubTab('asignaturas')}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                        resumenSubTab === 'asignaturas' ? 'bg-white text-slep-blue shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      📚 Por Asignatura
+                    </button>
+                    <button
+                      onClick={() => setResumenSubTab('disponibilidad')}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                        resumenSubTab === 'disponibilidad' ? 'bg-white text-slep-blue shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      ⏳ Horas Disponibles
+                    </button>
+                    <button
+                      onClick={() => setResumenSubTab('alertas')}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                        resumenSubTab === 'alertas' ? 'bg-white text-slep-blue shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      🚨 Alertas de Exceso ({courseAlerts.length})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tab Content: Territorio & Comunas */}
+                {resumenSubTab === 'territorio' && (
+                  <div className="space-y-6 animate-in fade-in duration-200">
+                    {/* Stat Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="bg-white border rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Establecimientos</span>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-xl font-black text-slate-800">{totalEstablecimientos}</span>
+                          <span className="text-xs text-slate-400">escuelas</span>
+                        </div>
+                      </div>
+                      <div className="bg-white border rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Total Horas Docentes</span>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-xl font-black text-slep-blue">{totalHorasContratadasDocentes}</span>
+                          <span className="text-xs text-slate-400">horas contratas</span>
+                        </div>
+                      </div>
+                      <div className="bg-white border rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Carga en Aula</span>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-xl font-black text-emerald-600">{totalHorasAsignadas}</span>
+                          <span className="text-xs text-slate-400">({((totalHorasAsignadas / (totalHorasContratadasDocentes || 1)) * 100).toFixed(0)}% de carga)</span>
+                        </div>
+                      </div>
+                      <div className="bg-white border rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Horas Sobrantes (UATP)</span>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-xl font-black text-amber-600">{totalSobrantesTerritorio.toFixed(1)}</span>
+                          <span className="text-xs text-slate-400">disponibles</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Breakdown by Funding Source */}
+                    <div className="bg-white border rounded-xl p-6 shadow-sm">
+                      <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4">Financiamientos Consolidados del Territorio</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                          <p className="text-[9px] uppercase font-bold text-blue-500">Subvención Regular</p>
+                          <p className="text-base font-black text-blue-900 mt-1">{totalHorasRegular} hrs</p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-orange-50 border border-orange-100">
+                          <p className="text-[9px] uppercase font-bold text-orange-500">SEP</p>
+                          <p className="text-base font-black text-orange-900 mt-1">{totalHorasSEP} hrs</p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
+                          <p className="text-[9px] uppercase font-bold text-emerald-500">PIE</p>
+                          <p className="text-base font-black text-emerald-900 mt-1">{totalHorasPIE} hrs</p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-purple-50 border border-purple-100">
+                          <p className="text-[9px] uppercase font-bold text-purple-500">Proretención</p>
+                          <p className="text-base font-black text-purple-900 mt-1">{totalHorasProretencion} hrs</p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                          <p className="text-[9px] uppercase font-bold text-slate-500">Otros Fondos</p>
+                          <p className="text-base font-black text-slate-900 mt-1">{totalHorasOtros} hrs</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Comunas Table */}
+                    <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+                      <div className="p-4 border-b bg-slate-50">
+                        <h3 className="font-bold text-slate-800">Desglose de Horas por Comuna</h3>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 uppercase font-black">
+                              <th className="p-4">Comuna</th>
+                              <th className="p-4 text-center">Escuelas</th>
+                              <th className="p-4">Horas Contrato</th>
+                              <th className="p-4">Horas Aula</th>
+                              <th className="p-4 text-blue-600">Regular</th>
+                              <th className="p-4 text-orange-600">SEP</th>
+                              <th className="p-4 text-emerald-600">PIE</th>
+                              <th className="p-4 text-slate-500">Otros</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                            {comunasSummary.map(c => (
+                              <tr key={c.comuna} className="hover:bg-slate-50/50">
+                                <td className="p-4 font-bold text-slate-800">{c.comuna}</td>
+                                <td className="p-4 text-center font-bold text-slate-500">{c.establecimientos}</td>
+                                <td className="p-4 font-mono font-bold">{c.horasContrato} hrs</td>
+                                <td className="p-4 font-mono font-bold text-emerald-600">{c.horasAsignadas} hrs</td>
+                                <td className="p-4 font-mono text-blue-600">{c.regularHours} hrs</td>
+                                <td className="p-4 font-mono text-orange-600">{c.sepHours} hrs</td>
+                                <td className="p-4 font-mono text-emerald-600">{c.pieHours} hrs</td>
+                                <td className="p-4 font-mono text-slate-500">{c.otherHours} hrs</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab Content: Por Asignatura */}
+                {resumenSubTab === 'asignaturas' && (
+                  <div className="bg-white border rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-200">
+                    <div className="p-4 border-b bg-slate-50">
+                      <h3 className="font-bold text-slate-800">Carga Horaria Semanal Ejecutada por Asignatura</h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Suma total de horas de aula asignadas en el territorio.</p>
+                    </div>
+                    <div className="p-6">
+                      {subjectsSorted.length === 0 ? (
+                        <p className="text-slate-400 italic text-center py-8">No hay asignaciones de aula registradas en el sistema.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-3">
+                            {subjectsSorted.slice(0, Math.ceil(subjectsSorted.length / 2)).map((s, idx) => (
+                              <div key={idx} className="flex flex-col gap-1 border-b pb-2">
+                                <div className="flex justify-between font-bold text-slate-700">
+                                  <span>{s.nombre}</span>
+                                  <span className="font-mono font-black text-slep-blue">{s.horas} hrs</span>
+                                </div>
+                                <div className="w-full bg-slate-100 rounded-full h-1.5">
+                                  <div 
+                                    className="bg-slep-blue h-1.5 rounded-full" 
+                                    style={{ width: `${Math.min(100, (s.horas / (totalHorasAsignadas || 1)) * 100 * 3)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="space-y-3">
+                            {subjectsSorted.slice(Math.ceil(subjectsSorted.length / 2)).map((s, idx) => (
+                              <div key={idx} className="flex flex-col gap-1 border-b pb-2">
+                                <div className="flex justify-between font-bold text-slate-700">
+                                  <span>{s.nombre}</span>
+                                  <span className="font-mono font-black text-slep-blue">{s.horas} hrs</span>
+                                </div>
+                                <div className="w-full bg-slate-100 rounded-full h-1.5">
+                                  <div 
+                                    className="bg-slep-blue h-1.5 rounded-full" 
+                                    style={{ width: `${Math.min(100, (s.horas / (totalHorasAsignadas || 1)) * 100 * 3)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab Content: Horas Disponibles */}
+                {resumenSubTab === 'disponibilidad' && (
+                  <div className="bg-white border rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-200">
+                    <div className="p-4 border-b bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                      <div>
+                        <h3 className="font-bold text-slate-800">Docentes con Horas Sobrantes de Contrato</h3>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Docentes con contratos vigentes cuyas asignaciones en aula y cargos no cubren su carga contratada.</p>
+                      </div>
+                      <span className="bg-amber-100 text-amber-800 text-[10px] uppercase font-bold px-2.5 py-1 rounded-full">
+                        Total Disponibilidad: {totalSobrantesTerritorio.toFixed(1)} hrs
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      {teachersWithSpare.length === 0 ? (
+                        <p className="text-slate-400 italic text-center py-12">✓ Todos los docentes tienen asignada su carga horaria contractual completa.</p>
+                      ) : (
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 uppercase font-black">
+                              <th className="p-4">Funcionario</th>
+                              <th className="p-4">Establecimiento Principal</th>
+                              <th className="p-4">Horas Contrato</th>
+                              <th className="p-4">Horas Asignadas</th>
+                              <th className="p-4">Horas Cargos</th>
+                              <th className="p-4 text-amber-600">Horas Sobrantes</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                            {teachersWithSpare.map(t => (
+                              <tr key={t.run} className="hover:bg-slate-50/50">
+                                <td className="p-4">
+                                  <p className="font-bold text-slate-800">{t.nombre}</p>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">{t.run}</p>
+                                </td>
+                                <td className="p-4 text-slate-500 font-bold">{t.escuela}</td>
+                                <td className="p-4 font-mono font-bold">{t.horasContrato} hrs</td>
+                                <td className="p-4 font-mono">{t.horasAsignadas} hrs</td>
+                                <td className="p-4 font-mono">{t.horasCargos} hrs</td>
+                                <td className="p-4">
+                                  <span className="bg-amber-50 text-amber-700 font-mono font-bold px-2 py-0.5 rounded border border-amber-200">
+                                    +{t.horasSobrantes} hrs
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab Content: Alertas de Exceso */}
+                {resumenSubTab === 'alertas' && (
+                  <div className="bg-white border rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-200">
+                    <div className="p-4 border-b bg-slate-50">
+                      <h3 className="font-bold text-slate-800">Cursos Excedidos de Horas (vs Plan de Estudio)</h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Auditoría automática de sobre-asignación: cursos que superan las horas obligatorias definidas por el MINEDUC.</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      {courseAlerts.length === 0 ? (
+                        <p className="text-emerald-600 font-bold text-center py-12">✓ Todos los cursos cumplen con el límite de horas del plan de estudio.</p>
+                      ) : (
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 uppercase font-black">
+                              <th className="p-4">Establecimiento</th>
+                              <th className="p-4">Curso</th>
+                              <th className="p-4">Nivel / Régimen</th>
+                              <th className="p-4 text-center">Límite Plan</th>
+                              <th className="p-4 text-center">Horas Asignadas</th>
+                              <th className="p-4 text-red-600 text-right">Exceso</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                            {courseAlerts.map((c, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50/50">
+                                <td className="p-4 font-bold text-slate-800">{c.escuela}</td>
+                                <td className="p-4">
+                                  <span className="bg-red-50 text-red-700 px-2 py-0.5 rounded font-bold border border-red-100">{c.curso}</span>
+                                </td>
+                                <td className="p-4 text-slate-500">{c.nivel} ({c.regimen})</td>
+                                <td className="p-4 text-center font-mono font-bold text-slate-500">{c.limitePlan} hrs</td>
+                                <td className="p-4 text-center font-mono font-bold text-red-600">{c.horasAsignadas} hrs</td>
+                                <td className="p-4 text-right">
+                                  <span className="bg-red-100 text-red-800 px-2.5 py-1 rounded font-black">
+                                    +{c.diferencia.toFixed(1)} hrs
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </main>
       )}
 
