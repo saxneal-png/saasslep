@@ -474,7 +474,7 @@ export default function RRHHPage() {
       grupo_estamento: 'P02_Educacion'
     };
 
-    dbLocal.funcionarios = [...dbLocal.funcionarios, nuevoPostulante];
+    await api.upsertFuncionario(nuevoPostulante);
     
     setNewPoolRun('');
     setNewPoolNombre('');
@@ -494,7 +494,6 @@ export default function RRHHPage() {
 
     const lines = csvBulkInput.split('\n');
     let addedCount = 0;
-    const currentFuncs = [...dbLocal.funcionarios];
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -508,7 +507,7 @@ export default function RRHHPage() {
       if (!rawRun || !rawName) continue;
 
       const cleanRun = normalizarRun(rawRun);
-      if (currentFuncs.some(f => f.run === cleanRun)) continue; // Skip existing
+      if (funcionarios.some(f => f.run === cleanRun)) continue; // Skip existing
 
       const title = parts[2] ? parts[2].trim() : '';
       const email = parts[3] ? parts[3].trim() : '';
@@ -525,11 +524,10 @@ export default function RRHHPage() {
         grupo_estamento: 'P02_Educacion'
       };
 
-      currentFuncs.push(nuevoPostulante);
+      await api.upsertFuncionario(nuevoPostulante);
       addedCount++;
     }
 
-    dbLocal.funcionarios = currentFuncs;
     setCsvBulkInput('');
     await loadData();
     alert(`✅ Ingesta finalizada. Se registraron ${addedCount} postulantes en el Banco de Reemplazos.`);
