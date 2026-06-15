@@ -476,15 +476,19 @@ export const api = {
   },
 
   upsertFuncionario: async (funcionario: Funcionario): Promise<void> => {
-    const { error } = await supabase.from('funcionarios').upsert(funcionario);
+    const dataObj = { ...funcionario };
+    if (dataObj.estamento === 'Docente' || dataObj.estamento === 'Asistente de la Educación') {
+      dataObj.grupo_estamento = 'P02_Educacion';
+    }
+    const { error } = await supabase.from('funcionarios').upsert(dataObj);
     if (error) {
       console.warn("⚠️ Error en Supabase, guardando funcionario en local:", error);
       const funcionarios = dbLocal.funcionarios;
-      const index = funcionarios.findIndex(f => f.run === funcionario.run);
+      const index = funcionarios.findIndex(f => f.run === dataObj.run);
       if (index >= 0) {
-        funcionarios[index] = { ...funcionarios[index], ...funcionario };
+        funcionarios[index] = { ...funcionarios[index], ...dataObj };
       } else {
-        funcionarios.push(funcionario);
+        funcionarios.push(dataObj);
       }
       dbLocal.funcionarios = funcionarios;
     }

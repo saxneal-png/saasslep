@@ -2000,6 +2000,13 @@ export default function SostenedorDashboard() {
               return f && f.estamento === 'Docente';
             });
             const totalHorasContratadasDocentes = totalContratosDocentes.reduce((sum, c) => sum + c.horas_totales, 0);
+
+            const totalContratosAsistentes = contratos.filter(c => {
+              const f = funcionarios.find(fn => fn.run === c.funcionario_run);
+              return f && f.estamento === 'Asistente de la Educación';
+            });
+            const totalHorasContratadasAsistentes = totalContratosAsistentes.reduce((sum, c) => sum + c.horas_totales, 0);
+
             const totalHorasAsignadas = asignaciones.reduce((sum, a) => sum + a.horas, 0);
 
             // Funding Sources Breakdown
@@ -2016,7 +2023,16 @@ export default function SostenedorDashboard() {
               
               const comunaConts = contratos.filter(c => rbds.includes(c.rbd));
               const comunaContIds = comunaConts.map(c => c.id);
-              const totalContHours = comunaConts.reduce((sum, c) => sum + c.horas_totales, 0);
+              
+              const horasContratoDocente = comunaConts.filter(c => {
+                const f = funcionarios.find(fn => fn.run === c.funcionario_run);
+                return f && f.estamento === 'Docente';
+              }).reduce((sum, c) => sum + c.horas_totales, 0);
+
+              const horasContratoAsistente = comunaConts.filter(c => {
+                const f = funcionarios.find(fn => fn.run === c.funcionario_run);
+                return f && f.estamento === 'Asistente de la Educación';
+              }).reduce((sum, c) => sum + c.horas_totales, 0);
               
               const comunaAsigs = asignaciones.filter(a => comunaContIds.includes(a.contrato_id));
               const totalAsigHours = comunaAsigs.reduce((sum, a) => sum + a.horas, 0);
@@ -2030,7 +2046,8 @@ export default function SostenedorDashboard() {
               return {
                 comuna: comName,
                 establecimientos: comunaEsts.length,
-                horasContrato: totalContHours,
+                horasDocentes: horasContratoDocente,
+                horasAsistentes: horasContratoAsistente,
                 horasAsignadas: totalAsigHours,
                 sepHours,
                 pieHours,
@@ -2211,7 +2228,7 @@ export default function SostenedorDashboard() {
                 {resumenSubTab === 'territorio' && (
                   <div className="space-y-6 animate-in fade-in duration-200">
                     {/* Stat Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                       <div className="bg-white border rounded-xl p-4 shadow-sm flex flex-col justify-between">
                         <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Establecimientos</span>
                         <div className="flex items-baseline gap-1 mt-2">
@@ -2227,10 +2244,17 @@ export default function SostenedorDashboard() {
                         </div>
                       </div>
                       <div className="bg-white border rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Total Horas Asistentes</span>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-xl font-black text-purple-650">{totalHorasContratadasAsistentes}</span>
+                          <span className="text-xs text-slate-400">horas contratas</span>
+                        </div>
+                      </div>
+                      <div className="bg-white border rounded-xl p-4 shadow-sm flex flex-col justify-between">
                         <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Carga en Aula</span>
                         <div className="flex items-baseline gap-1 mt-2">
                           <span className="text-xl font-black text-emerald-600">{totalHorasAsignadas}</span>
-                          <span className="text-xs text-slate-400">({((totalHorasAsignadas / (totalHorasContratadasDocentes || 1)) * 100).toFixed(0)}% de carga)</span>
+                          <span className="text-xs text-slate-400">({((totalHorasAsignadas / ((totalHorasContratadasDocentes + totalHorasContratadasAsistentes) || 1)) * 100).toFixed(0)}% de carga)</span>
                         </div>
                       </div>
                       <div className="bg-white border rounded-xl p-4 shadow-sm flex flex-col justify-between">
@@ -2280,7 +2304,8 @@ export default function SostenedorDashboard() {
                             <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 uppercase font-black">
                               <th className="p-4">Comuna</th>
                               <th className="p-4 text-center">Escuelas</th>
-                              <th className="p-4">Horas Contrato</th>
+                              <th className="p-4 text-blue-800">Horas Docente</th>
+                              <th className="p-4 text-purple-800">Horas Asistente</th>
                               <th className="p-4">Horas Aula</th>
                               <th className="p-4 text-blue-600">Regular</th>
                               <th className="p-4 text-orange-600">SEP</th>
@@ -2293,7 +2318,8 @@ export default function SostenedorDashboard() {
                               <tr key={c.comuna} className="hover:bg-slate-50/50">
                                 <td className="p-4 font-bold text-slate-800">{c.comuna}</td>
                                 <td className="p-4 text-center font-bold text-slate-500">{c.establecimientos}</td>
-                                <td className="p-4 font-mono font-bold">{c.horasContrato} hrs</td>
+                                <td className="p-4 font-mono font-bold text-blue-800">{c.horasDocentes} hrs</td>
+                                <td className="p-4 font-mono font-bold text-purple-800">{c.horasAsistentes} hrs</td>
                                 <td className="p-4 font-mono font-bold text-emerald-600">{c.horasAsignadas} hrs</td>
                                 <td className="p-4 font-mono text-blue-600">{c.regularHours} hrs</td>
                                 <td className="p-4 font-mono text-orange-600">{c.sepHours} hrs</td>

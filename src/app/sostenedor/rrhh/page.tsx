@@ -599,8 +599,11 @@ export default function RRHHPage() {
   // Filter staff
   const filteredFuncionarios = funcionarios.filter(f => {
     const matchesSearch = f.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || f.run.includes(searchTerm);
-    if (filterEstamento === 'P01') return matchesSearch && f.grupo_estamento === 'P01_Administrativo';
-    if (filterEstamento === 'P02') return matchesSearch && f.grupo_estamento === 'P02_Educacion';
+    const esP02 = f.grupo_estamento === 'P02_Educacion' || f.estamento === 'Docente' || f.estamento === 'Asistente de la Educación';
+    const esP01 = f.grupo_estamento === 'P01_Administrativo';
+
+    if (filterEstamento === 'P01') return matchesSearch && esP01;
+    if (filterEstamento === 'P02') return matchesSearch && esP02;
     return matchesSearch;
   });
 
