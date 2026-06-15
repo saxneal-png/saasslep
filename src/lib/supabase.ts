@@ -306,6 +306,10 @@ class DatabaseLocal {
         const remoteTimestamp = backup._timestamp || 0;
 
         if (remoteTimestamp !== localTimestamp || !localStorage.getItem('slep_db_initialized')) {
+          const oldContratos = [...this.contratos];
+          const oldAsignaciones = [...this.asignacionesAula];
+          const oldAlertas = [...this.alertas];
+
           Object.keys(backup).forEach(k => {
             if (k === '_timestamp') {
               localStorage.setItem('slep_db__timestamp', backup[k].toString());
@@ -315,6 +319,39 @@ class DatabaseLocal {
           });
           localStorage.setItem('slep_db_initialized', 'true');
           console.log('☁️ Datos actualizados desde la nube global.');
+
+          // Dispatch Postgres simulation diff events
+          const newContratos = this.contratos;
+          const newAsignaciones = this.asignacionesAula;
+          const newAlertas = this.alertas;
+
+          const dispatchDiffs = (table: string, oldArr: any[], newArr: any[], idKey = 'id') => {
+            newArr.forEach(newItem => {
+              const oldItem = oldArr.find(o => o[idKey] === newItem[idKey]);
+              if (!oldItem) {
+                window.dispatchEvent(new CustomEvent('supabase_postgres_changes', {
+                  detail: { table, eventType: 'INSERT', new: newItem }
+                }));
+              } else if (JSON.stringify(oldItem) !== JSON.stringify(newItem)) {
+                window.dispatchEvent(new CustomEvent('supabase_postgres_changes', {
+                  detail: { table, eventType: 'UPDATE', new: newItem }
+                }));
+              }
+            });
+            oldArr.forEach(oldItem => {
+              const newItem = newArr.find(n => n[idKey] === oldItem[idKey]);
+              if (!newItem) {
+                window.dispatchEvent(new CustomEvent('supabase_postgres_changes', {
+                  detail: { table, eventType: 'DELETE', old: oldItem }
+                }));
+              }
+            });
+          };
+
+          dispatchDiffs('contratos', oldContratos, newContratos, 'id');
+          dispatchDiffs('asignaciones_aula', oldAsignaciones, newAsignaciones, 'id');
+          dispatchDiffs('alertas_conciliacion', oldAlertas, newAlertas, 'id');
+
           return true;
         }
       } else if (res.status === 404) {
@@ -795,23 +832,70 @@ export const supabase = {
         if (table === 'alertas_conciliacion') {
           return Promise.resolve({ data: dbLocal.alertas.filter(a => a.rbd === val), error: null });
         }
+        if (table === 'contratos') {
+          return Promise.resolve({ data: dbLocal.contratos.filter(c => c.rbd === val), error: null });
+        }
+        if (table === 'asignaciones_aula') {
+          const rbdContratos = dbLocal.contratos.filter(c => c.rbd === val).map(c => c.id);
+          return Promise.resolve({ data: dbLocal.asignacionesAula.filter(a => rbdContratos.includes(a.contrato_id)), error: null });
+        }
         return Promise.resolve({ data: [], error: null });
       }
     })
   }),
   channel: (channelName: string) => {
-    return {
-      on: (event: string, filter: any, callback: (payload: any) => void) => {
-        return {
-          subscribe: () => ({
-            unsubscribe: () => {}
-          })
-        };
-      },
-      subscribe: () => ({
-        unsubscribe: () => {}
-      })
+    const listeners: { table: string; filter: string; callback: (payload: any) => void }[] = [];
+
+    const eventHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      listeners.forEach(({ table, filter, callback }) => {
+        if (detail.table === table) {
+          if (filter) {
+            const parts = filter.split('=eq.');
+            if (parts.length === 2) {
+              const col = parts[0];
+              const val = parts[1];
+              const record = detail.eventType === 'DELETE' ? detail.old : detail.new;
+              if (record && String(record[col]) !== String(val)) {
+                return;
+              }
+            }
+          }
+          callback(detail);
+        }
+      });
     };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('supabase_postgres_changes', eventHandler);
+    }
+
+    const channelObj = {
+      on: (event: string, config: { event: string; schema: string; table: string; filter?: string }, callback: (payload: any) => void) => {
+        listeners.push({
+          table: config.table,
+          filter: config.filter || '',
+          callback
+        });
+        return channelObj;
+      },
+      subscribe: () => {
+        return {
+          unsubscribe: () => {
+            if (typeof window !== 'undefined') {
+              window.removeEventListener('supabase_postgres_changes', eventHandler);
+            }
+          },
+          _handler: eventHandler
+        };
+      }
+    };
+
+    return channelObj;
   },
-  removeChannel: (channel: any) => {}
+  removeChannel: (channel: any) => {
+    if (typeof window !== 'undefined' && channel && channel._handler) {
+      window.removeEventListener('supabase_postgres_changes', channel._handler);
+    }
+  }
 };

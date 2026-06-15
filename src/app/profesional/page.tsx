@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { api, dbLocal } from '@/lib/supabase';
+import { api, dbLocal, supabase } from '@/lib/supabase';
 
 import { 
   Establecimiento, 
@@ -151,6 +151,70 @@ export default function ProfesionalDashboard() {
       if (interval) clearInterval(interval);
     };
   }, []);
+
+  // Realtime Supabase Channels Subscription for Asesor (filtered by assigned RBDs in callback)
+  useEffect(() => {
+    if (!profesionalRun || escuelasAsignadasRbd.length === 0) return;
+
+    const channel = supabase
+      .channel(`asesor-realtime-${profesionalRun}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'contratos' },
+        (payload: any) => {
+          console.log('🔥 Cambios en contratos recibidos por canal realtime (Asesor):', payload);
+          const record = payload.eventType === 'DELETE' ? payload.old : payload.new;
+          if (record && escuelasAsignadasRbd.includes(record.rbd)) {
+            if (payload.eventType === 'INSERT') {
+              setContratos(prev => [...prev, payload.new]);
+            } else if (payload.eventType === 'UPDATE') {
+              setContratos(prev => prev.map(c => c.id === payload.new.id ? payload.new : c));
+            } else if (payload.eventType === 'DELETE') {
+              setContratos(prev => prev.filter(c => c.id !== payload.old.id));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'asignaciones_aula' },
+        (payload: any) => {
+          console.log('🔥 Cambios en asignaciones recibidos por canal realtime (Asesor):', payload);
+          const record = payload.eventType === 'DELETE' ? payload.old : payload.new;
+          if (record) {
+            if (payload.eventType === 'INSERT') {
+              setAsignaciones(prev => [...prev, payload.new]);
+            } else if (payload.eventType === 'UPDATE') {
+              setAsignaciones(prev => prev.map(a => a.id === payload.new.id ? payload.new : a));
+            } else if (payload.eventType === 'DELETE') {
+              setAsignaciones(prev => prev.filter(a => a.id !== payload.old.id));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'alertas_conciliacion' },
+        (payload: any) => {
+          console.log('🔥 Cambios en alertas recibidos por canal realtime (Asesor):', payload);
+          const record = payload.eventType === 'DELETE' ? payload.old : payload.new;
+          if (record && escuelasAsignadasRbd.includes(record.rbd)) {
+            if (payload.eventType === 'INSERT') {
+              setAlertas(prev => [...prev, payload.new]);
+            } else if (payload.eventType === 'UPDATE') {
+              setAlertas(prev => prev.map(a => a.id === payload.new.id ? payload.new : a));
+            } else if (payload.eventType === 'DELETE') {
+              setAlertas(prev => prev.filter(a => a.id !== payload.old.id));
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profesionalRun, escuelasAsignadasRbd]);
 
   useEffect(() => {
     async function loadData() {
