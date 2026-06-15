@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import { 
   Establecimiento, 
   Funcionario, 
@@ -497,85 +498,99 @@ class DatabaseLocal {
 
 export const dbLocal = new DatabaseLocal();
 
+const supabaseUrl = typeof window !== 'undefined' ? (window as any).env?.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' : process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = typeof window !== 'undefined' ? (window as any).env?.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder' : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
 export const api = {
   getEstablecimientos: async (): Promise<Establecimiento[]> => {
-    return dbLocal.establecimientos;
+    const { data, error } = await supabase.from('establecimientos').select('*');
+    if (error) console.error(error);
+    return data || [];
   },
 
   getEstablecimientoByRbd: async (rbd: string): Promise<Establecimiento | undefined> => {
-    return dbLocal.establecimientos.find(e => e.rbd === rbd);
+    const { data, error } = await supabase.from('establecimientos').select('*').eq('rbd', rbd).maybeSingle();
+    if (error) console.error(error);
+    return data || undefined;
   },
 
   upsertEstablecimiento: async (est: Establecimiento): Promise<void> => {
-    const list = dbLocal.establecimientos;
-    const idx = list.findIndex(e => e.rbd === est.rbd);
-    if (idx >= 0) {
-      list[idx] = est;
-    } else {
-      list.push(est);
-    }
-    dbLocal.establecimientos = list;
+    const { error } = await supabase.from('establecimientos').upsert(est);
+    if (error) console.error(error);
   },
 
   deleteEstablecimiento: async (rbd: string): Promise<void> => {
-    dbLocal.establecimientos = dbLocal.establecimientos.filter(e => e.rbd !== rbd);
+    const { error } = await supabase.from('establecimientos').delete().eq('rbd', rbd);
+    if (error) console.error(error);
   },
 
   getFuncionarios: async (): Promise<Funcionario[]> => {
-    return dbLocal.funcionarios;
+    const { data, error } = await supabase.from('funcionarios').select('*');
+    if (error) console.error(error);
+    return data || [];
   },
 
   getContratos: async (rbd?: string): Promise<Contrato[]> => {
-    const contratos = dbLocal.contratos;
-    return rbd ? contratos.filter(c => c.rbd === rbd) : contratos;
+    let query = supabase.from('contratos').select('*');
+    if (rbd) {
+      query = query.eq('rbd', rbd);
+    }
+    const { data, error } = await query;
+    if (error) console.error(error);
+    return data || [];
   },
 
   getFinanciamientosPorContrato: async (contratoId: string): Promise<FinanciamientoContrato[]> => {
-    return dbLocal.financiamientoContratos.filter(f => f.contrato_id === contratoId);
+    const { data, error } = await supabase.from('financiamientos').select('*').eq('contrato_id', contratoId);
+    if (error) console.error(error);
+    return data || [];
   },
 
   getAsignacionesPorEstablecimiento: async (rbd: string): Promise<AsignacionAula[]> => {
-    const contratos = dbLocal.contratos.filter(c => c.rbd === rbd);
-    const contratoIds = contratos.map(c => c.id);
-    return dbLocal.asignacionesAula.filter(a => contratoIds.includes(a.contrato_id));
+    const { data: contratos } = await supabase.from('contratos').select('id').eq('rbd', rbd);
+    if (!contratos || contratos.length === 0) return [];
+    const ids = contratos.map(c => c.id);
+    const { data, error } = await supabase.from('asignaciones_aula').select('*').in('contrato_id', ids);
+    if (error) console.error(error);
+    return data || [];
   },
 
   getAlertas: async (rbd?: string): Promise<AlertaConciliacion[]> => {
-    const alertas = dbLocal.alertas;
-    return rbd ? alertas.filter(a => a.rbd === rbd) : alertas;
+    let query = supabase.from('alertas_conciliacion').select('*');
+    if (rbd) {
+      query = query.eq('rbd', rbd);
+    }
+    const { data, error } = await query;
+    if (error) console.error(error);
+    return data || [];
   },
 
   upsertFuncionario: async (funcionario: Funcionario): Promise<void> => {
-    const funcionarios = dbLocal.funcionarios;
-    const index = funcionarios.findIndex(f => f.run === funcionario.run);
-    if (index >= 0) {
-      funcionarios[index] = { ...funcionarios[index], ...funcionario };
-    } else {
-      funcionarios.push(funcionario);
-    }
-    dbLocal.funcionarios = funcionarios;
+    const { error } = await supabase.from('funcionarios').upsert(funcionario);
+    if (error) console.error(error);
   },
 
   deleteFuncionario: async (run: string): Promise<void> => {
-    dbLocal.funcionarios = dbLocal.funcionarios.filter(f => f.run !== run);
+    const { error } = await supabase.from('funcionarios').delete().eq('run', run);
+    if (error) console.error(error);
   },
 
   upsertContratoCompleto: async (
     contrato: Contrato, 
     financiamientos: FinanciamientoContrato[]
   ): Promise<void> => {
-    const contratos = dbLocal.contratos;
-    const cIndex = contratos.findIndex(c => c.id === contrato.id);
-    if (cIndex >= 0) {
-      contratos[cIndex] = contrato;
-    } else {
-      contratos.push(contrato);
-    }
-    dbLocal.contratos = contratos;
+    const { error: cErr } = await supabase.from('contratos').upsert(contrato);
+    if (cErr) console.error(cErr);
+    
+    const { error: delErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contrato.id);
+    if (delErr) console.error(delErr);
 
-    let finList = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== contrato.id);
-    finList.push(...financiamientos);
-    dbLocal.financiamientoContratos = finList;
+    if (financiamientos.length > 0) {
+      const { error: insErr } = await supabase.from('financiamientos').insert(financiamientos);
+      if (insErr) console.error(insErr);
+    }
   },
 
   updateContratoEstado: async (
@@ -583,137 +598,107 @@ export const api = {
     estado: EstadoContrato, 
     vinculoTitularId: string | null = null
   ): Promise<void> => {
-    const contratos = dbLocal.contratos;
-    const idx = contratos.findIndex(c => c.id === contratoId);
-    if (idx >= 0) {
-      contratos[idx].estado = estado;
-      contratos[idx].vinculo_titular_id = vinculoTitularId;
-      dbLocal.contratos = contratos;
-    }
+    const { error } = await supabase.from('contratos').update({ estado, vinculo_titular_id: vinculoTitularId }).eq('id', contratoId);
+    if (error) console.error(error);
   },
 
   deleteContrato: async (contratoId: string): Promise<void> => {
-    dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== contratoId);
-    dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== contratoId);
-    dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.contrato_id !== contratoId);
+    await supabase.from('asignaciones_aula').delete().eq('contrato_id', contratoId);
+    await supabase.from('financiamientos').delete().eq('contrato_id', contratoId);
+    const { error } = await supabase.from('contratos').delete().eq('id', contratoId);
+    if (error) console.error(error);
   },
 
   saveAsignacion: async (asignacion: AsignacionAula): Promise<void> => {
-    const asignaciones = dbLocal.asignacionesAula;
-    const idx = asignaciones.findIndex(a => a.id === asignacion.id);
-    if (idx >= 0) {
-      asignaciones[idx] = asignacion;
-    } else {
-      asignaciones.push(asignacion);
-    }
-    dbLocal.asignacionesAula = asignaciones;
+    const { error } = await supabase.from('asignaciones_aula').upsert(asignacion);
+    if (error) console.error(error);
   },
 
   deleteAsignacion: async (id: string): Promise<void> => {
-    dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.id !== id);
+    const { error } = await supabase.from('asignaciones_aula').delete().eq('id', id);
+    if (error) console.error(error);
   },
 
   crearAlerta: async (alerta: AlertaConciliacion): Promise<void> => {
-    const alertas = dbLocal.alertas;
-    if (!alertas.some(a => a.id === alerta.id)) {
-      alertas.push(alerta);
-      dbLocal.alertas = alertas;
-    }
+    const { error } = await supabase.from('alertas_conciliacion').upsert(alerta);
+    if (error) console.error(error);
   },
 
   resolverAlerta: async (alertaId: string): Promise<void> => {
-    const alertas = dbLocal.alertas;
-    const idx = alertas.findIndex(a => a.id === alertaId);
-    if (idx >= 0) {
-      alertas[idx].resuelta = true;
-      dbLocal.alertas = alertas;
-    }
+    const { error } = await supabase.from('alertas_conciliacion').update({ resuelta: true }).eq('id', alertaId);
+    if (error) console.error(error);
   },
 
   limpiarAlertasPorRbd: async (rbd: string): Promise<void> => {
-    dbLocal.alertas = dbLocal.alertas.filter(a => a.rbd !== rbd || a.resuelta);
+    const { error } = await supabase.from('alertas_conciliacion').delete().eq('rbd', rbd).eq('resuelta', true);
+    if (error) console.error(error);
   },
 
-  // Tutelas/Asignaciones de Escuelas a Profesionales SLEP
   getTutelasPorProfesional: async (profesionalRun: string): Promise<string[]> => {
-    const list = dbLocal.tutelas;
-    return list
-      .filter(t => t.profesional_run === profesionalRun)
-      .map(t => t.establecimiento_rbd);
+    const { data, error } = await supabase.from('tutelas').select('establecimiento_rbd').eq('profesional_run', profesionalRun);
+    if (error) console.error(error);
+    return data ? data.map(t => t.establecimiento_rbd) : [];
   },
 
   getTodasLasTutelas: async (): Promise<ProfesionalEscuelaAsignada[]> => {
-    return dbLocal.tutelas;
+    const { data, error } = await supabase.from('tutelas').select('*');
+    if (error) console.error(error);
+    return data || [];
   },
 
   asignarEscuelaAProfesional: async (profesionalRun: string, rbd: string): Promise<void> => {
-    const list = dbLocal.tutelas;
-    if (!list.some(t => t.profesional_run === profesionalRun && t.establecimiento_rbd === rbd)) {
-      list.push({ profesional_run: profesionalRun, establecimiento_rbd: rbd });
-      dbLocal.tutelas = list;
-    }
+    const { error } = await supabase.from('tutelas').upsert({ profesional_run: profesionalRun, establecimiento_rbd: rbd });
+    if (error) console.error(error);
   },
 
   removerEscuelaDeProfesional: async (profesionalRun: string, rbd: string): Promise<void> => {
-    let list = dbLocal.tutelas;
-    list = list.filter(t => !(t.profesional_run === profesionalRun && t.establecimiento_rbd === rbd));
-    dbLocal.tutelas = list;
+    const { error } = await supabase.from('tutelas').delete().eq('profesional_run', profesionalRun).eq('establecimiento_rbd', rbd);
+    if (error) console.error(error);
   },
 
-  // Cursos Dinámicos por Escuela (Director)
   getCursosDinamicos: async (rbd: string): Promise<CursoDinamico[]> => {
-    return dbLocal.cursosDinamicos.filter(c => c.rbd === rbd);
+    const { data, error } = await supabase.from('cursos_dinamicos').select('*').eq('rbd', rbd);
+    if (error) console.error(error);
+    return data || [];
   },
 
   crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
-    const list = dbLocal.cursosDinamicos;
-    const index = list.findIndex(c => c.rbd === curso.rbd && c.nombre === curso.nombre);
-    if (index >= 0) {
-      list[index] = curso;
-    } else {
-      list.push(curso);
-    }
-    dbLocal.cursosDinamicos = list;
+    const { error } = await supabase.from('cursos_dinamicos').upsert(curso);
+    if (error) console.error(error);
   },
 
   eliminarCursoDinamico: async (rbd: string, nombre: string): Promise<void> => {
-    dbLocal.cursosDinamicos = dbLocal.cursosDinamicos.filter(c => !(c.rbd === rbd && c.nombre === nombre));
-    dbLocal.asignaturasDinamicas = dbLocal.asignaturasDinamicas.filter(a => !(a.rbd === rbd && a.cursoNombre === nombre));
-    // Optionally clean assignments associated with this course name under this rbd
-    const conts = dbLocal.contratos.filter(c => c.rbd === rbd);
-    const contIds = conts.map(c => c.id);
-    dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => !(a.curso === nombre && contIds.includes(a.contrato_id)));
+    await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq('cursoNombre', nombre);
+    const { data: contratos } = await supabase.from('contratos').select('id').eq('rbd', rbd);
+    if (contratos && contratos.length > 0) {
+      const ids = contratos.map(c => c.id);
+      await supabase.from('asignaciones_aula').delete().eq('curso', nombre).in('contrato_id', ids);
+    }
+    const { error } = await supabase.from('cursos_dinamicos').delete().eq('rbd', rbd).eq('nombre', nombre);
+    if (error) console.error(error);
   },
 
-  // Asignaturas Dinámicas por Escuela/Curso
   getAsignaturasDinamicas: async (rbd: string, cursoNombre: string): Promise<AsignaturaDinamica[]> => {
-    return dbLocal.asignaturasDinamicas.filter(a => a.rbd === rbd && a.cursoNombre === cursoNombre);
+    const { data, error } = await supabase.from('asignaturas_dinamicas').select('*').eq('rbd', rbd).eq('cursoNombre', cursoNombre);
+    if (error) console.error(error);
+    return data || [];
   },
 
   crearAsignaturaDinamica: async (asignatura: AsignaturaDinamica): Promise<void> => {
-    const list = dbLocal.asignaturasDinamicas;
-    if (!list.some(a => a.rbd === asignatura.rbd && a.cursoNombre === asignatura.cursoNombre && a.nombre === asignatura.nombre)) {
-      list.push(asignatura);
-      dbLocal.asignaturasDinamicas = list;
-    }
+    const { error } = await supabase.from('asignaturas_dinamicas').upsert(asignatura);
+    if (error) console.error(error);
   },
 
-  // Supervisors (Profesionales SLEP) CRUD
   getSupervisores: async (): Promise<Supervisor[]> => {
-    return dbLocal.supervisores;
+    const { data, error } = await supabase.from('supervisores').select('*');
+    if (error) console.error(error);
+    return data || [];
   },
 
   upsertSupervisor: async (sup: Supervisor): Promise<void> => {
-    const list = dbLocal.supervisores;
-    const idx = list.findIndex(s => s.run === sup.run);
-    if (idx >= 0) {
-      list[idx] = sup;
-    } else {
-      list.push(sup);
-    }
-    dbLocal.supervisores = list;
-
-    // Sync to master funcionarios as well
+    const { error: supErr } = await supabase.from('supervisores').upsert(sup);
+    if (supErr) console.error(supErr);
+    
     await api.upsertFuncionario({
       run: sup.run,
       nombre: sup.nombre,
@@ -724,178 +709,101 @@ export const api = {
   },
 
   deleteSupervisor: async (run: string): Promise<void> => {
-    dbLocal.supervisores = dbLocal.supervisores.filter(s => s.run !== run);
-    dbLocal.tutelas = dbLocal.tutelas.filter(t => t.profesional_run !== run);
+    await supabase.from('tutelas').delete().eq('profesional_run', run);
+    const { error } = await supabase.from('supervisores').delete().eq('run', run);
+    if (error) console.error(error);
     await api.deleteFuncionario(run);
   },
 
-  // Cargos Personalizados CRUD
   getCargosPorEstablecimiento: async (rbd: string): Promise<CargoPersonalizado[]> => {
-    return dbLocal.cargosPersonalizados.filter(c => c.rbd === rbd);
+    const { data, error } = await supabase.from('cargos_personalizados').select('*').eq('rbd', rbd);
+    if (error) console.error(error);
+    return data || [];
   },
 
   crearCargoPersonalizado: async (cargo: CargoPersonalizado): Promise<void> => {
-    const list = dbLocal.cargosPersonalizados;
-    list.push(cargo);
-    dbLocal.cargosPersonalizados = list;
+    const { error } = await supabase.from('cargos_personalizados').upsert(cargo);
+    if (error) console.error(error);
   },
 
   removerCargoPersonalizado: async (id: string): Promise<void> => {
-    dbLocal.cargosPersonalizados = dbLocal.cargosPersonalizados.filter(c => c.id !== id);
+    const { error } = await supabase.from('cargos_personalizados').delete().eq('id', id);
+    if (error) console.error(error);
   },
 
-  // Planes de estudio JSON (Gobernanza del Sostenedor)
   getPlanesEstudio: async (): Promise<PlanEstudioNorm[]> => {
-    return dbLocal.planesEstudio;
+    const { data, error } = await supabase.from('planes_estudio').select('*');
+    if (error) console.error(error);
+    return data || [];
   },
 
   guardarPlanesEstudio: async (planes: PlanEstudioNorm[]): Promise<void> => {
-    dbLocal.planesEstudio = planes;
+    await supabase.from('planes_estudio').delete().neq('nivel', 'PLACEHOLDER_THAT_NEVER_MATCHES');
+    const { error } = await supabase.from('planes_estudio').insert(planes);
+    if (error) console.error(error);
   },
 
-  // Comunas CRUD
   getComunas: async (): Promise<string[]> => {
-    return dbLocal.comunas;
+    const { data, error } = await supabase.from('comunas').select('nombre');
+    if (error) console.error(error);
+    return data ? data.map((c: any) => c.nombre) : [];
   },
 
   addComuna: async (comuna: string): Promise<void> => {
-    const list = [...dbLocal.comunas];
-    if (!list.includes(comuna)) {
-      list.push(comuna);
-      dbLocal.comunas = list;
-    }
+    const { error } = await supabase.from('comunas').upsert({ nombre: comuna });
+    if (error) console.error(error);
   },
 
   deleteComuna: async (comuna: string): Promise<void> => {
-    let list = [...dbLocal.comunas];
-    list = list.filter(c => c !== comuna);
-    dbLocal.comunas = list;
+    const { error } = await supabase.from('comunas').delete().eq('nombre', comuna);
+    if (error) console.error(error);
   },
 
   getRemuneraciones: async (): Promise<RegistroRemuneracion[]> => {
-    return dbLocal.libroRemuneraciones;
+    const { data, error } = await supabase.from('libro_remuneraciones').select('*');
+    if (error) console.error(error);
+    return data || [];
   },
 
   cargarRemuneraciones: async (registros: RegistroRemuneracion[]): Promise<void> => {
-    dbLocal.libroRemuneraciones = registros;
+    await supabase.from('libro_remuneraciones').delete().neq('id', 'PLACEHOLDER');
+    const { error } = await supabase.from('libro_remuneraciones').insert(registros);
+    if (error) console.error(error);
   },
 
   getTareasReemplazo: async (): Promise<TareaReemplazo[]> => {
-    return dbLocal.tareasReemplazo;
+    const { data, error } = await supabase.from('tareas_reemplazo').select('*');
+    if (error) console.error(error);
+    return data || [];
   },
 
   crearTareaReemplazo: async (tarea: TareaReemplazo): Promise<void> => {
-    const list = [...dbLocal.tareasReemplazo, tarea];
-    dbLocal.tareasReemplazo = list;
+    const { error } = await supabase.from('tareas_reemplazo').insert(tarea);
+    if (error) console.error(error);
   },
 
   resolverTareaReemplazo: async (id: string, reemplazoRun: string): Promise<void> => {
-    const list = dbLocal.tareasReemplazo.map(t => {
-      if (t.id === id) {
-        return { ...t, estado: 'Asignado' as const, reemplazo_run: reemplazoRun };
-      }
-      return t;
-    });
-    dbLocal.tareasReemplazo = list;
+    const { error } = await supabase.from('tareas_reemplazo').update({ estado: 'Asignado', reemplazo_run: reemplazoRun }).eq('id', id);
+    if (error) console.error(error);
   },
 
   getReemplazosLicencias: async (): Promise<ReemplazoDetalle[]> => {
-    return dbLocal.reemplazosLicencias;
+    const { data, error } = await supabase.from('reemplazos_licencias').select('*');
+    if (error) console.error(error);
+    return data || [];
   },
 
   saveReemplazoLicencia: async (r: ReemplazoDetalle): Promise<void> => {
-    const list = [...dbLocal.reemplazosLicencias, r];
-    dbLocal.reemplazosLicencias = list;
+    const { error } = await supabase.from('reemplazos_licencias').insert(r);
+    if (error) console.error(error);
   },
 
   deleteReemplazoLicencia: async (id: string): Promise<void> => {
-    dbLocal.reemplazosLicencias = dbLocal.reemplazosLicencias.filter(r => r.id !== id);
+    const { error } = await supabase.from('reemplazos_licencias').delete().eq('id', id);
+    if (error) console.error(error);
   },
 
-  scheduleCloudSync: async (): Promise<void> => {
-    dbLocal.scheduleCloudSync();
-  },
-
-  pullCloudSync: async (): Promise<boolean> => {
-    return await dbLocal.pullCloudSync();
-  },
-
-  pushCloudSyncForce: async (): Promise<void> => {
-    await dbLocal.pushCloudSyncForce();
-  }
-};
-
-export const supabase = {
-  from: (table: string) => ({
-    select: (cols: string) => ({
-      eq: (col: string, val: any) => {
-        if (table === 'alertas_conciliacion') {
-          return Promise.resolve({ data: dbLocal.alertas.filter(a => a.rbd === val), error: null });
-        }
-        if (table === 'contratos') {
-          return Promise.resolve({ data: dbLocal.contratos.filter(c => c.rbd === val), error: null });
-        }
-        if (table === 'asignaciones_aula') {
-          const rbdContratos = dbLocal.contratos.filter(c => c.rbd === val).map(c => c.id);
-          return Promise.resolve({ data: dbLocal.asignacionesAula.filter(a => rbdContratos.includes(a.contrato_id)), error: null });
-        }
-        return Promise.resolve({ data: [], error: null });
-      }
-    })
-  }),
-  channel: (channelName: string) => {
-    const listeners: { table: string; filter: string; callback: (payload: any) => void }[] = [];
-
-    const eventHandler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      listeners.forEach(({ table, filter, callback }) => {
-        if (detail.table === table) {
-          if (filter) {
-            const parts = filter.split('=eq.');
-            if (parts.length === 2) {
-              const col = parts[0];
-              const val = parts[1];
-              const record = detail.eventType === 'DELETE' ? detail.old : detail.new;
-              if (record && String(record[col]) !== String(val)) {
-                return;
-              }
-            }
-          }
-          callback(detail);
-        }
-      });
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('supabase_postgres_changes', eventHandler);
-    }
-
-    const channelObj = {
-      on: (event: string, config: { event: string; schema: string; table: string; filter?: string }, callback: (payload: any) => void) => {
-        listeners.push({
-          table: config.table,
-          filter: config.filter || '',
-          callback
-        });
-        return channelObj;
-      },
-      subscribe: () => {
-        return {
-          unsubscribe: () => {
-            if (typeof window !== 'undefined') {
-              window.removeEventListener('supabase_postgres_changes', eventHandler);
-            }
-          },
-          _handler: eventHandler
-        };
-      }
-    };
-
-    return channelObj;
-  },
-  removeChannel: (channel: any) => {
-    if (typeof window !== 'undefined' && channel && channel._handler) {
-      window.removeEventListener('supabase_postgres_changes', channel._handler);
-    }
-  }
+  scheduleCloudSync: async (): Promise<void> => {},
+  pullCloudSync: async (): Promise<boolean> => { return false; },
+  pushCloudSyncForce: async (): Promise<void> => {}
 };
