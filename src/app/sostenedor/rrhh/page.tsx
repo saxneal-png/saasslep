@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { api, dbLocal } from '@/lib/supabase';
+import { api, dbLocal, supabase } from '@/lib/supabase';
 import { 
   Funcionario, 
   Contrato, 
@@ -589,8 +589,15 @@ export default function RRHHPage() {
   const handleMassDelete = async () => {
     if (selectedFuncs.length === 0) return;
     if (confirm(`¿Está seguro de que desea eliminar masivamente a los ${selectedFuncs.length} funcionarios seleccionados y sus contratos correspondientes?`)) {
-      dbLocal.funcionarios = dbLocal.funcionarios.filter(f => !selectedFuncs.includes(f.run));
-      dbLocal.contratos = dbLocal.contratos.filter(c => !selectedFuncs.includes(c.funcionario_run));
+      for (const run of selectedFuncs) {
+        const { data: employeeConts } = await supabase.from('contratos').select('id').eq('funcionario_run', run);
+        if (employeeConts && employeeConts.length > 0) {
+          for (const c of employeeConts) {
+            await api.deleteContrato(c.id);
+          }
+        }
+        await api.deleteFuncionario(run);
+      }
       setSelectedFuncs([]);
       await loadData();
       alert('✅ Funcionarios y sus contratos eliminados exitosamente.');
