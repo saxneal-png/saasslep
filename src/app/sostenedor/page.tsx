@@ -54,6 +54,7 @@ export default function SostenedorDashboard() {
   const [todosLosCursos, setTodosLosCursos] = useState<CursoDinamico[]>([]);
   const [todasLasAsignaturas, setTodasLasAsignaturas] = useState<AsignaturaDinamica[]>([]);
   const [resumenSubTab, setResumenSubTab] = useState<'territorio' | 'asignaturas' | 'disponibilidad' | 'alertas'>('territorio');
+  const [resumenSelectedAsignatura, setResumenSelectedAsignatura] = useState('Todas');
   const [authorized, setAuthorized] = useState(false);
   const [exportModal, setExportModal] = useState<{
     isOpen: boolean;
@@ -2234,51 +2235,143 @@ export default function SostenedorDashboard() {
 
                 {/* Tab Content: Por Asignatura */}
                 {resumenSubTab === 'asignaturas' && (
-                  <div className="bg-white border rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-200">
-                    <div className="p-4 border-b bg-slate-50">
-                      <h3 className="font-bold text-slate-800">Carga Horaria Semanal Ejecutada por Asignatura</h3>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Suma total de horas de aula asignadas en el territorio.</p>
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div className="bg-white border rounded-xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-sm">Filtro de Asignación por Asignatura</h3>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Seleccione una asignatura para auditar en qué establecimientos y por qué docentes se ejecuta.</p>
+                      </div>
+                      <select
+                        value={resumenSelectedAsignatura}
+                        onChange={(e) => setResumenSelectedAsignatura(e.target.value)}
+                        className="px-3 py-2 border rounded-xl text-xs bg-slate-50 font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-slep-blue cursor-pointer"
+                      >
+                        <option value="Todas">-- Todas las Asignaturas (Consolidado) --</option>
+                        {subjectsSorted.map(s => (
+                          <option key={s.nombre} value={s.nombre}>{s.nombre} ({s.horas} hrs)</option>
+                        ))}
+                      </select>
                     </div>
-                    <div className="p-6">
-                      {subjectsSorted.length === 0 ? (
-                        <p className="text-slate-400 italic text-center py-8">No hay asignaciones de aula registradas en el sistema.</p>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="space-y-3">
-                            {subjectsSorted.slice(0, Math.ceil(subjectsSorted.length / 2)).map((s, idx) => (
-                              <div key={idx} className="flex flex-col gap-1 border-b pb-2">
-                                <div className="flex justify-between font-bold text-slate-700">
-                                  <span>{s.nombre}</span>
-                                  <span className="font-mono font-black text-slep-blue">{s.horas} hrs</span>
-                                </div>
-                                <div className="w-full bg-slate-100 rounded-full h-1.5">
-                                  <div 
-                                    className="bg-slep-blue h-1.5 rounded-full" 
-                                    style={{ width: `${Math.min(100, (s.horas / (totalHorasAsignadas || 1)) * 100 * 3)}%` }}
-                                  />
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="space-y-3">
-                            {subjectsSorted.slice(Math.ceil(subjectsSorted.length / 2)).map((s, idx) => (
-                              <div key={idx} className="flex flex-col gap-1 border-b pb-2">
-                                <div className="flex justify-between font-bold text-slate-700">
-                                  <span>{s.nombre}</span>
-                                  <span className="font-mono font-black text-slep-blue">{s.horas} hrs</span>
-                                </div>
-                                <div className="w-full bg-slate-100 rounded-full h-1.5">
-                                  <div 
-                                    className="bg-slep-blue h-1.5 rounded-full" 
-                                    style={{ width: `${Math.min(100, (s.horas / (totalHorasAsignadas || 1)) * 100 * 3)}%` }}
-                                  />
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+
+                    {resumenSelectedAsignatura === 'Todas' ? (
+                      <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+                        <div className="p-4 border-b bg-slate-50">
+                          <h3 className="font-bold text-slate-850">Carga Horaria Semanal Ejecutada por Asignatura</h3>
+                          <p className="text-[10px] text-slate-400 mt-0.5">Suma total de horas de aula asignadas en el territorio.</p>
                         </div>
-                      )}
-                    </div>
+                        <div className="p-6">
+                          {subjectsSorted.length === 0 ? (
+                            <p className="text-slate-400 italic text-center py-8">No hay asignaciones de aula registradas en el sistema.</p>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="space-y-3">
+                                {subjectsSorted.slice(0, Math.ceil(subjectsSorted.length / 2)).map((s, idx) => (
+                                  <div key={idx} className="flex flex-col gap-1 border-b pb-2">
+                                    <div className="flex justify-between font-bold text-slate-700">
+                                      <span>{s.nombre}</span>
+                                      <span className="font-mono font-black text-slep-blue">{s.horas} hrs</span>
+                                    </div>
+                                    <div className="w-full bg-slate-100 rounded-full h-1.5">
+                                      <div 
+                                        className="bg-slep-blue h-1.5 rounded-full" 
+                                        style={{ width: `${Math.min(100, (s.horas / (totalHorasAsignadas || 1)) * 100 * 3)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="space-y-3">
+                                {subjectsSorted.slice(Math.ceil(subjectsSorted.length / 2)).map((s, idx) => (
+                                  <div key={idx} className="flex flex-col gap-1 border-b pb-2">
+                                    <div className="flex justify-between font-bold text-slate-700">
+                                      <span>{s.nombre}</span>
+                                      <span className="font-mono font-black text-slep-blue">{s.horas} hrs</span>
+                                    </div>
+                                    <div className="w-full bg-slate-100 rounded-full h-1.5">
+                                      <div 
+                                        className="bg-slep-blue h-1.5 rounded-full" 
+                                        style={{ width: `${Math.min(100, (s.horas / (totalHorasAsignadas || 1)) * 100 * 3)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-white border rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-200">
+                        {(() => {
+                          const targetAsigs = asignaciones.filter(a => a.asignatura === resumenSelectedAsignatura);
+                          const totalSubjectHours = targetAsigs.reduce((sum, a) => sum + a.horas, 0);
+                          
+                          const detailList = targetAsigs.map(a => {
+                            const cont = contratos.find(c => c.id === a.contrato_id);
+                            const school = cont ? establecimientos.find(e => e.rbd === cont.rbd) : null;
+                            const teacher = cont ? funcionarios.find(f => f.run === cont.funcionario_run) : null;
+                            return {
+                              rbd: cont ? cont.rbd : 'N/A',
+                              escuela: school ? school.nombre : 'N/A',
+                              curso: a.curso,
+                              docente: teacher ? teacher.nombre : 'Sin Asignar',
+                              run: cont ? cont.funcionario_run : '',
+                              horas: a.horas
+                            };
+                          }).sort((a, b) => b.horas - a.horas);
+
+                          return (
+                            <>
+                              <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                                <div>
+                                  <h3 className="font-bold text-slate-800">Detalle de Ejecución: {resumenSelectedAsignatura}</h3>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">Listado de asignaciones de aula para esta asignatura específica.</p>
+                                </div>
+                                <span className="bg-blue-100 text-blue-800 font-mono font-bold px-3 py-1 rounded text-xs">
+                                  Total Horas: {totalSubjectHours} hrs
+                                </span>
+                              </div>
+                              <div className="overflow-x-auto">
+                                {detailList.length === 0 ? (
+                                  <p className="text-slate-400 italic text-center py-8">No hay horas asignadas para esta asignatura.</p>
+                                ) : (
+                                  <table className="w-full text-left border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 uppercase font-black">
+                                        <th className="p-3 pl-6">Establecimiento</th>
+                                        <th className="p-3">Curso</th>
+                                        <th className="p-3">Docente Asignado</th>
+                                        <th className="p-3 text-right pr-6">Horas Ejecutadas</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                                      {detailList.map((d, idx) => (
+                                        <tr key={idx} className="hover:bg-slate-50/50">
+                                          <td className="p-3 pl-6">
+                                            <p className="font-bold text-slate-800">{d.escuela}</p>
+                                            <p className="text-[9px] text-slate-400 font-mono mt-0.5">RBD {d.rbd}</p>
+                                          </td>
+                                          <td className="p-3">
+                                            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold border">{d.curso}</span>
+                                          </td>
+                                          <td className="p-3">
+                                            <p className="font-bold text-slate-700">{d.docente}</p>
+                                            <p className="text-[9px] text-slate-400 mt-0.5">{d.run}</p>
+                                          </td>
+                                          <td className="p-3 text-right pr-6 font-mono font-bold text-slep-blue">
+                                            {d.horas} hrs
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
 
