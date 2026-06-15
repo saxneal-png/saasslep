@@ -98,6 +98,17 @@ export default function EscuelaDashboard() {
   const [showAsistenteActionsDropdown, setShowAsistenteActionsDropdown] = useState(false);
   const [openAddFuncionarioModal, setOpenAddFuncionarioModal] = useState<EstamentoType | null>(null);
   const [openCreateCargoModal, setOpenCreateCargoModal] = useState(false);
+  const [exportModal, setExportModal] = useState<{
+    isOpen: boolean;
+    format: 'xlsx' | 'pdf';
+    tab: string;
+    columns: { key: string; label: string; checked: boolean }[];
+  }>({
+    isOpen: false,
+    format: 'xlsx',
+    tab: '',
+    columns: []
+  });
   const [editingFuncionario, setEditingFuncionario] = useState<Funcionario | null>(null);
   const [editFuncNombre, setEditFuncNombre] = useState('');
   const [editFuncCargo, setEditFuncCargo] = useState('');
@@ -755,9 +766,50 @@ export default function EscuelaDashboard() {
     }
   };
 
-  // Mock Export files (xlsx / pdf)
-  const handleExportDotacion = (format: 'xlsx' | 'pdf') => {
-    alert(`📥 Descargando Dotación de Personal Completa (${colegio?.nombre}) en formato ${format.toUpperCase()}...`);
+  // Mock Export files (xlsx / pdf) with column selector
+  const triggerExport = (tab: string, format: 'xlsx' | 'pdf') => {
+    let cols: { key: string; label: string; checked: boolean }[] = [];
+    if (tab === 'docentes' || tab === 'asistentes') {
+      cols = [
+        { key: 'run', label: 'RUT / RUN', checked: true },
+        { key: 'nombre', label: 'Nombre Completo', checked: true },
+        { key: 'cargo', label: 'Cargo / Función', checked: true },
+        { key: 'horas', label: 'Horas Totales', checked: true },
+        { key: 'estado', label: 'Estado del Contrato', checked: true }
+      ];
+    } else if (tab === 'cursos') {
+      cols = [
+        { key: 'nombre', label: 'Curso', checked: true },
+        { key: 'nivel', label: 'Nivel', checked: true },
+        { key: 'regimen', label: 'Régimen Horario', checked: true },
+        { key: 'horas', label: 'Horas Plan Estudio', checked: true }
+      ];
+    } else if (tab === 'compendio') {
+      cols = [
+        { key: 'indicador', label: 'Indicador / Métrica', checked: true },
+        { key: 'valor', label: 'Valor Reportado', checked: true }
+      ];
+    } else if (tab === 'dotacion') {
+      cols = [
+        { key: 'run', label: 'RUT / RUN', checked: true },
+        { key: 'nombre', label: 'Nombre Completo', checked: true },
+        { key: 'estamento', label: 'Estamento', checked: true },
+        { key: 'cargo', label: 'Cargo / Función', checked: true },
+        { key: 'horas', label: 'Horas Contratadas', checked: true }
+      ];
+    }
+    setExportModal({
+      isOpen: true,
+      format,
+      tab,
+      columns: cols
+    });
+  };
+
+  const handleExecuteExport = () => {
+    const activeCols = exportModal.columns.filter(c => c.checked).map(c => c.label);
+    alert(`📥 Descargando reporte de la pestaña "${exportModal.tab.toUpperCase()}" (${colegio?.nombre || 'Establecimiento'}) en formato ${exportModal.format.toUpperCase()}...\n\nColumnas seleccionadas:\n- ${activeCols.join('\n- ')}`);
+    setExportModal({ ...exportModal, isOpen: false });
   };
 
   // Curricular plans for matrix selector
@@ -1260,20 +1312,7 @@ export default function EscuelaDashboard() {
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <button 
-              onClick={() => handleExportDotacion('xlsx')}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded text-xs shadow flex items-center gap-1"
-            >
-              📊 Exportar Excel (.xlsx)
-            </button>
-            <button 
-              onClick={() => window.print()}
-              className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded text-xs shadow flex items-center gap-1"
-            >
-              📄 Imprimir PDF
-            </button>
-          </div>
+
         </div>
 
 
@@ -1558,6 +1597,18 @@ export default function EscuelaDashboard() {
                     >
                       ➕ Agregar / Asignar ▾
                     </button>
+                    <button
+                      onClick={() => triggerExport('docentes', 'xlsx')}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                    >
+                      📊 Excel
+                    </button>
+                    <button
+                      onClick={() => triggerExport('docentes', 'pdf')}
+                      className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                    >
+                      📄 PDF
+                    </button>
                     {showDocenteActionsDropdown && (
                       <div className="absolute right-0 top-full mt-1 w-60 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-xs text-slate-700">
                         <button
@@ -1841,6 +1892,18 @@ export default function EscuelaDashboard() {
                     >
                       ➕ Agregar / Asignar ▾
                     </button>
+                    <button
+                      onClick={() => triggerExport('asistentes', 'xlsx')}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                    >
+                      📊 Excel
+                    </button>
+                    <button
+                      onClick={() => triggerExport('asistentes', 'pdf')}
+                      className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                    >
+                      📄 PDF
+                    </button>
                     {showAsistenteActionsDropdown && (
                       <div className="absolute right-0 top-full mt-1 w-60 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-xs text-slate-700">
                         <button
@@ -2030,7 +2093,23 @@ export default function EscuelaDashboard() {
                 
                 {/* Course list, custom cargo loader, PIE Checker, and assignment matrix */}
                 <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-                  <h3 className="text-base font-bold text-slate-800 mb-4">Planificador de Carga Horaria y Cursos</h3>
+                  <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
+                    <h3 className="text-base font-bold text-slate-800">Planificador de Carga Horaria y Cursos</h3>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => triggerExport('cursos', 'xlsx')}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                      >
+                        📊 Excel
+                      </button>
+                      <button
+                        onClick={() => triggerExport('cursos', 'pdf')}
+                        className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                      >
+                        📄 PDF
+                      </button>
+                    </div>
+                  </div>
                   
                   {/* Cursos Registrados */}
                   <div className="mb-6 pb-6 border-b border-slate-100">
@@ -2315,9 +2394,25 @@ export default function EscuelaDashboard() {
 
             {activeTab === 'compendio' && (
               <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-6">
-                <div>
-                  <h3 className="text-base font-bold text-slate-800">Compendio e Información Completa del Establecimiento</h3>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">Consolidado interactivo de matrícula, dotaciones docentes, horas de plan de estudio, y financiamiento SEP/PIE.</p>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Compendio e Información Completa del Establecimiento</h3>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">Consolidado interactivo de matrícula, dotaciones docentes, horas de plan de estudio, y financiamiento SEP/PIE.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => triggerExport('compendio', 'xlsx')}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                    >
+                      📊 Excel
+                    </button>
+                    <button
+                      onClick={() => triggerExport('compendio', 'pdf')}
+                      className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                    >
+                      📄 PDF
+                    </button>
+                  </div>
                 </div>
 
                 {/* Dashboard Stats Grid */}
@@ -2556,9 +2651,25 @@ export default function EscuelaDashboard() {
 
             {activeTab === 'dotacion' && (
               <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-6">
-                <div>
-                  <h3 className="text-base font-bold text-slate-800">Dotación Completa de Personal</h3>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">Listado consolidado de docentes y asistentes con sus cargas horarias y cursos asignados.</p>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Dotación Completa de Personal</h3>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">Listado consolidado de docentes y asistentes con sus cargas horarias y cursos asignados.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => triggerExport('dotacion', 'xlsx')}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                    >
+                      📊 Excel
+                    </button>
+                    <button
+                      onClick={() => triggerExport('dotacion', 'pdf')}
+                      className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                    >
+                      📄 PDF
+                    </button>
+                  </div>
                 </div>
 
                 {/* Visual Hours Distribution Grid */}
@@ -3533,6 +3644,66 @@ export default function EscuelaDashboard() {
                     className="bg-slep-blue hover:bg-slep-blue-hover text-white font-bold px-6 py-2.5 rounded-xl shadow transition-all cursor-pointer"
                   >
                     Guardar Cambios
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Export Column Selection Modal */}
+        {exportModal.isOpen && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">📥 Exportar Reporte ({exportModal.format.toUpperCase()})</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Seleccione las columnas que desea incluir en el archivo exportado.</p>
+                </div>
+                <button 
+                  onClick={() => setExportModal({ ...exportModal, isOpen: false })}
+                  className="text-slate-400 hover:text-slate-600 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-all cursor-pointer font-bold w-8 h-8 flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Columns Selection */}
+              <div className="p-6 space-y-4">
+                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Columnas Disponibles</p>
+                <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto pr-1">
+                  {exportModal.columns.map((col, idx) => (
+                    <label key={col.key} className="flex items-center gap-3 p-2 border rounded-lg bg-slate-50 hover:bg-slate-100 cursor-pointer text-xs transition-colors">
+                      <input 
+                        type="checkbox" 
+                        checked={col.checked}
+                        onChange={(e) => {
+                          const updated = [...exportModal.columns];
+                          updated[idx].checked = e.target.checked;
+                          setExportModal({ ...exportModal, columns: updated });
+                        }}
+                        className="rounded border-slate-300 text-slep-blue focus:ring-slep-blue"
+                      />
+                      <span className="font-semibold text-slate-700">{col.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="flex gap-3 pt-3 border-t">
+                  <button 
+                    type="button"
+                    onClick={() => setExportModal({ ...exportModal, isOpen: false })}
+                    className="flex-1 bg-white border border-slate-200 text-slate-655 hover:bg-slate-50 font-bold py-2.5 rounded-lg shadow cursor-pointer text-xs"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={handleExecuteExport}
+                    className="flex-1 bg-slep-blue hover:bg-slep-blue-hover text-white font-bold py-2.5 rounded-lg shadow cursor-pointer text-xs"
+                  >
+                    Confirmar Exportación
                   </button>
                 </div>
               </div>

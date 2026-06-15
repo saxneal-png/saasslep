@@ -93,6 +93,60 @@ export default function RRHHPage() {
   const [selectedFuncs, setSelectedFuncs] = useState<string[]>([]);
   const [rrhhTab, setRrhhTab] = useState<'fichas' | 'licencias' | 'banco'>('fichas');
   const [csvBulkInput, setCsvBulkInput] = useState('');
+  const [exportModal, setExportModal] = useState<{
+    isOpen: boolean;
+    format: 'xlsx' | 'pdf';
+    tab: string;
+    columns: { key: string; label: string; checked: boolean }[];
+  }>({
+    isOpen: false,
+    format: 'xlsx',
+    tab: '',
+    columns: []
+  });
+
+  const triggerExport = (tab: string, format: 'xlsx' | 'pdf') => {
+    let cols: { key: string; label: string; checked: boolean }[] = [];
+    if (tab === 'fichas') {
+      cols = [
+        { key: 'run', label: 'RUT / RUN', checked: true },
+        { key: 'nombre', label: 'Nombre Completo', checked: true },
+        { key: 'estamento', label: 'Estamento', checked: true },
+        { key: 'cargo', label: 'Función Principal', checked: true },
+        { key: 'rbd', label: 'RBD Escuela', checked: true },
+        { key: 'horas', label: 'Horas Totales', checked: true },
+        { key: 'estado', label: 'Estado', checked: true }
+      ];
+    } else if (tab === 'licencias') {
+      cols = [
+        { key: 'nombre', label: 'Funcionario Licenciado', checked: true },
+        { key: 'run', label: 'RUT / RUN', checked: true },
+        { key: 'horas', label: 'Horas a Cubrir', checked: true },
+        { key: 'rbd', label: 'RBD Escuela', checked: true },
+        { key: 'cobertura', label: 'Horas Reemplazo Cubiertas', checked: true }
+      ];
+    } else if (tab === 'banco') {
+      cols = [
+        { key: 'run', label: 'RUT / RUN', checked: true },
+        { key: 'nombre', label: 'Nombre Completo', checked: true },
+        { key: 'titulo', label: 'Título / Especialidad', checked: true },
+        { key: 'email', label: 'Correo de Contacto', checked: true },
+        { key: 'telefono', label: 'Teléfono', checked: true }
+      ];
+    }
+    setExportModal({
+      isOpen: true,
+      format,
+      tab,
+      columns: cols
+    });
+  };
+
+  const handleExecuteExport = () => {
+    const activeCols = exportModal.columns.filter(c => c.checked).map(c => c.label);
+    alert(`📥 Descargando reporte de la pestaña "${exportModal.tab.toUpperCase()}" (Gestión de Personas SLEP) en formato ${exportModal.format.toUpperCase()}...\n\nColumnas seleccionadas:\n- ${activeCols.join('\n- ')}`);
+    setExportModal({ ...exportModal, isOpen: false });
+  };
 
   const [authorized, setAuthorized] = useState(false);
 
@@ -909,6 +963,18 @@ export default function RRHHPage() {
                         🗑️ Eliminar Selección ({selectedFuncs.length})
                       </button>
                     )}
+                    <button
+                      onClick={() => triggerExport('fichas', 'xlsx')}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow flex items-center gap-1 cursor-pointer"
+                    >
+                      📊 Excel
+                    </button>
+                    <button
+                      onClick={() => triggerExport('fichas', 'pdf')}
+                      className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow flex items-center gap-1 cursor-pointer"
+                    >
+                      📄 PDF
+                    </button>
                     <input 
                       type="text" 
                       placeholder="Buscar por Nombre o RUN..." 
@@ -1236,9 +1302,23 @@ export default function RRHHPage() {
                           Solo se muestran los funcionarios que actualmente poseen licencias médicas vigentes en sus respectivos colegios.
                         </p>
                       </div>
-                      <span className="bg-red-100 text-red-800 font-bold px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono">
-                        {activeLicencias.length} En Licencia
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-red-100 text-red-800 font-bold px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-mono">
+                          {activeLicencias.length} En Licencia
+                        </span>
+                        <button
+                          onClick={() => triggerExport('licencias', 'xlsx')}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow flex items-center gap-1 cursor-pointer"
+                        >
+                          📊 Excel
+                        </button>
+                        <button
+                          onClick={() => triggerExport('licencias', 'pdf')}
+                          className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow flex items-center gap-1 cursor-pointer"
+                        >
+                          📄 PDF
+                        </button>
+                      </div>
                     </div>
 
                     <div className="overflow-x-auto text-xs">
@@ -1735,9 +1815,25 @@ export default function RRHHPage() {
 
               {/* Candidates detailed list table */}
               <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4 animate-fadeIn">
-                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 pb-2 border-b">
-                  <span>📋</span> Nómina Completa del Banco de Reemplazos Activos en el Territorio
-                </h3>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <span>📋</span> Nómina Completa del Banco de Reemplazos Activos en el Territorio
+                  </h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => triggerExport('banco', 'xlsx')}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                    >
+                      📊 Excel
+                    </button>
+                    <button
+                      onClick={() => triggerExport('banco', 'pdf')}
+                      className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                    >
+                      📄 PDF
+                    </button>
+                  </div>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 font-bold text-slate-600 border-b">
@@ -1953,6 +2049,66 @@ export default function RRHHPage() {
               >
                 Cerrar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Column Selection Modal */}
+      {exportModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">📥 Exportar Reporte ({exportModal.format.toUpperCase()})</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Seleccione las columnas que desea incluir en el archivo exportado.</p>
+              </div>
+              <button 
+                onClick={() => setExportModal({ ...exportModal, isOpen: false })}
+                className="text-slate-400 hover:text-slate-600 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-all cursor-pointer font-bold w-8 h-8 flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Columns Selection */}
+            <div className="p-6 space-y-4">
+              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Columnas Disponibles</p>
+              <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto pr-1">
+                {exportModal.columns.map((col, idx) => (
+                  <label key={col.key} className="flex items-center gap-3 p-2 border rounded-lg bg-slate-50 hover:bg-slate-100 cursor-pointer text-xs transition-colors">
+                    <input 
+                      type="checkbox" 
+                      checked={col.checked}
+                      onChange={(e) => {
+                        const updated = [...exportModal.columns];
+                        updated[idx].checked = e.target.checked;
+                        setExportModal({ ...exportModal, columns: updated });
+                      }}
+                      className="rounded border-slate-300 text-slep-blue focus:ring-slep-blue"
+                    />
+                    <span className="font-semibold text-slate-700">{col.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="flex gap-3 pt-3 border-t">
+                <button 
+                  type="button"
+                  onClick={() => setExportModal({ ...exportModal, isOpen: false })}
+                  className="flex-1 bg-white border border-slate-200 text-slate-655 hover:bg-slate-50 font-bold py-2.5 rounded-lg shadow cursor-pointer text-xs"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleExecuteExport}
+                  className="flex-1 bg-slep-blue hover:bg-slep-blue-hover text-white font-bold py-2.5 rounded-lg shadow cursor-pointer text-xs"
+                >
+                  Confirmar Exportación
+                </button>
+              </div>
             </div>
           </div>
         </div>
