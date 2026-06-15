@@ -92,8 +92,8 @@ export default function Home() {
               
               <div className="grid grid-cols-1 gap-2.5">
                 {[
-                  { id: 'sostenedor_maestro', label: 'Sostenedor Maestro (SLEP General)', desc: 'Vista global absoluta, configuración de planes de estudio y tutela de supervisores.' },
-                  { id: 'profesional_slep', label: 'Profesional SLEP (Supervisor Técnico)', desc: 'Visibilidad de escuelas bajo su tutela asignada, carga de nóminas y finanzas de su grupo.' },
+                  { id: 'sostenedor_maestro', label: 'Sostenedor Maestro (SLEP General)', desc: 'Vista global absoluta, configuración de planes de estudio y tutela de asesores.' },
+                  { id: 'profesional_slep', label: 'Profesional SLEP (Asesor Técnico)', desc: 'Visibilidad de escuelas bajo su tutela asignada, carga de nóminas y finanzas de su grupo.' },
                   { id: 'director_escuela', label: 'Director / Jefe de UTP (Escuela)', desc: 'Gestión exclusiva de su propio RBD, matriz horaria, licencias médicas y cursos.' },
                 ].map(r => (
                   <label 
@@ -124,14 +124,14 @@ export default function Home() {
             {/* Simulated login parameters based on selected role */}
             {selectedRole === 'profesional_slep' && (
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-                <label className="block text-xs font-bold text-slate-500">Seleccionar RUN de Supervisor Técnico</label>
+                <label className="block text-xs font-bold text-slate-500">Seleccionar RUN de Asesor Técnico</label>
                 <select 
                   className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm"
                   value={profesionalRun}
                   onChange={(e) => setProfesionalRun(e.target.value)}
                 >
-                  <option value="11.111.111-1">11.111.111-1 (Supervisor 1 - Tutela Escuela 10202 y 10204)</option>
-                  <option value="22.222.222-2">22.222.222-2 (Supervisor 2 - Sin tutela asignada)</option>
+                  <option value="11.111.111-1">11.111.111-1 (Asesor 1 - Tutela Escuela 10202 y 10204)</option>
+                  <option value="22.222.222-2">22.222.222-2 (Asesor 2 - Sin tutela asignada)</option>
                 </select>
               </div>
             )}

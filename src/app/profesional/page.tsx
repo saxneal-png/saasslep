@@ -516,7 +516,7 @@ export default function ProfesionalDashboard() {
         </div>
 
         <div className="p-4 border-t border-white/10 text-center">
-          <p className="text-[10px] text-slate-400 font-medium">Supervisor SLEP</p>
+          <p className="text-[10px] text-slate-400 font-medium">Asesor SLEP</p>
           <p className="text-[9px] text-slate-500 font-mono mt-0.5 truncate" title={profesionalRun}>{profesionalRun}</p>
           <Link href="/" className="mt-2 block w-full bg-white/10 hover:bg-white/20 text-white font-bold py-1.5 rounded text-[10px] transition-colors border border-white/10">
             Cerrar Sesión
@@ -539,7 +539,7 @@ export default function ProfesionalDashboard() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
               <div>
                 <h2 className="text-base font-bold text-slate-800">Compendio Técnico de Escuelas Asignadas</h2>
-                <p className="text-xs text-slate-500 mt-1 font-medium font-mono text-blue-700">Supervisor: {profesionalRun}</p>
+                <p className="text-xs text-slate-500 mt-1 font-medium font-mono text-blue-700">Asesor: {profesionalRun}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button 
@@ -878,7 +878,7 @@ export default function ProfesionalDashboard() {
 
             {/* Financial details */}
             <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-              <h2 className="text-base font-bold text-slate-800">Presupuesto consolidado del supervisor</h2>
+               <h2 className="text-base font-bold text-slate-800">Presupuesto consolidado del asesor</h2>
               <div className="mt-4 space-y-3">
                 {[
                   { name: 'Subvención Regular', hours: totalRegular, color: 'bg-blue-600' },

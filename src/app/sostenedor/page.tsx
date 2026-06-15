@@ -280,7 +280,7 @@ export default function SostenedorDashboard() {
     }
   };
 
-  // Supervisor CRUD Actions
+  // Asesor CRUD Actions
   const handleCreateSupervisor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSupRun || !newSupNombre || !newSupEmail) {
@@ -297,11 +297,11 @@ export default function SostenedorDashboard() {
     setNewSupNombre('');
     setNewSupEmail('');
     await loadAllData();
-    alert('✅ Supervisor creado/actualizado.');
+    alert('✅ Asesor creado/actualizado.');
   };
 
   const handleDeleteSupervisor = async (run: string) => {
-    if (confirm('¿Está seguro de eliminar este supervisor?')) {
+    if (confirm('¿Está seguro de eliminar este asesor?')) {
       await api.deleteSupervisor(run);
       await loadAllData();
     }
@@ -1386,12 +1386,12 @@ export default function SostenedorDashboard() {
             {/* Supervisor CRUD */}
             <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
               <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <span>👥</span> Gestión de Supervisores (Profesionales SLEP)
+                <span>👥</span> Gestión de Asesores (Profesionales SLEP)
               </h3>
 
               <form onSubmit={handleCreateSupervisor} className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs bg-slate-50 p-4 rounded-xl border mb-4">
                 <div>
-                  <label className="block font-bold text-slate-500 mb-1">RUN Supervisor</label>
+                  <label className="block font-bold text-slate-500 mb-1">RUN Asesor</label>
                   <input 
                     type="text" 
                     className="w-full p-2 border rounded"
@@ -1419,7 +1419,7 @@ export default function SostenedorDashboard() {
                 </div>
                 <div className="flex items-end">
                   <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2 rounded text-xs shadow">
-                    Guardar Supervisor
+                    Guardar Asesor
                   </button>
                 </div>
               </form>
@@ -1428,7 +1428,7 @@ export default function SostenedorDashboard() {
                 <table className="w-full text-left">
                   <thead className="bg-slate-100 font-bold text-slate-600">
                     <tr>
-                      <th className="p-3">Supervisor</th>
+                      <th className="p-3">Asesor</th>
                       <th className="p-3">Email</th>
                       <th className="p-3 text-center">Acciones</th>
                     </tr>
@@ -1456,11 +1456,11 @@ export default function SostenedorDashboard() {
             {/* Tutela assignments */}
             <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
               <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <span>🔗</span> Asignación de Tutela de Supervisores
+                <span>🔗</span> Asignación de Tutela de Asesores
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl text-xs border">
                 <div>
-                  <label className="block font-bold text-slate-500 mb-1">Supervisor</label>
+                  <label className="block font-bold text-slate-500 mb-1">Asesor</label>
                   <select
                     className="w-full p-2 bg-white border rounded"
                     value={selectedProfRun}
@@ -1494,7 +1494,7 @@ export default function SostenedorDashboard() {
                 <table className="w-full text-left">
                   <thead className="bg-slate-100 font-bold text-slate-600">
                     <tr>
-                      <th className="p-3">Supervisor</th>
+                      <th className="p-3">Asesor</th>
                       <th className="p-3">Escuela Supervisada</th>
                       <th className="p-3 text-center">Acciones</th>
                     </tr>

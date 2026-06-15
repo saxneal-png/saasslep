@@ -143,13 +143,13 @@ const FUNCIONARIOS_MOCK_INICIAL: Funcionario[] = [
   { run: '18.901.234-5', nombre: 'Daniela Paz Contreras Sepúlveda', email: 'dcontreras@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Psicóloga' },
   { run: '10.876.543-2', nombre: 'Héctor Manuel Olivares Pinto', email: 'holivares@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
   { run: '17.654.321-0', nombre: 'Verónica Andrea Torres Castro', email: 'vtorres@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Auxiliar de Servicios' },
-  // Supervisores
-  { run: '11.111.111-1', nombre: 'Supervisor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Supervisor UATP' },
-  { run: '22.222.222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Supervisor UATP' },
+  // Asesores
+  { run: '11.111.111-1', nombre: 'Asesor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Asesor UATP' },
+  { run: '22.222.222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Asesor UATP' },
 ];
 
 const SUPERVISORES_INICIAL: Supervisor[] = [
-  { run: '11.111.111-1', nombre: 'Supervisor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl' },
+  { run: '11.111.111-1', nombre: 'Asesor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl' },
   { run: '22.222.222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl' }
 ];
 
@@ -579,7 +579,7 @@ export const api = {
       nombre: sup.nombre,
       email: sup.email,
       estamento: 'Docente',
-      cargo: 'Supervisor UATP'
+      cargo: 'Asesor UATP'
     });
   },
 

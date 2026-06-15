@@ -1243,7 +1243,7 @@ export default function EscuelaDashboard() {
             <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain" />
             <div className="border-l border-white/20 pl-3">
               <p className="text-[9px] uppercase tracking-wider text-slate-300 font-semibold leading-none">
-                {isSupervisorMode ? 'Acceso Supervisor Delegado' : isSostenedorMode ? 'Sostenedor (Gestión de Escuela)' : 'Director / UTP de Escuela'}
+                {isSupervisorMode ? 'Acceso Asesor Delegado' : isSostenedorMode ? 'Sostenedor (Gestión de Escuela)' : 'Director / UTP de Escuela'}
               </p>
               <h1 className="text-sm font-bold tracking-tight mt-0.5">{colegio ? colegio.nombre : 'Establecimiento'}</h1>
             </div>
@@ -1255,7 +1255,7 @@ export default function EscuelaDashboard() {
                 onClick={handleExitSupervisorMode}
                 className="bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold px-4 py-2 rounded-lg text-xs shadow transition-all duration-200"
               >
-                Volver a Supervisor 🔙
+                Volver a Asesor 🔙
               </button>
             ) : isSostenedorMode ? (
               <button 
