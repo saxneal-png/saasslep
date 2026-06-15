@@ -227,8 +227,7 @@ class DatabaseLocal {
 
   public scheduleCloudSync(): void {
     if (typeof window === 'undefined') return;
-    const clave = localStorage.getItem('slep_sync_clave');
-    if (!clave) return;
+    const clave = 'slep_global_prod_db_v1';
 
     if ((window as any).slepSyncTimeout) {
       clearTimeout((window as any).slepSyncTimeout);
@@ -250,24 +249,54 @@ class DatabaseLocal {
             backup[k] = JSON.parse(item);
           }
         });
-        backup._timestamp = parseInt(localStorage.getItem('slep_db__timestamp') || '0', 10);
+        backup._timestamp = Date.now();
+        localStorage.setItem('slep_db__timestamp', backup._timestamp.toString());
 
         await fetch(`https://kvdb.io/slep_bucket_${clave}/slep_sync_db`, {
           method: 'POST',
           body: JSON.stringify(backup),
           headers: { 'Content-Type': 'application/json' }
         });
-        console.log('☁️ Sincronización en la nube exitosa.');
+        console.log('☁️ Sincronización en la nube global exitosa.');
       } catch (err) {
-        console.error('Error al sincronizar con la nube:', err);
+        console.error('Error al sincronizar con la nube global:', err);
       }
-    }, 2000);
+    }, 1000);
+  }
+
+  public async pushCloudSyncForce(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    const clave = 'slep_global_prod_db_v1';
+    try {
+      const keys = [
+        'establecimientos', 'funcionarios', 'contratos', 'financiamientos',
+        'asignaciones', 'alertas', 'tutelas', 'cursos_dinamicos',
+        'asignaturas_dinamicas', 'supervisores', 'cargos_personalizados',
+        'planes_estudio_json', 'comunas', 'libro_remuneraciones',
+        'tareas_reemplazo', 'reemplazos_licencias'
+      ];
+      const backup: Record<string, any> = {};
+      keys.forEach(k => {
+        backup[k] = (this as any)[k];
+      });
+      backup._timestamp = Date.now();
+      localStorage.setItem('slep_db__timestamp', backup._timestamp.toString());
+
+      await fetch(`https://kvdb.io/slep_bucket_${clave}/slep_sync_db`, {
+        method: 'POST',
+        body: JSON.stringify(backup),
+        headers: { 'Content-Type': 'application/json' }
+      });
+      localStorage.setItem('slep_db_initialized', 'true');
+      console.log('☁️ Base de datos global inicializada en la nube.');
+    } catch (err) {
+      console.error('Error al inicializar la nube:', err);
+    }
   }
 
   public async pullCloudSync(): Promise<boolean> {
     if (typeof window === 'undefined') return false;
-    const clave = localStorage.getItem('slep_sync_clave');
-    if (!clave) return false;
+    const clave = 'slep_global_prod_db_v1';
 
     try {
       const res = await fetch(`https://kvdb.io/slep_bucket_${clave}/slep_sync_db`);
@@ -276,7 +305,7 @@ class DatabaseLocal {
         const localTimestamp = parseInt(localStorage.getItem('slep_db__timestamp') || '0', 10);
         const remoteTimestamp = backup._timestamp || 0;
 
-        if (remoteTimestamp > localTimestamp) {
+        if (remoteTimestamp > localTimestamp || !localStorage.getItem('slep_db_initialized')) {
           Object.keys(backup).forEach(k => {
             if (k === '_timestamp') {
               localStorage.setItem('slep_db__timestamp', backup[k].toString());
@@ -284,9 +313,12 @@ class DatabaseLocal {
               localStorage.setItem(`slep_db_${k}`, JSON.stringify(backup[k]));
             }
           });
-          console.log('☁️ Datos actualizados desde la nube.');
+          localStorage.setItem('slep_db_initialized', 'true');
+          console.log('☁️ Datos actualizados desde la nube global.');
           return true;
         }
+      } else if (res.status === 404) {
+        await this.pushCloudSyncForce();
       }
     } catch (err) {
       console.error('Error al descargar datos de la nube:', err);
