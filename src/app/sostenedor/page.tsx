@@ -165,6 +165,7 @@ export default function SostenedorDashboard() {
   }, []);
 
   async function loadAllData() {
+    await api.pullCloudSync();
     const ests = await api.getEstablecimientos();
     const conts = await api.getContratos();
     const funcs = await api.getFuncionarios();

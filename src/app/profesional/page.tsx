@@ -142,6 +142,7 @@ export default function ProfesionalDashboard() {
     async function loadData() {
       if (!profesionalRun) return;
 
+      await api.pullCloudSync();
       const rbds = await api.getTutelasPorProfesional(profesionalRun);
       setEscuelasAsignadasRbd(rbds);
 

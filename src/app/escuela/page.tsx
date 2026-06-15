@@ -156,6 +156,7 @@ export default function EscuelaDashboard() {
   }, [selectedRbd]);
 
   async function loadAllSchoolData() {
+    await api.pullCloudSync();
     const est = await api.getEstablecimientoByRbd(selectedRbd);
     setColegio(est || null);
 

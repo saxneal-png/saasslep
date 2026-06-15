@@ -89,6 +89,7 @@ export default function FinanzasPage() {
   }, []);
 
   async function loadAllData() {
+    await api.pullCloudSync();
     const conts = await api.getContratos();
     const funcs = await api.getFuncionarios();
     const asigs = dbLocal.asignacionesAula;

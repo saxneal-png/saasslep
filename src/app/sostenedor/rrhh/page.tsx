@@ -169,6 +169,7 @@ export default function RRHHPage() {
   }, []);
 
   async function loadData() {
+    await api.pullCloudSync();
     const funcs = await api.getFuncionarios();
     setFuncionarios(funcs);
     const conts = await api.getContratos();
