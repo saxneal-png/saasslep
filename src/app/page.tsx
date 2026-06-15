@@ -166,6 +166,76 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Database Synchronization Panel */}
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200/80 p-6 w-full max-w-lg mt-6">
+          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <span>💾</span> Sincronizar Datos entre Dispositivos
+          </h4>
+          <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
+            La plataforma guarda tus cambios localmente en el navegador de este computador. Usa estos botones para exportar tu base de datos e importarla en otro dispositivo.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => {
+                const keys = [
+                  'establecimientos', 'funcionarios', 'contratos', 'financiamientos',
+                  'asignaciones', 'alertas', 'tutelas', 'cursos_dinamicos',
+                  'asignaturas_dinamicas', 'supervisores', 'cargos_personalizados',
+                  'planes_estudio_json', 'comunas', 'libro_remuneraciones',
+                  'tareas_reemplazo', 'reemplazos_licencias'
+                ];
+                const backup: Record<string, any> = {};
+                keys.forEach(k => {
+                  const item = localStorage.getItem(`slep_db_${k}`);
+                  if (item) {
+                    backup[k] = JSON.parse(item);
+                  }
+                });
+                const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `slep_backup_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+              className="bg-slep-blue hover:bg-slep-blue-hover text-white font-bold py-2 px-3 rounded-lg text-xs transition-colors shadow-sm cursor-pointer text-center"
+            >
+              📤 Descargar Datos de Aquí
+            </button>
+            <div className="relative">
+              <label className="w-full block bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 px-3 rounded-lg text-xs transition-colors border border-dashed border-slate-300 text-center cursor-pointer">
+                📥 Subir Datos (JSON)
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      try {
+                        const backup = JSON.parse(event.target?.result as string);
+                        Object.keys(backup).forEach(k => {
+                          localStorage.setItem(`slep_db_${k}`, JSON.stringify(backup[k]));
+                        });
+                        alert('✅ Datos importados correctamente. La página se recargará.');
+                        window.location.reload();
+                      } catch (err) {
+                        alert('Error al leer el archivo JSON.');
+                      }
+                    };
+                    reader.readAsText(file);
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+
       </main>
 
       {/* Footer */}
