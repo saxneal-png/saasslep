@@ -55,6 +55,7 @@ export default function SostenedorDashboard() {
   const [todasLasAsignaturas, setTodasLasAsignaturas] = useState<AsignaturaDinamica[]>([]);
   const [resumenSubTab, setResumenSubTab] = useState<'territorio' | 'asignaturas' | 'disponibilidad' | 'alertas'>('territorio');
   const [resumenSelectedAsignatura, setResumenSelectedAsignatura] = useState('Todas');
+  const [resumenSelectedComunas, setResumenSelectedComunas] = useState<string[]>([]);
   const [authorized, setAuthorized] = useState(false);
   const [exportModal, setExportModal] = useState<{
     isOpen: boolean;
@@ -251,6 +252,7 @@ export default function SostenedorDashboard() {
     setAsignaciones(asigs);
     setCargosPersonalizados(cargs);
     setComunasList(coms);
+    setResumenSelectedComunas(coms);
 
     if (sups.length > 0) {
       setSelectedProfRun(sups[0].run);
@@ -2037,9 +2039,17 @@ export default function SostenedorDashboard() {
               };
             });
 
-            // Subject-wise breakdown (Horas por Asignatura)
+            // Subject-wise breakdown (Horas por Asignatura) - filtered by selected comunas
+            const filteredAsignaciones = asignaciones.filter(a => {
+              const cont = contratos.find(c => c.id === a.contrato_id);
+              if (!cont) return false;
+              const est = establecimientos.find(e => e.rbd === cont.rbd);
+              if (!est || !est.comuna) return false;
+              return resumenSelectedComunas.includes(est.comuna);
+            });
+
             const subjectsMap: { [key: string]: number } = {};
-            asignaciones.forEach(a => {
+            filteredAsignaciones.forEach(a => {
               subjectsMap[a.asignatura] = (subjectsMap[a.asignatura] || 0) + a.horas;
             });
             const subjectsSorted = Object.entries(subjectsMap)
@@ -2059,19 +2069,22 @@ export default function SostenedorDashboard() {
                 
                 const spareHours = totalCont - (totalAsig + totalCargs);
                 const mainRbd = teacherConts.length > 0 ? teacherConts[0].rbd : 'Desconocido';
-                const schoolName = establecimientos.find(e => e.rbd === mainRbd)?.nombre || `RBD ${mainRbd}`;
+                const school = establecimientos.find(e => e.rbd === mainRbd);
+                const schoolName = school ? school.nombre : `RBD ${mainRbd}`;
+                const schoolComuna = school ? school.comuna : '';
                 
                 return {
                   run: f.run,
                   nombre: f.nombre,
                   escuela: schoolName,
+                  comuna: schoolComuna,
                   horasContrato: totalCont,
                   horasAsignadas: totalAsig,
                   horasCargos: totalCargs,
                   horasSobrantes: spareHours > 0 ? Number(spareHours.toFixed(1)) : 0
                 };
               })
-              .filter(t => t.horasSobrantes > 0.1)
+              .filter(t => t.horasSobrantes > 0.1 && t.comuna && resumenSelectedComunas.includes(t.comuna))
               .sort((a, b) => b.horasSobrantes - a.horasSobrantes);
 
             const totalSobrantesTerritorio = teachersWithSpare.reduce((sum, t) => sum + t.horasSobrantes, 0);
@@ -2092,6 +2105,7 @@ export default function SostenedorDashboard() {
               return {
                 rbd: curso.rbd,
                 escuela: school ? school.nombre : `RBD ${curso.rbd}`,
+                comuna: school ? school.comuna : '',
                 curso: curso.nombre,
                 nivel: curso.nivel,
                 regimen: curso.regimen,
@@ -2100,7 +2114,7 @@ export default function SostenedorDashboard() {
                 diferencia: delta,
                 esExceso: delta > 0.1
               };
-            }).filter(c => c.esExceso);
+            }).filter(c => c.esExceso && c.comuna && resumenSelectedComunas.includes(c.comuna));
 
             return (
               <div className="space-y-6">
@@ -2147,6 +2161,51 @@ export default function SostenedorDashboard() {
                     </button>
                   </div>
                 </div>
+
+                {/* Checkboxes Filter for Comunas */}
+                {['asignaturas', 'disponibilidad', 'alertas'].includes(resumenSubTab) && (
+                  <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-3 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                        <span>📍</span> Filtrar por Comuna(s)
+                      </p>
+                      <div className="flex gap-3 text-[10px] font-bold text-slep-blue">
+                        <button 
+                          onClick={() => setResumenSelectedComunas(comunasList)}
+                          className="hover:underline cursor-pointer bg-transparent border-0 p-0 text-xs text-slep-blue font-bold"
+                        >
+                          Seleccionar todas
+                        </button>
+                        <span className="text-slate-300">|</span>
+                        <button 
+                          onClick={() => setResumenSelectedComunas([])}
+                          className="hover:underline cursor-pointer bg-transparent border-0 p-0 text-xs text-slep-blue font-bold"
+                        >
+                          Limpiar
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                      {comunasList.map(com => (
+                        <label key={com} className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+                          <input 
+                            type="checkbox"
+                            checked={resumenSelectedComunas.includes(com)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setResumenSelectedComunas([...resumenSelectedComunas, com]);
+                              } else {
+                                setResumenSelectedComunas(resumenSelectedComunas.filter(x => x !== com));
+                              }
+                            }}
+                            className="rounded border-slate-300 text-slep-blue focus:ring-slep-blue w-3.5 h-3.5"
+                          />
+                          <span>{com}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Tab Content: Territorio & Comunas */}
                 {resumenSubTab === 'territorio' && (
@@ -2319,7 +2378,7 @@ export default function SostenedorDashboard() {
                     ) : (
                       <div className="bg-white border rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-200">
                         {(() => {
-                          const targetAsigs = asignaciones.filter(a => a.asignatura === resumenSelectedAsignatura);
+                          const targetAsigs = filteredAsignaciones.filter(a => a.asignatura === resumenSelectedAsignatura);
                           const totalSubjectHours = targetAsigs.reduce((sum, a) => sum + a.horas, 0);
                           
                           const detailList = targetAsigs.map(a => {
