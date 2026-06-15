@@ -1253,36 +1253,33 @@ export default function RRHHPage() {
                   </form>
                 </div>
 
-                {/* Right Column: Pending replacement tasks count */}
+                {/* Right Column: Unified replacement statistics */}
                 <div className="lg:col-span-2 bg-white rounded-xl shadow border border-slate-200/60 p-6 space-y-4">
                   <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                    <span>📋</span> Tareas de Reemplazo Pendientes en Establecimientos
+                    <span>📋</span> Resumen de Cobertura de Reemplazos
                   </h2>
-                  <p className="text-xs text-slate-500">Listado de horas críticas de aula que se encuentran vacantes por licencias vigentes y requieren cobertura.</p>
+                  <p className="text-xs text-slate-500">Indicadores territoriales de licencias médicas y asignación de personal sustituto en establecimientos.</p>
 
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                    {tareas.map(t => {
-                      const f = funcionarios.find(func => func.run === t.funcionario_titular_run);
-                      return (
-                        <div key={t.id} className="text-xs bg-slate-50 border p-3 rounded-xl flex justify-between items-center hover:shadow-sm transition-shadow">
-                          <div>
-                            <button
-                              onClick={() => f && setViewingFuncionario(f)}
-                              className="font-bold text-slate-800 underline hover:text-slep-blue text-left"
-                            >
-                              {t.funcionario_titular_nombre}
-                            </button>
-                            <p className="text-[10px] text-slate-400 mt-0.5">RBD: {t.rbd} • Horas a Cubrir: {t.horas_a_cubrir} hrs</p>
-                          </div>
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                            t.estado === 'Pendiente' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
-                          }`}>{t.estado === 'Pendiente' ? 'Buscando Reemplazo 🔍' : 'Asignado ✓'}</span>
-                        </div>
-                      );
-                    })}
-                    {tareas.length === 0 && (
-                      <p className="text-center py-6 text-slate-400 italic">No hay alertas de reemplazos activas en el territorio.</p>
-                    )}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 shadow-sm text-center">
+                      <p className="text-slate-500 text-[10px] uppercase font-bold">Licencias Activas</p>
+                      <p className="text-2xl font-extrabold text-slate-800 mt-1">{contratos.filter(c => c.estado === 'Licencia Médica').length}</p>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 shadow-sm text-center">
+                      <p className="text-amber-700 text-[10px] uppercase font-bold">Buscando Reemplazo</p>
+                      <p className="text-2xl font-extrabold text-amber-600 mt-1">{tareas.filter(t => t.estado === 'Pendiente').length}</p>
+                    </div>
+                    <div className="bg-green-50 border border-green-100 rounded-xl p-4 shadow-sm text-center">
+                      <p className="text-green-700 text-[10px] uppercase font-bold">Reemplazos Asignados</p>
+                      <p className="text-2xl font-extrabold text-green-600 mt-1">{reemplazosList.length}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 border rounded-xl p-4 space-y-2 text-xs">
+                    <p className="font-bold text-slate-700">📌 Directiva de Gestión Territorial</p>
+                    <p className="text-slate-500 leading-relaxed text-[11px]">
+                      El sistema supervisa de manera automática los descalces horarias en el aula. Utilice el botón de <span className="font-bold text-slep-blue">➕ Agregar Reemplazante</span> en la nómina de licencias médicas activa que figura a continuación para asignar personal de reemplazo.
+                    </p>
                   </div>
                 </div>
 
@@ -1296,10 +1293,10 @@ export default function RRHHPage() {
                     <div className="pb-2 border-b flex justify-between items-center">
                       <div>
                         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                          <span>🏥</span> Personal en Licencia Médica Activa
+                          <span>🏥</span> Personal en Licencia y Cobertura de Reemplazo
                         </h3>
                         <p className="text-xs text-slate-500 mt-1">
-                          Solo se muestran los funcionarios que actualmente poseen licencias médicas vigentes en sus respectivos colegios.
+                          Personal con licencias vigentes y estado de cobertura/reemplazo en el territorio.
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1340,6 +1337,7 @@ export default function RRHHPage() {
                             const reemps = reemplazosList.filter(r => r.contrato_titular_id === c.id);
                             const totalCubierto = reemps.reduce((acc, curr) => acc + curr.horas, 0);
                             const cubiertoCompletamente = totalCubierto >= c.horas_totales;
+                            const task = tareas.find(t => t.funcionario_titular_run === c.funcionario_run && t.rbd === c.rbd);
 
                             return (
                               <tr key={c.id} className="hover:bg-slate-50/50 align-top">
@@ -1366,11 +1364,21 @@ export default function RRHHPage() {
                                   <div className="space-y-1">
                                     <p>Contrato: <span className="font-bold">{c.horas_totales} hrs</span></p>
                                     <p>Cubierto: <span className={`font-bold ${cubiertoCompletamente ? 'text-green-600' : 'text-amber-600'}`}>{totalCubierto} hrs</span></p>
-                                    {!cubiertoCompletamente && (
-                                      <span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[8px] font-bold border border-rose-250 animate-pulse uppercase tracking-wider block text-center mt-1">
-                                        ⚠️ Por Cubrir
-                                      </span>
-                                    )}
+                                    <div className="mt-1">
+                                      {cubiertoCompletamente ? (
+                                        <span className="inline-block bg-green-100 text-green-800 px-1.5 py-0.5 rounded text-[8px] font-bold border border-green-200">
+                                          ✓ Cubierto
+                                        </span>
+                                      ) : task && task.estado === 'Pendiente' ? (
+                                        <span className="inline-block bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[8px] font-bold border border-amber-200 animate-pulse">
+                                          🔍 Reemplazo Pendiente
+                                        </span>
+                                      ) : (
+                                        <span className="inline-block bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[8px] font-bold border border-rose-200">
+                                          ⚠️ Cobertura Incompleta
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </td>
                                 <td className="p-3">
