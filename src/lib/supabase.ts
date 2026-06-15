@@ -787,3 +787,31 @@ export const api = {
     await dbLocal.pushCloudSyncForce();
   }
 };
+
+export const supabase = {
+  from: (table: string) => ({
+    select: (cols: string) => ({
+      eq: (col: string, val: any) => {
+        if (table === 'alertas_conciliacion') {
+          return Promise.resolve({ data: dbLocal.alertas.filter(a => a.rbd === val), error: null });
+        }
+        return Promise.resolve({ data: [], error: null });
+      }
+    })
+  }),
+  channel: (channelName: string) => {
+    return {
+      on: (event: string, filter: any, callback: (payload: any) => void) => {
+        return {
+          subscribe: () => ({
+            unsubscribe: () => {}
+          })
+        };
+      },
+      subscribe: () => ({
+        unsubscribe: () => {}
+      })
+    };
+  },
+  removeChannel: (channel: any) => {}
+};

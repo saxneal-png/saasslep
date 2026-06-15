@@ -148,11 +148,20 @@ export default function EscuelaDashboard() {
     }
   }, []);
 
-  // Sync school details when selectedRbd changes
+  // Sync school details when selectedRbd changes and establish background polling
   useEffect(() => {
     if (!selectedRbd) return;
     loadAllSchoolData();
     setItineranciaAlerta(null);
+
+    const interval = setInterval(async () => {
+      const updated = await api.pullCloudSync();
+      if (updated) {
+        loadAllSchoolData();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [selectedRbd]);
 
   async function loadAllSchoolData() {

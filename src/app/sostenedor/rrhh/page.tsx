@@ -151,6 +151,7 @@ export default function RRHHPage() {
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
+    let interval: any;
     if (typeof window !== 'undefined') {
       const role = localStorage.getItem('slep_sim_role');
       if (role !== 'sostenedor_maestro') {
@@ -164,8 +165,18 @@ export default function RRHHPage() {
       } else {
         setAuthorized(true);
         loadData();
+
+        interval = setInterval(async () => {
+          const updated = await api.pullCloudSync();
+          if (updated) {
+            loadData();
+          }
+        }, 5000);
       }
     }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   async function loadData() {

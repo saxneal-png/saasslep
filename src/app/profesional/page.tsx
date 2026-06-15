@@ -120,6 +120,7 @@ export default function ProfesionalDashboard() {
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
+    let interval: any;
     if (typeof window !== 'undefined') {
       const role = localStorage.getItem('slep_sim_role');
       if (role !== 'profesional_slep') {
@@ -134,8 +135,21 @@ export default function ProfesionalDashboard() {
         setAuthorized(true);
         const run = localStorage.getItem('slep_sim_run') || '11.111.111-1';
         setProfesionalRun(run);
+
+        interval = setInterval(async () => {
+          const updated = await api.pullCloudSync();
+          if (updated) {
+            // Trigger state reload by calling the loadData logic
+            const runVal = localStorage.getItem('slep_sim_run') || '11.111.111-1';
+            setProfesionalRun('');
+            setTimeout(() => setProfesionalRun(runVal), 50);
+          }
+        }, 5000);
       }
     }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {

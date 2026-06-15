@@ -141,6 +141,7 @@ export default function SostenedorDashboard() {
   } | null>(null);
 
   useEffect(() => {
+    let interval: any;
     if (typeof window !== 'undefined') {
       const role = localStorage.getItem('slep_sim_role');
       if (role !== 'sostenedor_maestro') {
@@ -160,8 +161,18 @@ export default function SostenedorDashboard() {
         if (tabParam === 'compendio' || tabParam === 'dashboard') {
           setActiveTab(tabParam as any);
         }
+
+        interval = setInterval(async () => {
+          const updated = await api.pullCloudSync();
+          if (updated) {
+            loadAllData();
+          }
+        }, 5000);
       }
     }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   async function loadAllData() {
