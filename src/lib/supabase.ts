@@ -305,7 +305,7 @@ class DatabaseLocal {
         const localTimestamp = parseInt(localStorage.getItem('slep_db__timestamp') || '0', 10);
         const remoteTimestamp = backup._timestamp || 0;
 
-        if (remoteTimestamp > localTimestamp || !localStorage.getItem('slep_db_initialized')) {
+        if (remoteTimestamp !== localTimestamp || !localStorage.getItem('slep_db_initialized')) {
           Object.keys(backup).forEach(k => {
             if (k === '_timestamp') {
               localStorage.setItem('slep_db__timestamp', backup[k].toString());
