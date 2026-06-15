@@ -424,11 +424,9 @@ export default function EscuelaDashboard() {
 
   const handleDeleteFuncionario = async (run: string) => {
     if (confirm('¿Desea desvincular a este funcionario de este establecimiento?')) {
-      const relatedCont = contratos.find(c => c.funcionario_run === run);
-      if (relatedCont) {
-        dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== relatedCont.id);
-        dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== relatedCont.id);
-        dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.contrato_id !== relatedCont.id);
+      const schoolConts = contratos.filter(c => c.funcionario_run === run && c.rbd === selectedRbd);
+      for (const cont of schoolConts) {
+        await api.deleteContrato(cont.id);
       }
       await loadAllSchoolData();
     }
@@ -439,11 +437,9 @@ export default function EscuelaDashboard() {
     if (selectedDocentes.length === 0) return;
     if (confirm(`¿Desea desvincular a los ${selectedDocentes.length} docentes seleccionados?`)) {
       for (const run of selectedDocentes) {
-        const relatedCont = contratos.find(c => c.funcionario_run === run);
-        if (relatedCont) {
-          dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== relatedCont.id);
-          dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== relatedCont.id);
-          dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.contrato_id !== relatedCont.id);
+        const schoolConts = contratos.filter(c => c.funcionario_run === run && c.rbd === selectedRbd);
+        for (const cont of schoolConts) {
+          await api.deleteContrato(cont.id);
         }
       }
       setSelectedDocentes([]);
@@ -456,11 +452,9 @@ export default function EscuelaDashboard() {
     if (selectedAsistentes.length === 0) return;
     if (confirm(`¿Desea desvincular a los ${selectedAsistentes.length} asistentes seleccionados?`)) {
       for (const run of selectedAsistentes) {
-        const relatedCont = contratos.find(c => c.funcionario_run === run);
-        if (relatedCont) {
-          dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== relatedCont.id);
-          dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== relatedCont.id);
-          dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.contrato_id !== relatedCont.id);
+        const schoolConts = contratos.filter(c => c.funcionario_run === run && c.rbd === selectedRbd);
+        for (const cont of schoolConts) {
+          await api.deleteContrato(cont.id);
         }
       }
       setSelectedAsistentes([]);
