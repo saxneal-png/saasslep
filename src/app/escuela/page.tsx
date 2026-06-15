@@ -2337,57 +2337,6 @@ export default function EscuelaDashboard() {
                   </form>
                 </div>
 
-                {/* Intelligent PIE validation Module */}
-                <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
-                  <h3 className="text-base font-bold text-slate-800">Módulo PIE Inteligente (Decretos MINEDUC)</h3>
-                  <p className="text-xs text-slate-500 mt-1">Coteja que las horas asignadas a co-docencia PIE por curso cuadren con el decreto oficial.</p>
-                  
-                  <div className="mt-4 space-y-3">
-                    {cursosDinamicos.map(c => {
-                      const dec = planesEstudio.find(p => p.nivel === c.nivel && p.regimen === c.regimen);
-                      const hrsRequeridas = dec ? dec.horasPIEReglamentarias : 10;
-                      
-                      // Calculate actual co-teaching hours assigned in PIE under this course
-                      const activeContractsPie = contratos.filter(cont => {
-                        const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === cont.id);
-                        return fins.some(f => f.origen_fondo === 'PIE');
-                      });
-                      const contractIdsPie = activeContractsPie.map(cont => cont.id);
-                      
-                      const hrsAsignadasPie = asignaciones
-                        .filter(a => a.curso === c.nombre && contractIdsPie.includes(a.contrato_id))
-                        .reduce((sum, a) => sum + a.horas, 0);
-
-                      const delta = hrsAsignadasPie - hrsRequeridas;
-                      const matches = Math.abs(delta) < 0.05;
-
-                      return (
-                        <div key={c.nombre} className={`p-3 rounded-lg border text-xs flex justify-between items-center ${
-                          matches ? 'bg-emerald-50 border-emerald-200 text-emerald-950' : 'bg-red-50 border-red-200 text-red-950'
-                        }`}>
-                          <div>
-                            <span className="font-bold">{c.nombre}</span>
-                            <p className="text-[10px] text-slate-500 mt-0.5">
-                              Exigido Decreto: {hrsRequeridas} hrs • Asignado Co-docencia: <strong>{hrsAsignadasPie} hrs</strong>
-                            </p>
-                          </div>
-                          <div>
-                            {matches ? (
-                              <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px]">
-                                ✓ PIE Cuadrado
-                              </span>
-                            ) : (
-                              <span className="bg-slep-coral/20 text-red-800 font-bold px-2 py-0.5 rounded text-[10px]">
-                                ⚠️ Descalce PIE: {delta > 0 ? `+${delta}` : delta} hrs
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
                 {/* Section for PIE hours assignment */}
                 <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
                   <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
