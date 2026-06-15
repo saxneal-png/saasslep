@@ -526,7 +526,24 @@ export default function RRHHPage() {
 
   const handleDeleteReemplazo = async (id: string) => {
     if (confirm('¿Está seguro de eliminar este reemplazo?')) {
+      const targetReemp = reemplazosList.find(r => r.id === id);
       await api.deleteReemplazoLicencia(id);
+
+      if (targetReemp) {
+        const otherReemps = dbLocal.reemplazosLicencias.filter(r => r.contrato_titular_id === targetReemp.contrato_titular_id);
+        if (otherReemps.length === 0) {
+          const cont = dbLocal.contratos.find(c => c.id === targetReemp.contrato_titular_id);
+          if (cont) {
+            const tasks = dbLocal.tareasReemplazo;
+            const tIdx = tasks.findIndex(t => t.funcionario_titular_run === cont.funcionario_run && t.rbd === cont.rbd);
+            if (tIdx >= 0) {
+              tasks[tIdx].estado = 'Pendiente';
+              dbLocal.tareasReemplazo = tasks;
+            }
+          }
+        }
+      }
+
       await loadData();
     }
   };
@@ -1268,7 +1285,12 @@ export default function RRHHPage() {
                     </div>
                     <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 shadow-sm text-center">
                       <p className="text-amber-700 text-[10px] uppercase font-bold">Buscando Reemplazo</p>
-                      <p className="text-2xl font-extrabold text-amber-600 mt-1">{tareas.filter(t => t.estado === 'Pendiente').length}</p>
+                      <p className="text-2xl font-extrabold text-amber-600 mt-1">
+                        {contratos.filter(c => 
+                          c.estado === 'Licencia Médica' && 
+                          reemplazosList.filter(r => r.contrato_titular_id === c.id).length === 0
+                        ).length}
+                      </p>
                     </div>
                     <div className="bg-green-50 border border-green-100 rounded-xl p-4 shadow-sm text-center">
                       <p className="text-green-700 text-[10px] uppercase font-bold">Reemplazos Asignados</p>
