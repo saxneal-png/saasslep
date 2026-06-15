@@ -16,7 +16,7 @@ import {
   RegistroRemuneracion
 } from '@/lib/types';
 import { parsearNominaCsv, parsearRemuneracionesCsv } from '@/lib/csvParser';
-import { conciliarFuncionario } from '@/lib/rulesEngine';
+import { conciliarFuncionario, calcularCargaDocente } from '@/lib/rulesEngine';
 
 export default function ProfesionalDashboard() {
   const router = useRouter();
@@ -38,7 +38,7 @@ export default function ProfesionalDashboard() {
   const [importLogsAsis, setImportLogsAsis] = useState('');
   const fileInputRefAsis = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio' | 'dotacion' | 'finanzas'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio' | 'dotacion' | 'finanzas' | 'conciliacion'>('dashboard');
   const [funcionarios, setFuncionarios] = useState<any[]>([]);
 
   // Local filters
@@ -543,6 +543,14 @@ export default function ProfesionalDashboard() {
                 }`}
               >
                 📋 Dotaciones de Personal
+              </button>
+              <button
+                onClick={() => { setActiveTab('conciliacion'); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all text-left ${
+                  activeTab === 'conciliacion' ? 'bg-slep-blue text-white shadow' : 'text-slate-300 hover:bg-white/5'
+                }`}
+              >
+                ⚖️ Conciliación de Horas
               </button>
             </nav>
           </div>
@@ -1145,100 +1153,86 @@ export default function ProfesionalDashboard() {
               }).length;
 
               return (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 shadow-sm">
-                    <p className="text-slate-500 text-[10px] uppercase font-bold">Total Liquidado (Supervisado)</p>
-                    <p className="text-lg font-extrabold text-slate-800 mt-1">${totalRemunerado.toLocaleString('es-CL')}</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                  <div className="p-4 border rounded-xl bg-slate-50/50">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Establecimientos Tutelados</p>
+                    <p className="text-2xl font-black text-slate-800 mt-1">{escuelasAsignadasRbd.length}</p>
                   </div>
-                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 shadow-sm">
-                    <p className="text-slate-500 text-[10px] uppercase font-bold">Horas Pagadas (Supervisadas)</p>
-                    <p className="text-lg font-extrabold text-slate-800 mt-1">{totalHrsPagadas.toFixed(1)} hrs</p>
+                  <div className="p-4 border rounded-xl bg-slate-50/50">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Horas Contrato</p>
+                    <p className="text-2xl font-black text-slate-800 mt-1">{totalHrsContrato} hrs</p>
                   </div>
-                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 shadow-sm">
-                    <p className="text-slate-500 text-[10px] uppercase font-bold">Horas Contratadas (RR.HH.)</p>
-                    <p className="text-lg font-extrabold text-slep-blue mt-1">{totalHrsContrato.toFixed(1)} hrs</p>
+                  <div className="p-4 border rounded-xl bg-slate-50/50">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Horas Liquidadas</p>
+                    <p className="text-2xl font-black text-slate-800 mt-1">{totalHrsPagadas} hrs</p>
                   </div>
-                  <div className="bg-red-50 border border-slep-coral/30 rounded-xl p-4 shadow-sm">
-                    <p className="text-red-700 text-[10px] uppercase font-bold">Alertas de Descalce</p>
-                    <p className="text-lg font-extrabold text-red-600 mt-1">⚠️ {alertsCount} Funcionarios</p>
+                  <div className="p-4 border rounded-xl bg-red-50 border-red-100">
+                    <p className="text-[10px] text-red-500 font-bold uppercase tracking-wider">Docentes con Discrepancia</p>
+                    <p className="text-2xl font-black text-red-700 mt-1">{alertsCount}</p>
                   </div>
                 </div>
               );
             })()}
 
-            <div className="mt-6 space-y-4">
-              <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border">
-                <div className="flex items-center gap-4">
-                  <span className="text-xs font-bold text-slate-700">Detalle de Conciliación (Sus Escuelas Supervisadas)</span>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => triggerExport('finanzas', 'xlsx')}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm flex items-center gap-1 cursor-pointer animate-fadeIn"
-                    >
-                      📊 Excel
-                    </button>
-                    <button
-                      onClick={() => triggerExport('finanzas', 'pdf')}
-                      className="bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm flex items-center gap-1 cursor-pointer animate-fadeIn"
-                    >
-                      📄 PDF
-                    </button>
-                  </div>
-                </div>
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
+            <div className="mt-8">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Listado de Personal bajo Tutela</h3>
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-655 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={filtroDiscrepancias}
                     onChange={(e) => setFiltroDiscrepancias(e.target.checked)}
-                    className="rounded text-slep-blue"
+                    className="rounded border-slate-300 text-slep-blue focus:ring-slep-blue"
                   />
-                  <span>Mostrar sólo descalces y discrepancias</span>
+                  <span>Mostrar solo con discrepancia</span>
                 </label>
               </div>
 
-              <div className="overflow-x-auto text-xs">
+              <div className="border rounded-xl overflow-hidden bg-white">
                 <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-100 font-bold text-slate-600 border-b">
-                    <tr>
-                      <th className="p-3 pl-4">Funcionario / RUN</th>
-                      <th className="p-3">Estamento</th>
-                      <th className="p-3 text-center">Horas Contratadas</th>
-                      <th className="p-3 text-center">Horas en Aula</th>
-                      <th className="p-3 text-center">Horas Pagadas</th>
-                      <th className="p-3">Estado de Auditoría / Descalce</th>
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 uppercase font-black">
+                      <th className="p-3 pl-4">Docente / Funcionario</th>
+                      <th className="p-3">Horas Contrato</th>
+                      <th className="p-3">Horas Liquidadas</th>
+                      <th className="p-3">Monto Remunerado</th>
+                      <th className="p-3">Estado Auditoría</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                     {(() => {
                       const rbdContratos = contratos.filter(c => escuelasAsignadasRbd.includes(c.rbd));
                       const rbdContratosRuns = new Set(rbdContratos.map(c => c.funcionario_run));
-                      return funcionarios
-                        .filter(f => rbdContratosRuns.has(f.run))
-                        .filter(f => {
-                          if (!filtroDiscrepancias) return true;
-                          const conc = conciliarFuncionario(f.run, contratos, asignaciones, remuneraciones);
-                          return conc.discrepancia;
-                        })
+                      const relevantFuncionarios = funcionarios.filter(f => rbdContratosRuns.has(f.run));
+
+                      return relevantFuncionarios
                         .map(f => {
+                          const fConts = contratos.filter(c => c.funcionario_run === f.run && escuelasAsignadasRbd.includes(c.rbd));
+                          const fRemun = remuneraciones.find(r => r.funcionario_run === f.run);
                           const conc = conciliarFuncionario(f.run, contratos, asignaciones, remuneraciones);
+                          return {
+                            funcionario: f,
+                            contratos: fConts,
+                            remun: fRemun,
+                            conc
+                          };
+                        })
+                        .filter(x => !filtroDiscrepancias || x.conc.discrepancia)
+                        .map(x => {
+                          const totalHrs = x.contratos.reduce((sum, c) => sum + c.horas_totales, 0);
+                          const conc = x.conc;
+
                           return (
-                            <tr key={f.run} className="hover:bg-slate-50">
+                            <tr key={x.funcionario.run} className="hover:bg-slate-50/50 transition-colors">
                               <td className="p-3 pl-4">
-                                <span className="font-bold text-slate-800">{f.nombre}</span>
-                                <p className="text-[10px] font-mono text-slate-400 mt-0.5">{f.run}</p>
+                                <p className="font-bold text-slate-800">{x.funcionario.nombre}</p>
+                                <p className="text-[9.5px] text-slate-400 font-mono mt-0.5">{x.funcionario.run}</p>
                               </td>
-                              <td className="p-3">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  f.estamento === 'Docente' 
-                                    ? 'bg-blue-100 text-blue-800' 
-                                    : 'bg-purple-100 text-purple-800'
-                                }`}>
-                                  {f.estamento || 'P01 Administrativo'}
-                                </span>
+                              <td className="p-3 font-mono">{totalHrs} hrs</td>
+                              <td className="p-3 font-mono">{x.remun ? `${x.remun.horas_pagadas} hrs` : '--'}</td>
+                              <td className="p-3 font-mono text-emerald-600">
+                                {x.remun ? `$${x.remun.total_haberes.toLocaleString('es-CL')}` : '--'}
                               </td>
-                              <td className="p-3 text-center font-bold text-slate-700">{conc.contratadas} hrs</td>
-                              <td className="p-3 text-center font-bold text-slep-blue">{conc.aula} hrs</td>
-                              <td className="p-3 text-center font-bold text-slate-600">{conc.pagadas} hrs</td>
                               <td className="p-3">
                                 {conc.discrepancia ? (
                                   <span className="inline-block bg-slep-coral/20 text-red-950 border border-slep-coral/40 px-2.5 py-1 rounded font-semibold text-[10.5px]">
@@ -1257,6 +1251,79 @@ export default function ProfesionalDashboard() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        </main>
+      )}
+
+      {activeTab === 'conciliacion' && (
+        <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full text-xs">
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+            <h2 className="text-base font-bold text-slate-800">⚖️ Conciliación de Carga Horaria Docente (Ley 20.903)</h2>
+            <p className="text-xs text-slate-500 mt-1 font-medium">
+              Listado de docentes con horas de contrato vacantes (horas sin destinar a aula ni a planificación proporcional).
+            </p>
+          </div>
+
+          <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              {(() => {
+                const rbdContratos = contratos.filter(c => escuelasAsignadasRbd.includes(c.rbd));
+                const rbdContratosRuns = new Set(rbdContratos.map(c => c.funcionario_run));
+                
+                const docDocs = funcionarios.filter(f => f.estamento === 'Docente' && rbdContratosRuns.has(f.run));
+                const listWithVacantes = docDocs.map(f => {
+                  const carga = calcularCargaDocente(f, contratos, establecimientos, asignaciones);
+                  return {
+                    funcionario: f,
+                    ...carga
+                  };
+                }).filter(x => x.horasNoDestinadas > 0.05)
+                  .sort((a, b) => b.horasNoDestinadas - a.horasNoDestinadas);
+
+                if (listWithVacantes.length === 0) {
+                  return (
+                    <div className="p-12 text-center text-slate-400 italic">
+                      ✓ Todos los docentes tienen su jornada horaria conciliada y asignada al 100%.
+                    </div>
+                  );
+                }
+
+                return (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 uppercase font-black">
+                        <th className="p-4 pl-6">Funcionario</th>
+                        <th className="p-4">Total Contrato</th>
+                        <th className="p-4">Horas Aula (Lectivas)</th>
+                        <th className="p-4">Prop. No Lectiva (Planificación)</th>
+                        <th className="p-4 text-amber-700">Horas Vacantes (Sin Asignar)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                      {listWithVacantes.map(x => (
+                        <tr 
+                          key={x.funcionario.run} 
+                          className="bg-amber-50/40 border-l-4 border-l-amber-500 hover:bg-amber-100/50 transition-colors"
+                        >
+                          <td className="p-4 pl-6">
+                            <p className="font-bold text-slate-800">{x.funcionario.nombre}</p>
+                            <p className="text-[9px] text-slate-400 font-mono mt-0.5">{x.funcionario.run}</p>
+                          </td>
+                          <td className="p-4 font-mono font-bold">{x.horasContrato} hrs</td>
+                          <td className="p-4 font-mono text-emerald-600">{x.horasAula} hrs</td>
+                          <td className="p-4 font-mono text-blue-600">{x.horasNoLectivas} hrs</td>
+                          <td className="p-4">
+                            <span className="bg-amber-100 text-amber-800 font-mono font-black px-2.5 py-1 rounded border border-amber-200">
+                              {x.horasNoDestinadas} hrs vacantes
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
             </div>
           </div>
         </main>

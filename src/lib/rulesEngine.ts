@@ -1,4 +1,4 @@
-import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado, RegistroRemuneracion } from './types';
+import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado, RegistroRemuneracion, Funcionario } from './types';
 
 export interface PlanEstudioNivel {
   nivel: string;
@@ -453,5 +453,61 @@ export function conciliarFuncionario(
     pagadas: totalPagadas,
     discrepancia,
     mensaje
+  };
+}
+
+/**
+ * Calculates teacher workload reconciliation (horas_no_destinadas = contrato - (aula + proporcion_no_lectiva))
+ */
+export function calcularCargaDocente(
+  funcionario: Funcionario,
+  contratos: Contrato[],
+  establecimientos: Establecimiento[],
+  asignaciones: AsignacionAula[]
+) {
+  // Find all contracts for this teacher
+  const teacherConts = contratos.filter(c => c.funcionario_run === funcionario.run);
+  if (teacherConts.length === 0) {
+    return {
+      horasContrato: 0,
+      horasAula: 0,
+      horasNoLectivas: 0,
+      horasNoDestinadas: 0
+    };
+  }
+
+  let totalContrato = 0;
+  let totalAula = 0;
+  let totalNoLectiva = 0;
+
+  teacherConts.forEach(c => {
+    totalContrato += c.horas_totales;
+
+    // Find establishment to get IVM
+    const est = establecimientos.find(e => e.rbd === c.rbd);
+    const ivm = est ? est.ivm : 80;
+
+    // Find assignments for this contract
+    const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
+    const horasAula = teacherAsigs.reduce((sum, a) => sum + a.horas, 0);
+    totalAula += horasAula;
+
+    // Determine non-pedagogical proportion based on Ley 20903 rules
+    const tieneCursosIvmEspecial = teacherAsigs.some(a => 
+      a.curso.includes('1°') || a.curso.includes('2°') || a.curso.includes('3°') || a.curso.includes('4°')
+    );
+    const esEspecial = ivm > 80 && tieneCursosIvmEspecial;
+    const proporcionNoLectiva = esEspecial ? 40 : 35;
+    const noLectivaHours = parseFloat(((c.horas_totales * proporcionNoLectiva) / 100).toFixed(2));
+    totalNoLectiva += noLectivaHours;
+  });
+
+  const horasNoDestinadas = parseFloat((totalContrato - (totalAula + totalNoLectiva)).toFixed(2));
+
+  return {
+    horasContrato: totalContrato,
+    horasAula: totalAula,
+    horasNoLectivas: totalNoLectiva,
+    horasNoDestinadas: horasNoDestinadas > 0 ? horasNoDestinadas : 0
   };
 }

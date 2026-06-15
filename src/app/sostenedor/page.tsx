@@ -22,7 +22,7 @@ import {
   CursoDinamico,
   AsignaturaDinamica
 } from '@/lib/types';
-import { validarCargaDocente, conciliarFuncionario } from '@/lib/rulesEngine';
+import { validarCargaDocente, conciliarFuncionario, calcularCargaDocente } from '@/lib/rulesEngine';
 
 export default function SostenedorDashboard() {
   const router = useRouter();
@@ -50,7 +50,7 @@ export default function SostenedorDashboard() {
   const [editContHoras, setEditContHoras] = useState(0);
   const [editContFins, setEditContFins] = useState<{ origen: OrigenFondo; horas: number }[]>([]);
   
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio' | 'resumenes'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio' | 'resumenes' | 'conciliacion'>('dashboard');
   const [todosLosCursos, setTodosLosCursos] = useState<CursoDinamico[]>([]);
   const [todasLasAsignaturas, setTodasLasAsignaturas] = useState<AsignaturaDinamica[]>([]);
   const [resumenSubTab, setResumenSubTab] = useState<'territorio' | 'asignaturas' | 'disponibilidad' | 'alertas'>('territorio');
@@ -989,6 +989,22 @@ export default function SostenedorDashboard() {
                 }`}
               >
                 📊 Compendio Territorial
+              </button>
+              <button
+                onClick={() => { setActiveTab('resumenes'); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all text-left ${
+                  activeTab === 'resumenes' ? 'bg-slep-blue text-white shadow' : 'text-slate-300 hover:bg-white/5'
+                }`}
+              >
+                📈 Resúmenes Consolidados
+              </button>
+              <button
+                onClick={() => { setActiveTab('conciliacion'); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all text-left ${
+                  activeTab === 'conciliacion' ? 'bg-slep-blue text-white shadow' : 'text-slate-300 hover:bg-white/5'
+                }`}
+              >
+                ⚖️ Conciliación de Horas
               </button>
             </nav>
           </div>
@@ -2475,6 +2491,76 @@ export default function SostenedorDashboard() {
               </div>
             );
           })()}
+        </main>
+      )}
+
+      {activeTab === 'conciliacion' && (
+        <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full text-xs">
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+            <h2 className="text-base font-bold text-slate-800">⚖️ Conciliación de Carga Horaria Docente (Ley 20.903)</h2>
+            <p className="text-xs text-slate-500 mt-1 font-medium">
+              Listado de docentes con horas de contrato vacantes (horas sin destinar a aula ni a planificación proporcional).
+            </p>
+          </div>
+
+          <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              {(() => {
+                const docDocs = funcionarios.filter(f => f.estamento === 'Docente');
+                const listWithVacantes = docDocs.map(f => {
+                  const carga = calcularCargaDocente(f, contratos, establecimientos, asignaciones);
+                  return {
+                    funcionario: f,
+                    ...carga
+                  };
+                }).filter(x => x.horasNoDestinadas > 0.05)
+                  .sort((a, b) => b.horasNoDestinadas - a.horasNoDestinadas);
+
+                if (listWithVacantes.length === 0) {
+                  return (
+                    <div className="p-12 text-center text-slate-400 italic">
+                      ✓ Todos los docentes tienen su jornada horaria conciliada y asignada al 100%.
+                    </div>
+                  );
+                }
+
+                return (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 uppercase font-black">
+                        <th className="p-4 pl-6">Funcionario</th>
+                        <th className="p-4">Total Contrato</th>
+                        <th className="p-4">Horas Aula (Lectivas)</th>
+                        <th className="p-4">Prop. No Lectiva (Planificación)</th>
+                        <th className="p-4 text-amber-700">Horas Vacantes (Sin Asignar)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                      {listWithVacantes.map(x => (
+                        <tr 
+                          key={x.funcionario.run} 
+                          className="bg-amber-50/40 border-l-4 border-l-amber-500 hover:bg-amber-100/50 transition-colors"
+                        >
+                          <td className="p-4 pl-6">
+                            <p className="font-bold text-slate-800">{x.funcionario.nombre}</p>
+                            <p className="text-[9px] text-slate-400 font-mono mt-0.5">{x.funcionario.run}</p>
+                          </td>
+                          <td className="p-4 font-mono font-bold">{x.horasContrato} hrs</td>
+                          <td className="p-4 font-mono text-emerald-600">{x.horasAula} hrs</td>
+                          <td className="p-4 font-mono text-blue-600">{x.horasNoLectivas} hrs</td>
+                          <td className="p-4">
+                            <span className="bg-amber-100 text-amber-800 font-mono font-black px-2.5 py-1 rounded border border-amber-200">
+                              {x.horasNoDestinadas} hrs vacantes
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+          </div>
         </main>
       )}
 

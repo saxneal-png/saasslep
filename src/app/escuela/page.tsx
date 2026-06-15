@@ -26,6 +26,7 @@ import {
 } from '@/lib/types';
 
 import { normalizarRun } from '@/lib/csvParser';
+import { calcularCargaDocente } from '@/lib/rulesEngine';
 
 export default function EscuelaDashboard() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function EscuelaDashboard() {
   const [planesEstudio, setPlanesEstudio] = useState<PlanEstudioNorm[]>([]);
 
   // Navigation tab state: 'docentes' | 'asistentes' | 'cursos' | 'compendio'
-  const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'dotacion'>('docentes');
+  const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'dotacion' | 'conciliacion'>('docentes');
   const [tareasReemplazo, setTareasReemplazo] = useState<TareaReemplazo[]>([]);
   const [taskReemplazoRun, setTaskReemplazoRun] = useState<{[key: string]: string}>({});
 
@@ -1403,6 +1404,16 @@ export default function EscuelaDashboard() {
             }`}
           >
             📋 Dotación Completa
+          </button>
+          <button 
+            onClick={() => setActiveTab('conciliacion')}
+            className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all ${
+              activeTab === 'conciliacion' 
+                ? 'bg-slep-blue text-white shadow-sm' 
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            ⚖️ Conciliación de Horas
           </button>
         </div>
 
@@ -2987,6 +2998,76 @@ export default function EscuelaDashboard() {
                       })()}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'conciliacion' && (
+              <div className="bg-white rounded-xl shadow border border-slate-200/60 overflow-hidden">
+                <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                  <h2 className="text-base font-bold text-slate-800">⚖️ Conciliación de Carga Horaria Docente (Ley 20.903)</h2>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">
+                    Listado de docentes de esta escuela con horas de contrato vacantes (horas sin destinar a aula ni a planificación proporcional).
+                  </p>
+                </div>
+                <div className="overflow-x-auto text-xs">
+                  {(() => {
+                    const schoolConts = contratos.filter(c => c.rbd === selectedRbd);
+                    const schoolRunList = Array.from(new Set(schoolConts.map(c => c.funcionario_run)));
+                    const schoolFuncs = funcionarios.filter(f => schoolRunList.includes(f.run) && f.estamento === 'Docente');
+
+                    const listWithVacantes = schoolFuncs.map(f => {
+                      const carga = calcularCargaDocente(f, contratos, colegio ? [colegio] : [], asignaciones);
+                      return {
+                        funcionario: f,
+                        ...carga
+                      };
+                    }).filter(x => x.horasNoDestinadas > 0.05)
+                      .sort((a, b) => b.horasNoDestinadas - a.horasNoDestinadas);
+
+                    if (listWithVacantes.length === 0) {
+                      return (
+                        <div className="p-12 text-center text-slate-400 italic">
+                          ✓ Todos los docentes del establecimiento tienen su jornada horaria conciliada y asignada al 100%.
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 uppercase font-black">
+                            <th className="p-3 pl-6">Docente</th>
+                            <th className="p-3 text-center">Total Contrato</th>
+                            <th className="p-3 text-center">Horas Aula (Lectivas)</th>
+                            <th className="p-3 text-center">Prop. No Lectiva</th>
+                            <th className="p-3 text-right pr-6 text-amber-700">Horas Vacantes (Sin Asignar)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {listWithVacantes.map(x => (
+                            <tr 
+                              key={x.funcionario.run} 
+                              className="bg-amber-50/40 border-l-4 border-l-amber-500 hover:bg-amber-100/50 transition-colors"
+                            >
+                              <td className="p-3 pl-6">
+                                <p className="font-bold text-slate-800">{x.funcionario.nombre}</p>
+                                <p className="text-[9px] font-mono text-slate-400 mt-0.5">{x.funcionario.run}</p>
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-slate-850">{x.horasContrato} hrs</td>
+                              <td className="p-3 text-center font-mono text-emerald-600 font-bold">{x.horasAula} hrs</td>
+                              <td className="p-3 text-center font-mono text-blue-600">{x.horasNoLectivas} hrs</td>
+                              <td className="p-3 text-right pr-6">
+                                <span className="bg-amber-100 text-amber-800 font-mono font-black px-2 py-0.5 rounded border border-amber-200">
+                                  {x.horasNoDestinadas} hrs vacantes
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
                 </div>
               </div>
             )}
