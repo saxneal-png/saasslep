@@ -781,5 +781,9 @@ export const api = {
 
   pullCloudSync: async (): Promise<boolean> => {
     return await dbLocal.pullCloudSync();
+  },
+
+  pushCloudSyncForce: async (): Promise<void> => {
+    await dbLocal.pushCloudSyncForce();
   }
 };

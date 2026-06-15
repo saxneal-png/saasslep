@@ -167,6 +167,47 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Cloud Sync Control Panel */}
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200/80 p-6 w-full max-w-lg mt-6 text-xs text-slate-700">
+          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <span>☁️</span> Control de Sincronización en la Nube
+          </h4>
+          <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
+            Si tus otros dispositivos muestran datos desactualizados, usa el botón de **Forzar Subida** desde este computador para sobreescribir la nube con tu versión actual.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={async () => {
+                if (confirm('¿Quieres establecer este equipo como la base de datos oficial en la nube? Esto sobrescribirá la versión actual en internet.')) {
+                  await api.pushCloudSyncForce();
+                  alert('✅ Base de datos subida con éxito. Los otros dispositivos se actualizarán automáticamente al recargar.');
+                }
+              }}
+              className="bg-slep-blue hover:bg-slep-blue-hover text-white font-bold py-2.5 px-3 rounded-lg transition-colors shadow-sm cursor-pointer text-center"
+            >
+              📤 Forzar Subida (Este Equipo)
+            </button>
+            <button
+              onClick={async () => {
+                if (confirm('¿Quieres borrar tus datos locales en este equipo y descargar la versión que está en la nube?')) {
+                  localStorage.removeItem('slep_db_initialized');
+                  localStorage.removeItem('slep_db__timestamp');
+                  const updated = await api.pullCloudSync();
+                  if (updated) {
+                    alert('✅ Base de datos descargada con éxito.');
+                    window.location.reload();
+                  } else {
+                    alert('No hay una versión más nueva en la nube.');
+                  }
+                }
+              }}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold py-2.5 px-3 rounded-lg transition-colors cursor-pointer text-center"
+            >
+              📥 Forzar Descarga (Desde Nube)
+            </button>
+          </div>
+        </div>
+
       </main>
 
       {/* Footer */}
