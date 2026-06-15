@@ -2388,6 +2388,214 @@ export default function EscuelaDashboard() {
                   </div>
                 </div>
 
+                {/* Section for PIE hours assignment */}
+                <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+                  <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">🧑‍🏫 Asignación de Docentes y Horas PIE por Curso</h3>
+                      <p className="text-xs text-slate-500 mt-1">Asocia docentes de la dotación PIE para cubrir las horas exigidas por curso. Soporta múltiples docentes por curso.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {cursosDinamicos.map(c => {
+                      const dec = planesEstudio.find(p => p.nivel === c.nivel && p.regimen === c.regimen);
+                      const hrsRequeridas = c.horasPIE !== undefined ? c.horasPIE : (dec ? dec.horasPIEReglamentarias : 10);
+                      
+                      // Active contracts with PIE financing
+                      const activeContractsPie = contratos.filter(cont => {
+                        const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === cont.id);
+                        return fins.some(f => f.origen_fondo === 'PIE');
+                      });
+                      const contractIdsPie = activeContractsPie.map(cont => cont.id);
+
+                      // Current assignments for this course by PIE teachers
+                      const currentAsigsCurso = asignaciones.filter(
+                        a => a.curso === c.nombre && contractIdsPie.includes(a.contrato_id)
+                      );
+                      const totalAsignadoCurso = currentAsigsCurso.reduce((sum, a) => sum + a.horas, 0);
+                      const delta = totalAsignadoCurso - hrsRequeridas;
+                      const cubierto = Math.abs(delta) < 0.05 || totalAsignadoCurso >= hrsRequeridas;
+
+                      return (
+                        <div key={c.nombre} className="border border-slate-200/60 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between space-y-3">
+                          <div>
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="bg-slate-200/80 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Curso</span>
+                                <h4 className="text-sm font-bold text-slate-800 mt-1">{c.nombre}</h4>
+                                <p className="text-[11px] text-slate-400 mt-0.5">{c.nivel}</p>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Horas Exigidas PIE</span>
+                                <strong className="text-sm text-slate-700">{hrsRequeridas} hrs</strong>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 space-y-2">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Docentes PIE Asignados:</span>
+                              {currentAsigsCurso.length > 0 ? (
+                                <div className="bg-white rounded-lg border border-slate-200 divide-y divide-slate-100 text-xs">
+                                  {currentAsigsCurso.map(a => {
+                                    const cont = contratos.find(co => co.id === a.contrato_id);
+                                    const func = funcionarios.find(f => f.run === cont?.funcionario_run);
+                                    return (
+                                      <div key={a.id} className="p-2.5 flex justify-between items-center hover:bg-slate-50/30">
+                                        <div className="flex flex-col min-w-0 pr-2">
+                                          <span className="font-semibold text-slate-800 truncate">
+                                            {func ? func.nombre : 'Docente Desconocido'}
+                                          </span>
+                                          <span className="text-[10px] text-slate-400">
+                                            RUN: {cont?.funcionario_run}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                          <span className="font-bold text-slep-blue bg-blue-50 px-2 py-0.5 rounded border border-blue-100 text-[10px]">
+                                            {a.horas} hrs
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={async () => {
+                                              if (confirm(`¿Está seguro de remover a este docente del curso ${c.nombre}?`)) {
+                                                await api.deleteAsignacion(a.id);
+                                                await loadAllSchoolData();
+                                              }
+                                            }}
+                                            className="text-red-500 hover:text-red-700 font-bold p-1 cursor-pointer transition-colors"
+                                            title="Remover asignación"
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <p className="text-[11px] text-slate-400 italic bg-white p-3 rounded-lg border border-slate-200 text-center">
+                                  Ningún docente asignado aún.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-200/60 space-y-2">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-slate-500">Total asignado curso:</span>
+                              <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                                cubierto 
+                                  ? 'bg-emerald-100 text-emerald-800' 
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {totalAsignadoCurso} / {hrsRequeridas} hrs
+                              </span>
+                            </div>
+
+                            {/* Dropdowns to add a teacher assignment */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                              <div className="sm:col-span-2">
+                                <label className="block text-[9px] font-bold text-slate-500 mb-0.5 uppercase">Asignar Docente PIE</label>
+                                <select
+                                  id={`select-pie-docente-${c.nombre}`}
+                                  className="w-full p-1.5 border rounded text-xs bg-white text-slate-700 focus:outline-slep-blue cursor-pointer"
+                                  defaultValue=""
+                                >
+                                  <option value="">-- Seleccionar --</option>
+                                  {activeContractsPie.map(cont => {
+                                    const func = funcionarios.find(f => f.run === cont.funcionario_run);
+                                    const totalPieHrs = dbLocal.financiamientoContratos
+                                      .filter(fc => fc.contrato_id === cont.id && fc.origen_fondo === 'PIE')
+                                      .reduce((sum, fc) => sum + fc.horas, 0);
+                                    const assignedPieHrs = dbLocal.asignacionesAula
+                                      .filter(as => as.contrato_id === cont.id && as.asignatura === 'Apoyo PIE')
+                                      .reduce((sum, as) => sum + as.horas, 0);
+                                    const dispHrs = totalPieHrs - assignedPieHrs;
+
+                                    return (
+                                      <option 
+                                        key={cont.id} 
+                                        value={cont.id}
+                                        disabled={dispHrs <= 0}
+                                      >
+                                        {func ? func.nombre.split(' ')[0] + ' ' + (func.nombre.split(' ')[2] || '') : cont.funcionario_run} ({dispHrs.toFixed(1)} hrs disp.)
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
+                              <div className="flex gap-1">
+                                <div className="w-12">
+                                  <label className="block text-[9px] font-bold text-slate-500 mb-0.5 uppercase">Horas</label>
+                                  <input
+                                    type="number"
+                                    id={`input-pie-horas-${c.nombre}`}
+                                    min="1"
+                                    step="1"
+                                    defaultValue="2"
+                                    className="w-full p-1.5 border rounded text-xs text-center font-bold"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const selectEl = document.getElementById(`select-pie-docente-${c.nombre}`) as HTMLSelectElement;
+                                    const horasEl = document.getElementById(`input-pie-horas-${c.nombre}`) as HTMLInputElement;
+                                    if (!selectEl || !horasEl) return;
+                                    const cId = selectEl.value;
+                                    const hrs = parseFloat(horasEl.value) || 0;
+
+                                    if (!cId) {
+                                      alert('Seleccione un docente.');
+                                      return;
+                                    }
+                                    if (hrs <= 0) {
+                                      alert('Horas debe ser mayor a 0.');
+                                      return;
+                                    }
+
+                                    const selectedCont = activeContractsPie.find(cont => cont.id === cId);
+                                    if (!selectedCont) return;
+
+                                    const totalPieHrs = dbLocal.financiamientoContratos
+                                      .filter(fc => fc.contrato_id === selectedCont.id && fc.origen_fondo === 'PIE')
+                                      .reduce((sum, fc) => sum + fc.horas, 0);
+                                    const assignedPieHrs = dbLocal.asignacionesAula
+                                      .filter(as => as.contrato_id === selectedCont.id && as.asignatura === 'Apoyo PIE')
+                                      .reduce((sum, as) => sum + as.horas, 0);
+                                    const dispHrs = totalPieHrs - assignedPieHrs;
+
+                                    if (hrs > dispHrs + 0.01) {
+                                      alert(`El docente solo cuenta con ${dispHrs.toFixed(1)} hrs disponibles.`);
+                                      return;
+                                    }
+
+                                    const newAsig: AsignacionAula = {
+                                      id: `asig-pie-${Date.now()}-${Math.random()}`,
+                                      contrato_id: cId,
+                                      curso: c.nombre,
+                                      asignatura: 'Apoyo PIE',
+                                      horas: hrs
+                                    };
+
+                                    await api.saveAsignacion(newAsig);
+                                    await loadAllSchoolData();
+
+                                    selectEl.value = "";
+                                    horasEl.value = "2";
+                                  }}
+                                  className="flex-1 bg-slep-blue hover:bg-slep-blue-hover text-white font-bold rounded text-xs transition-colors cursor-pointer text-center flex items-center justify-center py-1.5"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
               </div>
             )}
