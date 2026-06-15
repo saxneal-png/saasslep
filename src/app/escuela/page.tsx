@@ -299,18 +299,18 @@ export default function EscuelaDashboard() {
       fecha_ingreso_real: fechaIngresoReal
     };
 
-    // Save modified replacement record
-    dbLocal.reemplazosLicencias = dbLocal.reemplazosLicencias.map(r => r.id === reempId ? updatedReemp : r);
+    // Save modified replacement record to Supabase
+    await api.saveReemplazoLicencia(updatedReemp);
 
-    // Make sure replacement contract status is activated or configured as Reemplazo
+    // Make sure replacement contract status is activated or configured as Reemplazo in Supabase
     // Find the replacement's active or pending contract for this RBD
-    const allConts = dbLocal.contratos;
+    const allConts = await api.getContratos(selectedRbd);
     const cleanRun = match.reemplazo_run;
-    const targetIdx = allConts.findIndex(c => c.funcionario_run === cleanRun && c.rbd === selectedRbd && (c.estado === 'Reemplazo' || c.estado === 'Pendiente_Aprobacion'));
-    if (targetIdx >= 0) {
-      allConts[targetIdx].estado = 'Reemplazo';
-      allConts[targetIdx].fecha_inicio_licencia = fechaIngresoReal; // Record the day they started working
-      dbLocal.contratos = allConts;
+    const target = allConts.find(c => c.funcionario_run === cleanRun && c.rbd === selectedRbd && (c.estado === 'Reemplazo' || c.estado === 'Pendiente_Aprobacion'));
+    if (target) {
+      target.estado = 'Reemplazo';
+      target.fecha_inicio_licencia = fechaIngresoReal; // Record the day they started working
+      await api.upsertContratoCompleto(target, []);
     } else {
       // If no contract found, create one on the fly
       const newContId = `c-reemp-validated-${Date.now()}-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -324,15 +324,16 @@ export default function EscuelaDashboard() {
         horas_totales: match.horas,
         fecha_inicio_licencia: fechaIngresoReal
       };
-      dbLocal.contratos = [...dbLocal.contratos, newCont];
+      await api.upsertContratoCompleto(newCont, []);
     }
 
     // Mark matching pending tasks as resolved in database
-    const matchingTask = dbLocal.tareasReemplazo.find(t => 
+    const allTasks = await api.getTareasReemplazo();
+    const matchingTask = allTasks.find(t => 
       t.rbd === selectedRbd && 
       t.estado === 'Pendiente' && 
       (match.contrato_titular_id.includes(t.funcionario_titular_run) || t.funcionario_titular_run === match.contrato_titular_id || 
-       dbLocal.contratos.find(c => c.id === match.contrato_titular_id)?.funcionario_run === t.funcionario_titular_run)
+       allConts.find(c => c.id === match.contrato_titular_id)?.funcionario_run === t.funcionario_titular_run)
     );
 
     if (matchingTask) {
@@ -699,19 +700,20 @@ export default function EscuelaDashboard() {
       titulo: editFuncTitulo
     });
  
-    // 2. Update contract and finance sources
+    // 2. Update contract and finance sources in Supabase
     const cleanRun = editingFuncionario.run;
     const relatedConts = contratos.filter(c => c.funcionario_run === cleanRun && c.rbd === selectedRbd);
     
     if (editContFins.length > 0) {
-      // Delete old contracts and financiamientos for this teacher to rebuild cleanly
-      const allConts = dbLocal.contratos.filter(c => !(c.funcionario_run === cleanRun && c.rbd === selectedRbd));
-      let allFins = dbLocal.financiamientoContratos.filter(f => !relatedConts.map(c => c.id).includes(f.contrato_id));
+      // Delete old contracts and financiamientos for this teacher in Supabase
+      for (const oldCont of relatedConts) {
+        await api.deleteContrato(oldCont.id);
+      }
 
       const calidadesUnicas = Array.from(new Set(editContFins.map(sl => sl.calidad)));
-      const newContratos: Contrato[] = [];
 
-      calidadesUnicas.forEach((cal, cIdx) => {
+      for (let cIdx = 0; cIdx < calidadesUnicas.length; cIdx++) {
+        const cal = calidadesUnicas[cIdx];
         const linesForCal = editContFins.filter(l => l.calidad === cal);
         const totalHorasCal = linesForCal.reduce((sum, l) => sum + l.horas, 0);
 
@@ -732,7 +734,6 @@ export default function EscuelaDashboard() {
           fecha_inicio_licencia: oldCont?.fecha_inicio_licencia,
           fecha_termino_licencia: oldCont?.fecha_termino_licencia
         };
-        newContratos.push(nuevoContrato);
 
         const newFins = linesForCal.map((l, lIdx) => ({
           id: `fin-edit-${nuevoContrato.id}-${lIdx}`,
@@ -740,11 +741,9 @@ export default function EscuelaDashboard() {
           origen_fondo: l.origen,
           horas: l.horas
         }));
-        allFins.push(...newFins);
-      });
-
-      dbLocal.contratos = [...allConts, ...newContratos];
-      dbLocal.financiamientoContratos = allFins;
+        
+        await api.upsertContratoCompleto(nuevoContrato, newFins);
+      }
     }
  
     setEditingFuncionario(null);
@@ -772,24 +771,14 @@ export default function EscuelaDashboard() {
       await api.crearAsignaturaDinamica(asig);
     }
     
-    // 2. Save assignments: replace all assignments for editingCurso.nombre with editCursoAsignaciones
-    const otherCoursesAsigs = dbLocal.asignacionesAula.filter(a => {
-      // Find contract of this assignment
-      const cont = dbLocal.contratos.find(c => c.id === a.contrato_id);
-      // If it belongs to this school and is for this course, remove it
-      return !(cont && cont.rbd === selectedRbd && a.curso === editingCurso.nombre);
-    });
-    
-    dbLocal.asignacionesAula = [...otherCoursesAsigs, ...editCursoAsignaciones];
+    // 2. Save assignments: replace all assignments for editingCurso.nombre with editCursoAsignaciones in Supabase
+    await api.deleteAsignacionesPorCurso(selectedRbd, editingCurso.nombre);
+    for (const a of editCursoAsignaciones) {
+      await api.saveAsignacion(a);
+    }
 
-    // 3. Save updated course PIE hours
-    const updatedCursos = dbLocal.cursosDinamicos.map(cur => {
-      if (cur.rbd === selectedRbd && cur.nombre === editingCurso.nombre) {
-        return { ...cur, horasPIE: editCursoPIE };
-      }
-      return cur;
-    });
-    dbLocal.cursosDinamicos = updatedCursos;
+    // 3. Save updated course PIE hours in Supabase
+    await api.crearCursoDinamico({ ...editingCurso, horasPIE: editCursoPIE });
     
     setEditingCurso(null);
     await loadAllSchoolData();

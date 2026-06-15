@@ -579,6 +579,21 @@ export const api = {
     }
   },
 
+  deleteAsignacionesPorCurso: async (rbd: string, cursoNombre: string): Promise<void> => {
+    const { data: contratos } = await supabase.from('contratos').select('id').eq('rbd', rbd);
+    if (contratos && contratos.length > 0) {
+      const ids = contratos.map(c => c.id);
+      const { error } = await supabase.from('asignaciones_aula').delete().eq('curso', cursoNombre).in('contrato_id', ids);
+      if (error) {
+        console.warn("⚠️ Error en Supabase, eliminando asignaciones por curso:", error);
+      }
+    }
+    // Fallback/Local sync
+    const conts = dbLocal.contratos.filter(c => c.rbd === rbd);
+    const contIds = conts.map(c => c.id);
+    dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => !(a.curso === cursoNombre && contIds.includes(a.contrato_id)));
+  },
+
   crearAlerta: async (alerta: AlertaConciliacion): Promise<void> => {
     const { error } = await supabase.from('alertas_conciliacion').upsert(alerta);
     if (error) {
@@ -861,11 +876,11 @@ export const api = {
   },
 
   saveReemplazoLicencia: async (r: ReemplazoDetalle): Promise<void> => {
-    const { error } = await supabase.from('reemplazos_licencias').insert(r);
+    const { error } = await supabase.from('reemplazos_licencias').upsert(r);
     if (error) {
       console.warn("⚠️ Error en Supabase, guardando reemplazo en local:", error);
-      const list = [...dbLocal.reemplazosLicencias, r];
-      dbLocal.reemplazosLicencias = list;
+      const list = dbLocal.reemplazosLicencias.filter(x => x.id !== r.id);
+      dbLocal.reemplazosLicencias = [...list, r];
     }
   },
 
