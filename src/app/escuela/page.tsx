@@ -175,13 +175,7 @@ export default function EscuelaDashboard() {
         { event: '*', schema: 'public', table: 'contratos', filter: `rbd=eq.${selectedRbd}` },
         (payload: any) => {
           console.log('🔥 Cambios en contratos recibidos por canal realtime:', payload);
-          if (payload.eventType === 'INSERT') {
-            setContratos(prev => [...prev, payload.new]);
-          } else if (payload.eventType === 'UPDATE') {
-            setContratos(prev => prev.map(c => c.id === payload.new.id ? payload.new : c));
-          } else if (payload.eventType === 'DELETE') {
-            setContratos(prev => prev.filter(c => c.id !== payload.old.id));
-          }
+          loadAllSchoolData();
         }
       )
       .on(
@@ -189,13 +183,7 @@ export default function EscuelaDashboard() {
         { event: '*', schema: 'public', table: 'asignaciones_aula' },
         (payload: any) => {
           console.log('🔥 Cambios en asignaciones recibidos por canal realtime:', payload);
-          if (payload.eventType === 'INSERT') {
-            setAsignaciones(prev => [...prev, payload.new]);
-          } else if (payload.eventType === 'UPDATE') {
-            setAsignaciones(prev => prev.map(a => a.id === payload.new.id ? payload.new : a));
-          } else if (payload.eventType === 'DELETE') {
-            setAsignaciones(prev => prev.filter(a => a.id !== payload.old.id));
-          }
+          loadAllSchoolData();
         }
       )
       .on(
@@ -203,13 +191,7 @@ export default function EscuelaDashboard() {
         { event: '*', schema: 'public', table: 'alertas_conciliacion', filter: `rbd=eq.${selectedRbd}` },
         (payload: any) => {
           console.log('🔥 Cambios en alertas recibidos por canal realtime:', payload);
-          if (payload.eventType === 'INSERT') {
-            setAlertas(prev => [...prev, payload.new]);
-          } else if (payload.eventType === 'UPDATE') {
-            setAlertas(prev => prev.map(a => a.id === payload.new.id ? payload.new : a));
-          } else if (payload.eventType === 'DELETE') {
-            setAlertas(prev => prev.filter(a => a.id !== payload.old.id));
-          }
+          loadAllSchoolData();
         }
       )
       .subscribe();

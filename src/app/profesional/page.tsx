@@ -152,6 +152,42 @@ export default function ProfesionalDashboard() {
     };
   }, []);
 
+  async function loadData() {
+    if (!profesionalRun) return;
+
+    await api.pullCloudSync();
+    const rbds = await api.getTutelasPorProfesional(profesionalRun);
+    setEscuelasAsignadasRbd(rbds);
+
+    const allEsts = await api.getEstablecimientos();
+    const filteredEsts = allEsts.filter(e => rbds.includes(e.rbd));
+    setEstablecimientos(filteredEsts);
+
+    const allConts = await api.getContratos();
+    const filteredConts = allConts.filter(c => rbds.includes(c.rbd));
+    setContratos(filteredConts);
+
+    const funcs = await api.getFuncionarios();
+    setFuncionarios(funcs);
+
+    const allAlts = await api.getAlertas();
+    const filteredAlts = allAlts.filter(a => rbds.includes(a.rbd));
+    setAlertas(filteredAlts);
+
+    const fins: FinanciamientoContrato[] = [];
+    for (const c of filteredConts) {
+      const f = await api.getFinanciamientosPorContrato(c.id);
+      fins.push(...f);
+    }
+    setFinanciamientos(fins);
+
+    const allAsigs = dbLocal.asignacionesAula;
+    setAsignaciones(allAsigs);
+
+    const rems = await api.getRemuneraciones();
+    setRemuneraciones(rems);
+  }
+
   // Realtime Supabase Channels Subscription for Asesor (filtered by assigned RBDs in callback)
   useEffect(() => {
     if (!profesionalRun || escuelasAsignadasRbd.length === 0) return;
@@ -165,13 +201,7 @@ export default function ProfesionalDashboard() {
           console.log('🔥 Cambios en contratos recibidos por canal realtime (Asesor):', payload);
           const record = payload.eventType === 'DELETE' ? payload.old : payload.new;
           if (record && escuelasAsignadasRbd.includes(record.rbd)) {
-            if (payload.eventType === 'INSERT') {
-              setContratos(prev => [...prev, payload.new]);
-            } else if (payload.eventType === 'UPDATE') {
-              setContratos(prev => prev.map(c => c.id === payload.new.id ? payload.new : c));
-            } else if (payload.eventType === 'DELETE') {
-              setContratos(prev => prev.filter(c => c.id !== payload.old.id));
-            }
+            loadData();
           }
         }
       )
@@ -180,16 +210,7 @@ export default function ProfesionalDashboard() {
         { event: '*', schema: 'public', table: 'asignaciones_aula' },
         (payload: any) => {
           console.log('🔥 Cambios en asignaciones recibidos por canal realtime (Asesor):', payload);
-          const record = payload.eventType === 'DELETE' ? payload.old : payload.new;
-          if (record) {
-            if (payload.eventType === 'INSERT') {
-              setAsignaciones(prev => [...prev, payload.new]);
-            } else if (payload.eventType === 'UPDATE') {
-              setAsignaciones(prev => prev.map(a => a.id === payload.new.id ? payload.new : a));
-            } else if (payload.eventType === 'DELETE') {
-              setAsignaciones(prev => prev.filter(a => a.id !== payload.old.id));
-            }
-          }
+          loadData();
         }
       )
       .on(
@@ -199,13 +220,7 @@ export default function ProfesionalDashboard() {
           console.log('🔥 Cambios en alertas recibidos por canal realtime (Asesor):', payload);
           const record = payload.eventType === 'DELETE' ? payload.old : payload.new;
           if (record && escuelasAsignadasRbd.includes(record.rbd)) {
-            if (payload.eventType === 'INSERT') {
-              setAlertas(prev => [...prev, payload.new]);
-            } else if (payload.eventType === 'UPDATE') {
-              setAlertas(prev => prev.map(a => a.id === payload.new.id ? payload.new : a));
-            } else if (payload.eventType === 'DELETE') {
-              setAlertas(prev => prev.filter(a => a.id !== payload.old.id));
-            }
+            loadData();
           }
         }
       )
@@ -217,41 +232,6 @@ export default function ProfesionalDashboard() {
   }, [profesionalRun, escuelasAsignadasRbd]);
 
   useEffect(() => {
-    async function loadData() {
-      if (!profesionalRun) return;
-
-      await api.pullCloudSync();
-      const rbds = await api.getTutelasPorProfesional(profesionalRun);
-      setEscuelasAsignadasRbd(rbds);
-
-      const allEsts = await api.getEstablecimientos();
-      const filteredEsts = allEsts.filter(e => rbds.includes(e.rbd));
-      setEstablecimientos(filteredEsts);
-
-      const allConts = await api.getContratos();
-      const filteredConts = allConts.filter(c => rbds.includes(c.rbd));
-      setContratos(filteredConts);
-
-      const funcs = await api.getFuncionarios();
-      setFuncionarios(funcs);
-
-      const allAlts = await api.getAlertas();
-      const filteredAlts = allAlts.filter(a => rbds.includes(a.rbd));
-      setAlertas(filteredAlts);
-
-      const fins: FinanciamientoContrato[] = [];
-      for (const c of filteredConts) {
-        const f = await api.getFinanciamientosPorContrato(c.id);
-        fins.push(...f);
-      }
-      setFinanciamientos(fins);
-
-      const allAsigs = dbLocal.asignacionesAula;
-      setAsignaciones(allAsigs);
-
-      const rems = await api.getRemuneraciones();
-      setRemuneraciones(rems);
-    }
     loadData();
   }, [profesionalRun]);
 
