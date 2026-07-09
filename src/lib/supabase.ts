@@ -638,3 +638,11 @@ export const api = {
     dbLocal.tareasReemplazo = list;
   }
 };
+export const dbLocal = new DatabaseLocal();
+
+export const api = { 
+  // ... todo tu código actual ...
+};
+
+// AGREGA ESTA LÍNEA PARA SOLUCIONAR EL ERROR:
+export const supabase = api;
