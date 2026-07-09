@@ -1,6 +1,6 @@
 // @ts-ignore
 import Papa from 'papaparse';
-import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion, CalidadJuridica, normalizarCargoDocente } from './types';
+import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion } from './types';
 
 // Normalization function for RUN
 export function normalizarRun(runRaw: any): string {
@@ -45,7 +45,6 @@ export interface CsvRow {
   ProRetencion?: string;
   Otro?: string;
   Estamento?: string; // Optional stamento: Docente or Asistente
-  [key: string]: any;
 }
 
 export interface ParseResult {
@@ -93,155 +92,28 @@ export function parsearNominaCsv(
       const docRun = row.DOC_RUN || row.doc_run;
       const docDv = row.DOC_DV || row.doc_dv || '';
       runRaw = `${docRun}-${docDv}`;
-    } else if (!runRaw && (row.ASISTENTE_RUN || row.asistente_run)) {
-      const asisRun = row.ASISTENTE_RUN || row.asistente_run;
-      const asisDv = row.ASISTENTE_DV || row.asistente_dv || '';
-      runRaw = `${asisRun}-${asisDv}`;
     }
 
     if (!runRaw) return;
 
     const run = normalizarRun(runRaw);
     
-    // Clean corrupted encoding characters if any slipped through (e.g.  -> proper letters)
-    const limpiarCaracteresCorruptos = (str: string): string => {
-      if (!str) return '';
-      // Direct replacement for common chilean names/surnames/cargos that get corrupted
-      let clean = str
-        .replace(/PREZ/gi, 'PÉREZ')
-        .replace(/GONZLEZ/gi, 'GONZÁLEZ')
-        .replace(/JOS/gi, 'JOSÉ')
-        .replace(/GMEZ/gi, 'GÓMEZ')
-        .replace(/MUOZ/gi, 'MUÑOZ')
-        .replace(/RIQUELME PREZ/gi, 'RIQUELME PÉREZ')
-        .replace(/TCNICO/gi, 'TÉCNICO')
-        .replace(/TECNICO/gi, 'TÉCNICO')
-        .replace(/PRVULOS/gi, 'PÁRVULOS')
-        .replace(/PARVULOS/gi, 'PÁRVULOS')
-        .replace(/ASISTENTE\/TCNICO PRVULOS/gi, 'ASISTENTE/TÉCNICO PÁRVULOS')
-        .replace(/ASISTENTE\/TECNICO PARVULOS/gi, 'ASISTENTE/TÉCNICO PÁRVULOS');
-
-      // If we find raw replacement characters, try contextual fixes:
-      // If it looks like TCNICO -> TÉCNICO, PRVULOS -> PÁRVULOS, JOS -> JOSÉ, PREZ -> PÉREZ
-      clean = clean
-        .replace(/ASISTENTE\/T\uFFFDCnico P\uFFFDRvulos/gi, 'ASISTENTE/TÉCNICO PÁRVULOS')
-        .replace(/ASISTENTE\/T\uFFFDCnico P\uFFFDRvulo/gi, 'ASISTENTE/TÉCNICO PÁRVULA')
-        .replace(/T\uFFFDCNICO/gi, 'TÉCNICO')
-        .replace(/P\uFFFDRVULOS/gi, 'PÁRVULOS')
-        .replace(/T\uFFFDCnico/gi, 'TÉCNICO')
-        .replace(/P\uFFFDRvulos/gi, 'PÁRVULOS')
-        .replace(/JOS\uFFFD/gi, 'JOSÉ')
-        .replace(/P\uFFFDRez/gi, 'PÉREZ')
-        .replace(/GONZ\uFFFDLez/gi, 'GONZÁLEZ')
-        .replace(/G\uFFFDMez/gi, 'GÓMEZ')
-        .replace(/MU\uFFFDOz/gi, 'MUÑOZ')
-        .replace(/\uFFFD/g, 'Ñ'); // fallback general replacement
-      return clean;
-    };
-
     let nombre = 'Funcionario Sin Nombre';
     if (row.Nombre || row.nombre) {
-      nombre = limpiarCaracteresCorruptos((row.Nombre || row.nombre).trim());
+      nombre = (row.Nombre || row.nombre).trim();
     } else if (row.DOC_NOMBRE || row.doc_nombre) {
       const nom = (row.DOC_NOMBRE || row.doc_nombre || '').trim();
       const pat = (row.DOC_PATERNO || row.doc_paterno || '').trim();
       const mat = (row.DOC_MATERNO || row.doc_materno || '').trim();
-      nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim());
-    } else if (row.ASISTENTE_NOMBRE || row.asistente_nombre) {
-      const nom = (row.ASISTENTE_NOMBRE || row.asistente_nombre || '').trim();
-      const pat = (row.ASISTENTE_PATERNO || row.asistente_paterno || '').trim();
-      const mat = (row.ASISTENTE_MATERNO || row.asistente_materno || '').trim();
-      nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim());
+      nombre = `${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim();
     }
 
     const rbd = String(row.RBD || row.rbd || rbdContext).trim();
-    
-    // Quality mapping logic: map to expanded CalidadJuridica
-    const rawCal = String(row.CalidadJuridica || row.calidad_juridica || row.CALIDAD_JURIDICA || 'A contrata').trim();
-    let calidad_juridica: CalidadJuridica = 'A contrata';
-    if (rawCal.toLowerCase().includes('titular')) {
-      calidad_juridica = 'Titular';
-    } else if (rawCal.toLowerCase().includes('plazo fijo') || rawCal.toLowerCase().includes('plazofijo')) {
-      calidad_juridica = 'Plazo fijo';
-    } else if (rawCal.toLowerCase().includes('indefinido')) {
-      calidad_juridica = 'Indefinido';
-    } else if (rawCal.toLowerCase().includes('reemplazo')) {
-      calidad_juridica = 'Reemplazo';
-    } else if (rawCal.toLowerCase().includes('habilitacion') || rawCal.toLowerCase().includes('habilitación')) {
-      calidad_juridica = 'Habilitación especial';
-    } else {
-      calidad_juridica = 'A contrata';
-    }
-
-    const raw_funcion_principal = limpiarCaracteresCorruptos((
-      row.Funcion || 
-      row.funcion || 
-      row.FUNCION_PRINCIPAL || 
-      row.funcion_principal || 
-      row.FUNCION_UNO || 
-      row.funcion_uno || 
-      'Auxiliar de Servicios'
-    ).trim());
-
-    let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
-    if (forceEstamento) {
-      estamento = forceEstamento === 'Docente' ? 'Docente' : 'Asistente de la Educación';
-    } else {
-      const isAsisHeader = row.ASISTENTE_RUN !== undefined || row.asistente_run !== undefined;
-      const rawEst = String(row.Estamento || row.estamento || '').trim().toLowerCase();
-      if (!isAsisHeader && (rawEst.includes('docente') || rawEst.includes('profesor') || raw_funcion_principal.toLowerCase().includes('docente') || raw_funcion_principal.toLowerCase().includes('profesor'))) {
-        estamento = 'Docente';
-      }
-    }
-
-    const funcion_principal = estamento === 'Docente' 
-      ? normalizarCargoDocente(raw_funcion_principal) 
-      : raw_funcion_principal;
+    const calidad_juridica = ((row.CalidadJuridica || row.calidad_juridica || row.CALIDAD_JURIDICA) === 'Titular' ? 'Titular' : 'Contrata');
+    const funcion_principal = (row.Funcion || row.funcion || row.FUNCION_PRINCIPAL || row.funcion_principal || 'Docente de Aula').trim();
+    const estamento = forceEstamento || (row.Estamento || row.estamento || (funcion_principal.toLowerCase().includes('docente') || funcion_principal.toLowerCase().includes('profesor') ? 'Docente' : 'Asistente de la Educación'));
     
     const horas_totales = parseDecimalHours(row.HorasTotales || row.horas_totales || row.HORAS_CONTRATO || row.horas_contrato);
-
-    const checkHasValue = (val: any) => val !== undefined && val !== null && val !== '';
-    const horas_directivas = checkHasValue(row.horas_directivas) ? parseDecimalHours(row.horas_directivas)
-      : checkHasValue(row.HorasDirectivas) ? parseDecimalHours(row.HorasDirectivas)
-      : checkHasValue(row.HORAS_DIRECTIVAS) ? parseDecimalHours(row.HORAS_DIRECTIVAS)
-      : checkHasValue(row.horas_directiva) ? parseDecimalHours(row.horas_directiva)
-      : checkHasValue(row.HorasDirectiva) ? parseDecimalHours(row.HorasDirectiva)
-      : checkHasValue(row.HORAS_DIRECTIVA) ? parseDecimalHours(row.HORAS_DIRECTIVA)
-      : undefined;
-
-    const horas_aula = checkHasValue(row.horas_aula) ? parseDecimalHours(row.horas_aula)
-      : checkHasValue(row.HorasAula) ? parseDecimalHours(row.HorasAula)
-      : checkHasValue(row.HORAS_AULA) ? parseDecimalHours(row.HORAS_AULA)
-      : checkHasValue(row.horas_cronologicas) ? parseDecimalHours(row.horas_cronologicas)
-      : checkHasValue(row.HorasCronologicas) ? parseDecimalHours(row.HorasCronologicas)
-      : checkHasValue(row.HORAS_CRONOLOGICAS) ? parseDecimalHours(row.HORAS_CRONOLOGICAS)
-      : undefined;
-
-    const horas_tecnico_pedagogicas = checkHasValue(row.horas_tecnico_pedagogicas) ? parseDecimalHours(row.horas_tecnico_pedagogicas)
-      : checkHasValue(row.HorasTecnicoPedagogicas) ? parseDecimalHours(row.HorasTecnicoPedagogicas)
-      : checkHasValue(row.HORAS_TECNICO_PEDAGOGICAS) ? parseDecimalHours(row.HORAS_TECNICO_PEDAGOGICAS)
-      : checkHasValue(row.horas_tecnico_pedagogica) ? parseDecimalHours(row.horas_tecnico_pedagogica)
-      : checkHasValue(row.HorasTecnicoPedagogica) ? parseDecimalHours(row.HorasTecnicoPedagogica)
-      : checkHasValue(row.HORAS_TECNICO_PEDAGOGICA) ? parseDecimalHours(row.HORAS_TECNICO_PEDAGOGICA)
-      : checkHasValue(row.horas_tecnica) ? parseDecimalHours(row.horas_tecnica)
-      : checkHasValue(row.horas_tecnico) ? parseDecimalHours(row.horas_tecnico)
-      : checkHasValue(row.HorasTecnica) ? parseDecimalHours(row.HorasTecnica)
-      : checkHasValue(row.HorasTecnico) ? parseDecimalHours(row.HorasTecnico)
-      : undefined;
-
-    const dias_trabajados = row.dias_trabajados || row.DiasTrabajados || row.DIAS_TRABAJADOS ? parseInt(row.dias_trabajados || row.DiasTrabajados || row.DIAS_TRABAJADOS, 10) : undefined;
-    const dias_licencia_medica = row.dias_licencia_medica || row.DiasLicenciaMedica || row.DIAS_LICENCIA_MEDICA ? parseInt(row.dias_licencia_medica || row.DiasLicenciaMedica || row.DIAS_LICENCIA_MEDICA, 10) : undefined;
-    const inasistencias = row.inasistencias || row.Inasistencias || row.INASISTENCIAS ? parseInt(row.inasistencias || row.Inasistencias || row.INASISTENCIAS, 10) : undefined;
-    
-    let legislacion_laboral: any = estamento === 'Docente' ? 'Estatuto docente' : 'Asistentes de la educación';
-    const legRaw = String(row.legislacion_laboral || row.LegislacionLaboral || row.LEGISLACION_LABORAL || '').trim().toLowerCase();
-    if (legRaw) {
-      if (legRaw.includes('docente')) {
-        legislacion_laboral = 'Estatuto docente';
-      } else if (legRaw.includes('asistente')) {
-        legislacion_laboral = 'Asistentes de la educación';
-      }
-    }
 
     // Sum subvenciones using float (parseFloat representation)
     let regular = parseDecimalHours(row.SubvencionRegular || row.subvencion_regular || row.Regular || row.regular);
@@ -260,40 +132,15 @@ export function parsearNominaCsv(
     // Create unique ID for contract
     const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
 
-    // Discard values map to null logic
-    const cleanDiscardValue = (val: any): string | undefined => {
-      if (val === undefined || val === null) return undefined;
-      const clean = String(val).trim();
-      const lower = clean.toLowerCase();
-      if (lower === 'sin dato / agregar' || lower === 'no tiene' || lower === '--' || lower === '-') return undefined;
-      return clean;
-    };
-
     // Add unique Funcionario with estamento
-    const titulo = cleanDiscardValue(
-      row.Titulo || 
-      row.titulo || 
-      row.TITULO || 
-      row.DOC_TITULO || 
-      row.doc_titulo || 
-      row.ASISTENTE_TITULO || 
-      row.asistente_titulo || 
-      row.TituloProfesional || 
-      row.titulo_profesional
-    );
-
-    const genero = cleanDiscardValue(row.ASISTENTE_GENERO || row.asistente_genero || row.Genero || row.genero);
-    const fecha_nacimiento = cleanDiscardValue(row.FECHA_NACIMIENTO || row.fecha_nacimiento || row.FechaNacimiento || row.fecha_nac);
-
+    const titulo = String(row.Titulo || row.titulo || row.TITULO || row.DOC_TITULO || row.doc_titulo || row.TituloProfesional || row.titulo_profesional || '').trim();
     if (!funcionarios.some(f => f.run === run)) {
       funcionarios.push({ 
         run, 
         nombre, 
-        estamento,
+        estamento: estamento === 'Docente' ? 'Docente' : 'Asistente de la Educación',
         cargo: funcion_principal,
-        titulo: titulo || undefined,
-        genero,
-        fecha_nacimiento
+        titulo: titulo || undefined
       });
     }
 
@@ -305,14 +152,7 @@ export function parsearNominaCsv(
       calidad_juridica,
       funcion_principal,
       estado: 'Activo',
-      horas_totales,
-      dias_trabajados,
-      dias_licencia_medica,
-      inasistencias,
-      legislacion_laboral,
-      horas_directivas,
-      horas_aula,
-      horas_tecnico_pedagogicas
+      horas_totales
     };
     contratos.push(nuevoContrato);
 
@@ -335,26 +175,6 @@ export function parsearNominaCsv(
     agregarFondo('Pro-retención', proRetencion);
     agregarFondo('Otro', otro);
 
-    // Parse and cleanup SIGE-specific columns
-    const cleanSigeNumber = (val: any): number => {
-      if (val === undefined || val === null || String(val).trim() === '--' || String(val).trim() === '-') return 0;
-      return parseDecimalHours(val);
-    };
-
-    const cleanSigeString = (val: any): string => {
-      if (val === undefined || val === null || String(val).trim() === '--' || String(val).trim() === '-') return '';
-      return String(val).trim();
-    };
-
-    const horasAula = cleanSigeNumber(row.HORAS_AULA || row.horas_aula);
-    const sector1 = cleanSigeString(row.SECTOR_FUNCION_1 || row.sector_funcion_1);
-    const subSector1 = cleanSigeString(row.SUB_SECTOR_FUNCION_1 || row.sub_sector_funcion_1);
-
-    // Dynamic classroom load assignment auto-precarga
-    if (horasAula > 0 && (sector1 || subSector1)) {
-      // Direct push to local in-memory DB or mocked allocations lists returned to page.tsx
-    }
-
     // 1. Alerta de Descalce Horario (Suma de subvenciones no coincide con horas del contrato)
     if (Math.abs(sumaSubvenciones - horas_totales) > 0.01) {
       alertas.push({
@@ -370,41 +190,7 @@ export function parsearNominaCsv(
       });
     }
 
-    // 2. Control de Proporción Ley 20.903 (Semáforo Normativo)
-    if (estamento === 'Docente' && horas_totales > 0 && horasAula > 0) {
-      const pctLectivo = (horasAula / horas_totales) * 100;
-      const maxStandardPct = 65; // Standard 65% classroom hours
-      const maxSpecialPct = 60;  // Special 60% classroom hours
-      
-      // We can warn if it exceeds 65.01%. If it exceeds 65% it is an alert.
-      if (pctLectivo > maxStandardPct + 0.01) {
-        alertas.push({
-          id: `al-ley20903-${contrato_id}`,
-          run,
-          nombre_funcionario: nombre,
-          rbd,
-          tipo: 'infraccion_ley_20903',
-          nivel_alerta: 'critica',
-          mensaje: 'Infracción de Proporción Lectiva Ley 20.903',
-          detalle: `El docente tiene asignadas ${horasAula} horas lectivas de un contrato de ${horas_totales} horas (${pctLectivo.toFixed(1)}%), superando el límite máximo legal del 65% (o 60% en colegios de alta vulnerabilidad).`,
-          resuelta: false
-        });
-      } else if (pctLectivo > maxSpecialPct + 0.01) {
-        alertas.push({
-          id: `al-ley20903-warn-${contrato_id}`,
-          run,
-          nombre_funcionario: nombre,
-          rbd,
-          tipo: 'infraccion_ley_20903',
-          nivel_alerta: 'advertencia',
-          mensaje: 'Posible Infracción Ley 20.903 (Colegio Vulnerable)',
-          detalle: `El docente tiene asignadas ${horasAula} horas lectivas de un contrato de ${horas_totales} horas (${pctLectivo.toFixed(1)}%), superando el límite del 60% para establecimientos con IVM > 80%.`,
-          resuelta: false
-        });
-      }
-    }
-
-    // 3. Control Previo Discrepancies
+    // 2. Control Previo Discrepancies
     if (controlPrevioJson) {
       const match = controlPrevioJson.find(c => normalizarRun(c.run) === run);
       if (match) {
@@ -475,18 +261,6 @@ export function parsearRemuneracionesCsv(csvContent: string): RegistroRemuneraci
       ? 'P01_Administrativo' 
       : 'P02_Educacion';
 
-    // Parse Real-world payroll columns
-    const dias_trabajados = row.DiasTrabajados || row.dias_trabajados || row.dias_trab || row.DiasTrab ? parseInt(row.DiasTrabajados || row.dias_trabajados || row.dias_trab || row.DiasTrab, 10) : undefined;
-    const dias_licencia_medica = row.DiasLicenciaMedica || row.dias_licencia_medica || row.dias_lic_medica || row['Dias Lic. Médica'] || row.dias_lic ? parseInt(row.DiasLicenciaMedica || row.dias_licencia_medica || row.dias_lic_medica || row['Dias Lic. Médica'] || row.dias_lic, 10) : undefined;
-    const inasistencias = row.Inasistencias || row.inasistencias || row.Inasist ? parseInt(row.Inasistencias || row.inasistencias || row.Inasist, 10) : undefined;
-
-    const aplicaArt5Raw = String(row.AplicaLey20903Art5 || row.aplica_ley_20903_art5 || row['Aplica Ley 20903 Artículo 5'] || '').trim().toLowerCase();
-    const aplica_ley_20903_art5 = aplicaArt5Raw === 'sí' || aplicaArt5Raw === 'si' || aplicaArt5Raw === 'yes' || aplicaArt5Raw === '1' ? 'Sí' : 'No';
-
-    const planilla_complementaria_ley_20903 = parseInt(row.PlanillaComplementariaLey20903 || row.planilla_complementaria_ley_20903 || row['Planilla Complementaria Ley 20.903'] || '0', 10) || 0;
-    const asignacion_res_director = parseInt(row.AsignacionResDirector || row.asignacion_res_director || row['Asig. Res. Director'] || '0', 10) || 0;
-    const asignacion_resp_tec_ped = parseInt(row.AsignacionRespTecPed || row.asignacion_resp_tec_ped || row['DFL1/97 art.51 Asig. Resp. Téc-Ped'] || '0', 10) || 0;
-
     result.push({
       id: `rem-${run.replace(/[^a-zA-Z0-9]/g, '')}-${idx}`,
       funcionario_run: run,
@@ -494,14 +268,7 @@ export function parsearRemuneracionesCsv(csvContent: string): RegistroRemuneraci
       horas_pagadas,
       total_haberes,
       mes_pago,
-      grupo_estamento,
-      dias_trabajados,
-      dias_licencia_medica,
-      inasistencias,
-      aplica_ley_20903_art5,
-      planilla_complementaria_ley_20903,
-      asignacion_res_director,
-      asignacion_resp_tec_ped
+      grupo_estamento
     });
   });
 
