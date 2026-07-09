@@ -6,6 +6,14 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/supabase';
 import { Establecimiento, AlertaConciliacion, Supervisor, ProfesionalEscuelaAsignada } from '@/lib/types';
 
+// Dentro de SostenedorDashboard
+const [nuevaEscuela, setNuevaEscuela] = useState<Establecimiento>({ rbd: '', nombre: '', ivm: 0, comuna: '', regimen: 'JEC' });
+
+const handleAgregarEscuela = async () => {
+  await api.upsertEstablecimiento(nuevaEscuela);
+  setEstablecimientos([...establecimientos, nuevaEscuela]);
+  alert('Escuela agregada');
+};
 export default function SostenedorDashboard() {
   const router = useRouter();
 
