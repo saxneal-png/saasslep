@@ -85,9 +85,10 @@ export const DECRETOS_MINEDUC_INICIAL: PlanEstudioNorm[] = [
     asignaturasBase: [
       { nombre: 'Lenguaje y Comunicación', horasSugeridas: 6 },
       { nombre: 'Matemática', horasSugeridas: 6 },
-      { nickname: 'Ciencias Naturales', nombre: 'Ciencias Naturales', horasSugeridas: 4 },
+      { nombre: 'Ciencias Naturales', horasSugeridas: 4 },
       { nombre: 'Historia, Geografía y Ciencias Sociales', horasSugeridas: 4 },
       { nombre: 'Idioma Extranjero: Inglés', horasSugeridas: 3 },
+      // ... rest of asignaturas
       { nombre: 'Artes Visuales', horasSugeridas: 2 },
       { nombre: 'Música', horasSugeridas: 2 },
       { nombre: 'Educación Física y Salud', horasSugeridas: 4 },
