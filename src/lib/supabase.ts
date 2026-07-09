@@ -142,7 +142,6 @@ const FUNCIONARIOS_MOCK_INICIAL: Funcionario[] = [
   { run: '18.901.234-5', nombre: 'Daniela Paz Contreras Sepúlveda', email: 'dcontreras@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Psicóloga' },
   { run: '10.876.543-2', nombre: 'Héctor Manuel Olivares Pinto', email: 'holivares@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
   { run: '17.654.321-0', nombre: 'Verónica Andrea Torres Castro', email: 'vtorres@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Auxiliar de Servicios' },
-  // Supervisores
   { run: '11.111.111-1', nombre: 'Supervisor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Supervisor UATP' },
   { run: '22.222.222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Supervisor UATP' },
 ];
@@ -209,7 +208,6 @@ const ALERTAS_MOCK_INICIAL: AlertaConciliacion[] = [
   }
 ];
 
-
 class DatabaseLocal {
   private getStorageItem<T>(key: string, defaultValue: T): T {
     if (typeof window === 'undefined') return defaultValue;
@@ -222,149 +220,62 @@ class DatabaseLocal {
     localStorage.setItem(`slep_db_${key}`, JSON.stringify(value));
   }
 
-  get establecimientos(): Establecimiento[] {
-    return this.getStorageItem('establecimientos', generarEstablecimientosMock());
-  }
+  get establecimientos(): Establecimiento[] { return this.getStorageItem('establecimientos', generarEstablecimientosMock()); }
+  set establecimientos(val: Establecimiento[]) { this.setStorageItem('establecimientos', val); }
 
-  set establecimientos(val: Establecimiento[]) {
-    this.setStorageItem('establecimientos', val);
-  }
+  get funcionarios(): Funcionario[] { return this.getStorageItem('funcionarios', FUNCIONARIOS_MOCK_INICIAL); }
+  set funcionarios(val: Funcionario[]) { this.setStorageItem('funcionarios', val); }
 
-  get funcionarios(): Funcionario[] {
-    return this.getStorageItem('funcionarios', FUNCIONARIOS_MOCK_INICIAL);
-  }
+  get contratos(): Contrato[] { return this.getStorageItem('contratos', CONTRATOS_MOCK_INICIAL); }
+  set contratos(val: Contrato[]) { this.setStorageItem('contratos', val); }
 
-  set funcionarios(val: Funcionario[]) {
-    this.setStorageItem('funcionarios', val);
-  }
+  get financiamientoContratos(): FinanciamientoContrato[] { return this.getStorageItem('financiamientos', FINANCIAMIENTOS_MOCK_INICIAL); }
+  set financiamientoContratos(val: FinanciamientoContrato[]) { this.setStorageItem('financiamientos', val); }
 
-  get contratos(): Contrato[] {
-    return this.getStorageItem('contratos', CONTRATOS_MOCK_INICIAL);
-  }
+  get asignacionesAula(): AsignacionAula[] { return this.getStorageItem('asignaciones', ASIGNACIONES_MOCK_INICIAL); }
+  set asignacionesAula(val: AsignacionAula[]) { this.setStorageItem('asignaciones', val); }
 
-  set contratos(val: Contrato[]) {
-    this.setStorageItem('contratos', val);
-  }
+  get alertas(): AlertaConciliacion[] { return this.getStorageItem('alertas', ALERTAS_MOCK_INICIAL); }
+  set alertas(val: AlertaConciliacion[]) { this.setStorageItem('alertas', val); }
 
-  get financiamientoContratos(): FinanciamientoContrato[] {
-    return this.getStorageItem('financiamientos', FINANCIAMIENTOS_MOCK_INICIAL);
-  }
+  get tutelas(): ProfesionalEscuelaAsignada[] { return this.getStorageItem('tutelas', TUTELAS_INICIAL); }
+  set tutelas(val: ProfesionalEscuelaAsignada[]) { this.setStorageItem('tutelas', val); }
 
-  set financiamientoContratos(val: FinanciamientoContrato[]) {
-    this.setStorageItem('financiamientos', val);
-  }
+  get cursosDinamicos(): CursoDinamico[] { return this.getStorageItem('cursos_dinamicos', [{ rbd: '10202', nombre: '3° Básico A', nivel: '1° a 4° Básico', regimen: 'JEC' }, { rbd: '10202', nombre: '4° Básico A', nivel: '1° a 4° Básico', regimen: 'JEC' }]); }
+  set cursosDinamicos(val: CursoDinamico[]) { this.setStorageItem('cursos_dinamicos', val); }
 
-  get asignacionesAula(): AsignacionAula[] {
-    return this.getStorageItem('asignaciones', ASIGNACIONES_MOCK_INICIAL);
-  }
+  get asignaturasDinamicas(): AsignaturaDinamica[] { return this.getStorageItem('asignaturas_dinamicas', []); }
+  set asignaturasDinamicas(val: AsignaturaDinamica[]) { this.setStorageItem('asignaturas_dinamicas', val); }
 
-  set asignacionesAula(val: AsignacionAula[]) {
-    this.setStorageItem('asignaciones', val);
-  }
+  get supervisores(): Supervisor[] { return this.getStorageItem('supervisores', SUPERVISORES_INICIAL); }
+  set supervisores(val: Supervisor[]) { this.setStorageItem('supervisores', val); }
 
-  get alertas(): AlertaConciliacion[] {
-    return this.getStorageItem('alertas', ALERTAS_MOCK_INICIAL);
-  }
+  get cargosPersonalizados(): CargoPersonalizado[] { return this.getStorageItem('cargos_personalizados', []); }
+  set cargosPersonalizados(val: CargoPersonalizado[]) { this.setStorageItem('cargos_personalizados', val); }
 
-  set alertas(val: AlertaConciliacion[]) {
-    this.setStorageItem('alertas', val);
-  }
+  get planesEstudio(): PlanEstudioNorm[] { return this.getStorageItem('planes_estudio_json', DECRETOS_MINEDUC_INICIAL); }
+  set planesEstudio(val: PlanEstudioNorm[]) { this.setStorageItem('planes_estudio_json', val); }
 
-  get tutelas(): ProfesionalEscuelaAsignada[] {
-    return this.getStorageItem('tutelas', TUTELAS_INICIAL);
-  }
+  get comunas(): string[] { return this.getStorageItem('comunas', ['Bulnes', 'Chillán Viejo', 'El Carmen', 'Pemuco', 'San Ignacio', 'Yungay', 'Quillón']); }
+  set comunas(val: string[]) { this.setStorageItem('comunas', val); }
 
-  set tutelas(val: ProfesionalEscuelaAsignada[]) {
-    this.setStorageItem('tutelas', val);
-  }
+  get libroRemuneraciones(): RegistroRemuneracion[] { return this.getStorageItem('libro_remuneraciones', []); }
+  set libroRemuneraciones(val: RegistroRemuneracion[]) { this.setStorageItem('libro_remuneraciones', val); }
 
-  get cursosDinamicos(): CursoDinamico[] {
-    return this.getStorageItem('cursos_dinamicos', [
-      { rbd: '10202', nombre: '3° Básico A', nivel: '1° a 4° Básico', regimen: 'JEC' },
-      { rbd: '10202', nombre: '4° Básico A', nivel: '1° a 4° Básico', regimen: 'JEC' },
-    ]);
-  }
-
-  set cursosDinamicos(val: CursoDinamico[]) {
-    this.setStorageItem('cursos_dinamicos', val);
-  }
-
-  get asignaturasDinamicas(): AsignaturaDinamica[] {
-    return this.getStorageItem('asignaturas_dinamicas', []);
-  }
-
-  set asignaturasDinamicas(val: AsignaturaDinamica[]) {
-    this.setStorageItem('asignaturas_dinamicas', val);
-  }
-
-  get supervisores(): Supervisor[] {
-    return this.getStorageItem('supervisores', SUPERVISORES_INICIAL);
-  }
-
-  set supervisores(val: Supervisor[]) {
-    this.setStorageItem('supervisores', val);
-  }
-
-  get cargosPersonalizados(): CargoPersonalizado[] {
-    return this.getStorageItem('cargos_personalizados', []);
-  }
-
-  set cargosPersonalizados(val: CargoPersonalizado[]) {
-    this.setStorageItem('cargos_personalizados', val);
-  }
-
-  get planesEstudio(): PlanEstudioNorm[] {
-    return this.getStorageItem('planes_estudio_json', DECRETOS_MINEDUC_INICIAL);
-  }
-
-  set planesEstudio(val: PlanEstudioNorm[]) {
-    this.setStorageItem('planes_estudio_json', val);
-  }
-
-  get comunas(): string[] {
-    return this.getStorageItem('comunas', ['Bulnes', 'Chillán Viejo', 'El Carmen', 'Pemuco', 'San Ignacio', 'Yungay', 'Quillón']);
-  }
-
-  set comunas(val: string[]) {
-    this.setStorageItem('comunas', val);
-  }
-
-  get libroRemuneraciones(): RegistroRemuneracion[] {
-    return this.getStorageItem('libro_remuneraciones', []);
-  }
-
-  set libroRemuneraciones(val: RegistroRemuneracion[]) {
-    this.setStorageItem('libro_remuneraciones', val);
-  }
-
-  get tareasReemplazo(): TareaReemplazo[] {
-    return this.getStorageItem('tareas_reemplazo', []);
-  }
-
-  set tareasReemplazo(val: TareaReemplazo[]) {
-    this.setStorageItem('tareas_reemplazo', val);
-  }
+  get tareasReemplazo(): TareaReemplazo[] { return this.getStorageItem('tareas_reemplazo', []); }
+  set tareasReemplazo(val: TareaReemplazo[]) { this.setStorageItem('tareas_reemplazo', val); }
 }
 
 export const dbLocal = new DatabaseLocal();
 
 export const api = {
-  getEstablecimientos: async (): Promise<Establecimiento[]> => {
-    return dbLocal.establecimientos;
-  },
-
-  getEstablecimientoByRbd: async (rbd: string): Promise<Establecimiento | undefined> => {
-    return dbLocal.establecimientos.find(e => e.rbd === rbd);
-  },
-
+  getEstablecimientos: async (): Promise<Establecimiento[]> => dbLocal.establecimientos,
+  getEstablecimientoByRbd: async (rbd: string): Promise<Establecimiento | undefined> => dbLocal.establecimientos.find(e => e.rbd === rbd),
+  
   upsertEstablecimiento: async (est: Establecimiento): Promise<void> => {
     const list = dbLocal.establecimientos;
     const idx = list.findIndex(e => e.rbd === est.rbd);
-    if (idx >= 0) {
-      list[idx] = est;
-    } else {
-      list.push(est);
-    }
+    idx >= 0 ? list[idx] = est : list.push(est);
     dbLocal.establecimientos = list;
   },
 
@@ -372,18 +283,14 @@ export const api = {
     dbLocal.establecimientos = dbLocal.establecimientos.filter(e => e.rbd !== rbd);
   },
 
-  getFuncionarios: async (): Promise<Funcionario[]> => {
-    return dbLocal.funcionarios;
-  },
-
+  getFuncionarios: async (): Promise<Funcionario[]> => dbLocal.funcionarios,
+  
   getContratos: async (rbd?: string): Promise<Contrato[]> => {
     const contratos = dbLocal.contratos;
     return rbd ? contratos.filter(c => c.rbd === rbd) : contratos;
   },
 
-  getFinanciamientosPorContrato: async (contratoId: string): Promise<FinanciamientoContrato[]> => {
-    return dbLocal.financiamientoContratos.filter(f => f.contrato_id === contratoId);
-  },
+  getFinanciamientosPorContrato: async (contratoId: string): Promise<FinanciamientoContrato[]> => dbLocal.financiamientoContratos.filter(f => f.contrato_id === contratoId),
 
   getAsignacionesPorEstablecimiento: async (rbd: string): Promise<AsignacionAula[]> => {
     const contratos = dbLocal.contratos.filter(c => c.rbd === rbd);
@@ -399,11 +306,7 @@ export const api = {
   upsertFuncionario: async (funcionario: Funcionario): Promise<void> => {
     const funcionarios = dbLocal.funcionarios;
     const index = funcionarios.findIndex(f => f.run === funcionario.run);
-    if (index >= 0) {
-      funcionarios[index] = { ...funcionarios[index], ...funcionario };
-    } else {
-      funcionarios.push(funcionario);
-    }
+    index >= 0 ? funcionarios[index] = { ...funcionarios[index], ...funcionario } : funcionarios.push(funcionario);
     dbLocal.funcionarios = funcionarios;
   },
 
@@ -411,29 +314,17 @@ export const api = {
     dbLocal.funcionarios = dbLocal.funcionarios.filter(f => f.run !== run);
   },
 
-  upsertContratoCompleto: async (
-    contrato: Contrato, 
-    financiamientos: FinanciamientoContrato[]
-  ): Promise<void> => {
+  upsertContratoCompleto: async (contrato: Contrato, financiamientos: FinanciamientoContrato[]): Promise<void> => {
     const contratos = dbLocal.contratos;
     const cIndex = contratos.findIndex(c => c.id === contrato.id);
-    if (cIndex >= 0) {
-      contratos[cIndex] = contrato;
-    } else {
-      contratos.push(contrato);
-    }
+    cIndex >= 0 ? contratos[cIndex] = contrato : contratos.push(contrato);
     dbLocal.contratos = contratos;
-
     let finList = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== contrato.id);
     finList.push(...financiamientos);
     dbLocal.financiamientoContratos = finList;
   },
 
-  updateContratoEstado: async (
-    contratoId: string, 
-    estado: EstadoContrato, 
-    vinculoTitularId: string | null = null
-  ): Promise<void> => {
+  updateContratoEstado: async (contratoId: string, estado: EstadoContrato, vinculoTitularId: string | null = null): Promise<void> => {
     const contratos = dbLocal.contratos;
     const idx = contratos.findIndex(c => c.id === contratoId);
     if (idx >= 0) {
@@ -452,11 +343,7 @@ export const api = {
   saveAsignacion: async (asignacion: AsignacionAula): Promise<void> => {
     const asignaciones = dbLocal.asignacionesAula;
     const idx = asignaciones.findIndex(a => a.id === asignacion.id);
-    if (idx >= 0) {
-      asignaciones[idx] = asignacion;
-    } else {
-      asignaciones.push(asignacion);
-    }
+    idx >= 0 ? asignaciones[idx] = asignacion : asignaciones.push(asignacion);
     dbLocal.asignacionesAula = asignaciones;
   },
 
@@ -485,17 +372,11 @@ export const api = {
     dbLocal.alertas = dbLocal.alertas.filter(a => a.rbd !== rbd || a.resuelta);
   },
 
-  // Tutelas/Asignaciones de Escuelas a Profesionales SLEP
   getTutelasPorProfesional: async (profesionalRun: string): Promise<string[]> => {
-    const list = dbLocal.tutelas;
-    return list
-      .filter(t => t.profesional_run === profesionalRun)
-      .map(t => t.establecimiento_rbd);
+    return dbLocal.tutelas.filter(t => t.profesional_run === profesionalRun).map(t => t.establecimiento_rbd);
   },
 
-  getTodasLasTutelas: async (): Promise<ProfesionalEscuelaAsignada[]> => {
-    return dbLocal.tutelas;
-  },
+  getTodasLasTutelas: async (): Promise<ProfesionalEscuelaAsignada[]> => dbLocal.tutelas,
 
   asignarEscuelaAProfesional: async (profesionalRun: string, rbd: string): Promise<void> => {
     const list = dbLocal.tutelas;
@@ -506,15 +387,10 @@ export const api = {
   },
 
   removerEscuelaDeProfesional: async (profesionalRun: string, rbd: string): Promise<void> => {
-    let list = dbLocal.tutelas;
-    list = list.filter(t => !(t.profesional_run === profesionalRun && t.establecimiento_rbd === rbd));
-    dbLocal.tutelas = list;
+    dbLocal.tutelas = dbLocal.tutelas.filter(t => !(t.profesional_run === profesionalRun && t.establecimiento_rbd === rbd));
   },
 
-  // Cursos Dinámicos por Escuela (Director)
-  getCursosDinamicos: async (rbd: string): Promise<CursoDinamico[]> => {
-    return dbLocal.cursosDinamicos.filter(c => c.rbd === rbd);
-  },
+  getCursosDinamicos: async (rbd: string): Promise<CursoDinamico[]> => dbLocal.cursosDinamicos.filter(c => c.rbd === rbd),
 
   crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
     const list = dbLocal.cursosDinamicos;
@@ -524,10 +400,8 @@ export const api = {
     }
   },
 
-  // Asignaturas Dinámicas por Escuela/Curso
-  getAsignaturasDinamicas: async (rbd: string, cursoNombre: string): Promise<AsignaturaDinamica[]> => {
-    return dbLocal.asignaturasDinamicas.filter(a => a.rbd === rbd && a.cursoNombre === cursoNombre);
-  },
+  getAsignaturasDinamicas: async (rbd: string, cursoNombre: string): Promise<AsignaturaDinamica[]> => 
+    dbLocal.asignaturasDinamicas.filter(a => a.rbd === rbd && a.cursoNombre === cursoNombre),
 
   crearAsignaturaDinamica: async (asignatura: AsignaturaDinamica): Promise<void> => {
     const list = dbLocal.asignaturasDinamicas;
@@ -537,29 +411,14 @@ export const api = {
     }
   },
 
-  // Supervisors (Profesionales SLEP) CRUD
-  getSupervisores: async (): Promise<Supervisor[]> => {
-    return dbLocal.supervisores;
-  },
+  getSupervisores: async (): Promise<Supervisor[]> => dbLocal.supervisores,
 
   upsertSupervisor: async (sup: Supervisor): Promise<void> => {
     const list = dbLocal.supervisores;
     const idx = list.findIndex(s => s.run === sup.run);
-    if (idx >= 0) {
-      list[idx] = sup;
-    } else {
-      list.push(sup);
-    }
+    idx >= 0 ? list[idx] = sup : list.push(sup);
     dbLocal.supervisores = list;
-
-    // Sync to master funcionarios as well
-    await api.upsertFuncionario({
-      run: sup.run,
-      nombre: sup.nombre,
-      email: sup.email,
-      estamento: 'Docente',
-      cargo: 'Supervisor UATP'
-    });
+    await api.upsertFuncionario({ run: sup.run, nombre: sup.nombre, email: sup.email, estamento: 'Docente', cargo: 'Supervisor UATP' });
   },
 
   deleteSupervisor: async (run: string): Promise<void> => {
@@ -568,35 +427,20 @@ export const api = {
     await api.deleteFuncionario(run);
   },
 
-  // Cargos Personalizados CRUD
-  getCargosPorEstablecimiento: async (rbd: string): Promise<CargoPersonalizado[]> => {
-    return dbLocal.cargosPersonalizados.filter(c => c.rbd === rbd);
-  },
+  getCargosPorEstablecimiento: async (rbd: string): Promise<CargoPersonalizado[]> => dbLocal.cargosPersonalizados.filter(c => c.rbd === rbd),
 
   crearCargoPersonalizado: async (cargo: CargoPersonalizado): Promise<void> => {
-    const list = dbLocal.cargosPersonalizados;
-    list.push(cargo);
-    dbLocal.cargosPersonalizados = list;
+    dbLocal.cargosPersonalizados = [...dbLocal.cargosPersonalizados, cargo];
   },
 
   removerCargoPersonalizado: async (id: string): Promise<void> => {
     dbLocal.cargosPersonalizados = dbLocal.cargosPersonalizados.filter(c => c.id !== id);
   },
 
-  // Planes de estudio JSON (Gobernanza del Sostenedor)
-  getPlanesEstudio: async (): Promise<PlanEstudioNorm[]> => {
-    return dbLocal.planesEstudio;
-  },
+  getPlanesEstudio: async (): Promise<PlanEstudioNorm[]> => dbLocal.planesEstudio,
+  guardarPlanesEstudio: async (planes: PlanEstudioNorm[]): Promise<void> => { dbLocal.planesEstudio = planes; },
 
-  guardarPlanesEstudio: async (planes: PlanEstudioNorm[]): Promise<void> => {
-    dbLocal.planesEstudio = planes;
-  },
-
-  // Comunas CRUD
-  getComunas: async (): Promise<string[]> => {
-    return dbLocal.comunas;
-  },
-
+  getComunas: async (): Promise<string[]> => dbLocal.comunas,
   addComuna: async (comuna: string): Promise<void> => {
     const list = [...dbLocal.comunas];
     if (!list.includes(comuna)) {
@@ -604,51 +448,20 @@ export const api = {
       dbLocal.comunas = list;
     }
   },
-
   deleteComuna: async (comuna: string): Promise<void> => {
-    let list = [...dbLocal.comunas];
-    list = list.filter(c => c !== comuna);
-    dbLocal.comunas = list;
+    dbLocal.comunas = dbLocal.comunas.filter(c => c !== comuna);
   },
 
-  getRemuneraciones: async (): Promise<RegistroRemuneracion[]> => {
-    return dbLocal.libroRemuneraciones;
-  },
+  getRemuneraciones: async (): Promise<RegistroRemuneracion[]> => dbLocal.libroRemuneraciones,
+  cargarRemuneraciones: async (registros: RegistroRemuneracion[]): Promise<void> => { dbLocal.libroRemuneraciones = registros; },
 
-  cargarRemuneraciones: async (registros: RegistroRemuneracion[]): Promise<void> => {
-    dbLocal.libroRemuneraciones = registros;
-  },
-
-  getTareasReemplazo: async (): Promise<TareaReemplazo[]> => {
-    return dbLocal.tareasReemplazo;
-  },
-
+  getTareasReemplazo: async (): Promise<TareaReemplazo[]> => dbLocal.tareasReemplazo,
   crearTareaReemplazo: async (tarea: TareaReemplazo): Promise<void> => {
-    const list = [...dbLocal.tareasReemplazo, tarea];
-    dbLocal.tareasReemplazo = list;
+    dbLocal.tareasReemplazo = [...dbLocal.tareasReemplazo, tarea];
   },
-
   resolverTareaReemplazo: async (id: string, reemplazoRun: string): Promise<void> => {
-    const list = dbLocal.tareasReemplazo.map(t => {
-      if (t.id === id) {
-        return { ...t, estado: 'Asignado' as const, reemplazo_run: reemplazoRun };
-      }
-      return t;
-    });
-    dbLocal.tareasReemplazo = list;
+    dbLocal.tareasReemplazo = dbLocal.tareasReemplazo.map(t => t.id === id ? { ...t, estado: 'Asignado' as const, reemplazo_run: reemplazoRun } : t);
   }
-};
-export const dbLocal = new DatabaseLocal();
-
-export const api = { 
-// ... (Todo tu código anterior) ...
-
-// Instancia de la base de datos
-export const dbLocal = new DatabaseLocal();
-
-// Exportación principal del objeto API
-export const api = {
-  // ... (tus funciones declaradas anteriormente) ...
 };
 
 // Exportación de compatibilidad para solucionar el error del repositorio
