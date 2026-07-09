@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation'; // ✅ Importación correcta
+import { useRouter } from 'next/navigation'; // <-- Agregado 'next/'
 import { api } from '@/lib/supabase';
 import { Establecimiento, PlanEstudioNorm, CursoDinamico, AsignacionAula } from '@/lib/types';
 
