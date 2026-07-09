@@ -424,3 +424,5 @@ export function conciliarFuncionario(
     mensaje
   };
 }
+// Agregar al final de src/lib/rulesEngine.ts para compatibilidad
+export const calcularCargaDocente = validarCargaDocente;
