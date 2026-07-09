@@ -1,5 +1,3 @@
-// src/lib/rulesEngine.ts
-
 import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado, RegistroRemuneracion, Funcionario } from './types';
 
 export interface PlanEstudioNivel {
@@ -244,30 +242,32 @@ export const PLANES_MINEDUC: PlanEstudioNivel[] = getPlanesMineducConvertidos();
 
 export interface ResultadoProporcionHoraria {
   horasContrato: number;
-  horasLectivasMaximas: number;
-  horasNoLectivasMinimas: number;
-  horasLectivasAsignadas: number;
-  horasDisponibles: number;
+  horasLectivasMaximas: number; // Maximum teaching hours in classroom allowed
+  horasNoLectivasMinimas: number; // Minimum non-classroom hours (planning/grading)
+  horasLectivasAsignadas: number; // What they are actually teaching
+  horasDisponibles: number; // Free hours remaining
   leyEspecialAplicada: boolean;
   cumpleLey20903: boolean;
-  proporcionLectiva: number;
-  proporcionNoLectiva: number;
+  proporcionLectiva: number; // percentage (e.g. 60 or 65)
+  proporcionNoLectiva: number; // percentage (e.g. 40 or 35)
 }
 
 /**
- * Calcula la distribución horaria legal (Ley 20.903)
+ * Calculates the legal teaching/non-teaching hour distribution based on Ley 20.903
  */
 export function calcularLey20903(
   horasContrato: number,
   ivmEstablecimiento: number,
   esEnseBajoIvmEspecial: boolean // 1° a 4° Básico
 ): ResultadoProporcionHoraria {
-  // Proporción especial (60% lectivo / 40% no lectivo) en colegios con IVM > 80% en cursos de 1° a 4° básico
+  // Check if school has IVM > 80% and we are in 1° to 4° Básico -> Proporcion is 60% classroom (lectiva), 40% non-classroom (no lectiva)
+  // Otherwise it is 65% classroom (lectiva), 35% non-classroom (no lectiva)
   const esEspecial = ivmEstablecimiento > 80 && esEnseBajoIvmEspecial;
   
   const proporcionLectiva = esEspecial ? 60 : 65;
   const proporcionNoLectiva = esEspecial ? 40 : 35;
 
+  // Mathematically compute exact hours (with float support)
   const horasLectivasMaximas = parseFloat(((horasContrato * proporcionLectiva) / 100).toFixed(2));
   const horasNoLectivasMinimas = parseFloat(((horasContrato * proporcionNoLectiva) / 100).toFixed(2));
 
@@ -275,7 +275,7 @@ export function calcularLey20903(
     horasContrato,
     horasLectivasMaximas,
     horasNoLectivasMinimas,
-    horasLectivasAsignadas: 0,
+    horasLectivasAsignadas: 0, // Filled subsequently
     horasDisponibles: horasContrato,
     leyEspecialAplicada: esEspecial,
     cumpleLey20903: true,
@@ -285,7 +285,7 @@ export function calcularLey20903(
 }
 
 /**
- * Valida la carga docente de un contrato específico frente a las restricciones de la Ley 20.903
+ * Validates a contract's actual load against Ley 20.903 rules
  */
 export function validarCargaDocente(
   contrato: Contrato,
@@ -293,14 +293,20 @@ export function validarCargaDocente(
   asignaciones: AsignacionAula[],
   cargos: CargoPersonalizado[] = []
 ): ResultadoProporcionHoraria {
+  // If replacement, it inherits the same, but let's check its own capacity.
+  // If Licencia Médica, the contract's teaching workload is logically frozen (does not count towards this teacher).
+  
+  // Let's check if the assignments contain any 1° a 4° Básico courses
   const tieneCursosIvmEspecial = asignaciones.some(a => 
     a.curso.includes('1°') || a.curso.includes('2°') || a.curso.includes('3°') || a.curso.includes('4°')
   );
 
+  // Calculate non-pedagogical hours from custom cargos assigned to this teacher
   const horasCargo = cargos
     .filter(c => c.funcionario_run === contrato.funcionario_run)
     .reduce((sum, c) => sum + c.horas, 0);
 
+  // The contract hours that can be split under Ley 20.903 are the total minus the non-pedagogical cargo hours
   const horasEfectivasContrato = Math.max(0, contrato.horas_totales - horasCargo);
 
   const calculo = calcularLey20903(
@@ -309,15 +315,19 @@ export function validarCargaDocente(
     tieneCursosIvmEspecial
   );
 
+  // Set the total contract hours back on the calculation
   calculo.horasContrato = contrato.horas_totales;
 
+  // If Licence, active teaching load is 0
   const horasLectivasAsignadas = contrato.estado === 'Licencia Médica' 
     ? 0 
     : asignaciones.reduce((sum, a) => sum + a.horas, 0);
 
   calculo.horasLectivasAsignadas = horasLectivasAsignadas;
+  // Available hours to assign in classrooms
   calculo.horasDisponibles = parseFloat((calculo.horasLectivasMaximas - horasLectivasAsignadas).toFixed(2));
   
+  // Validation check: cannot exceed max teaching hours and total assigned cannot exceed contract hours
   const cumpleProporcion = calculo.horasLectivasAsignadas <= calculo.horasLectivasMaximas + 0.01;
   const cumpleTotalContrato = (calculo.horasLectivasAsignadas + horasCargo) <= contrato.horas_totales + 0.01;
   calculo.cumpleLey20903 = cumpleProporcion && cumpleTotalContrato;
@@ -330,11 +340,11 @@ export interface ReemplazoAuditoria {
   reemplazoContrato: Contrato;
   horasEspejo: number;
   horasAsignadas: number;
-  costoDuplicadoEstimado: number;
+  costoDuplicadoEstimado: number; // Simulated extra financial cost
 }
 
 /**
- * Audita costos y espejos de un docente en estado de Reemplazo
+ * Calculates replacement costs and mirrors
  */
 export function auditarReemplazo(
   contratos: Contrato[],
@@ -347,7 +357,8 @@ export function auditarReemplazo(
   const titular = contratos.find(c => c.id === contratoReemplazo.vinculo_titular_id);
   if (!titular) return null;
 
-  const costoHora = 18500; // Simulación promedio de costo por hora CLP
+  // Average cost per CLP per hour could be simulated (e.g. 18500 per hour)
+  const costoHora = 18500;
   const horasEspejo = titular.horas_totales;
   
   return {
@@ -355,19 +366,17 @@ export function auditarReemplazo(
     reemplazoContrato: contratoReemplazo,
     horasEspejo,
     horasAsignadas: contratoReemplazo.horas_totales,
-    costoDuplicadoEstimado: contratoReemplazo.horas_totales * costoHora * 4
+    costoDuplicadoEstimado: contratoReemplazo.horas_totales * costoHora * 4 // Monthly cost (4 weeks approx)
   };
 }
 
 export function calcularHaberBaseEUS(grado: number): number {
   if (grado < 1 || grado > 24) return 0;
-  const baseGrado24 = 380000;
+  const baseGrado24 = 380000; // base minimum salary for grade 24
+  // Grado 1 is highest, Grado 24 is lowest. Exponential scale:
   return Math.round(baseGrado24 * Math.pow(1.075, 24 - grado));
 }
 
-/**
- * Conciliación financiera y horaria de un funcionario
- */
 export function conciliarFuncionario(
   runNormalizado: string,
   contratos: Contrato[],
@@ -391,49 +400,50 @@ export function conciliarFuncionario(
 
   const isLicencia = contrs.some(c => c.estado === 'Licencia Médica');
 
-  let discrepancy = false;
+  let discrepancia = false;
   let mensaje = 'Conciliado correctamente.';
 
   if (contrs.length > 0) {
     if (totalContratadas !== totalPagadas) {
-      discrepancy = true;
+      discrepancia = true;
       mensaje = `Descalce financiero: Contratadas ${totalContratadas} hrs vs Pagadas ${totalPagadas} hrs.`;
     } else if (!isLicencia && totalAula > totalContratadas) {
-      discrepancy = true;
+      discrepancia = true;
       mensaje = `Sobrecarga de Aula: Registradas ${totalAula} hrs en aula vs Contratadas ${totalContratadas} hrs.`;
     } else {
-      // 1. Cruce Ley 20.903 Art 5
+      // 1. Ley 20.903 Art 5 Cross-check
+      // If any of the pay records for this user has aplica_ley_20903_art5 === 'Sí'
       const aplicaArt5 = remuns.some(r => r.aplica_ley_20903_art5 === 'Sí');
       if (aplicaArt5) {
         const totalComplementaria = remuns.reduce((sum, r) => sum + (r.planilla_complementaria_ley_20903 || 0), 0);
         if (totalComplementaria === 0) {
-          discrepancy = true;
+          discrepancia = true;
           mensaje = `Infracción Art. 5 Ley 20903: Indica que aplica pero Planilla Complementaria es $0.`;
         }
       }
 
-      // 2. Control de Asignaciones Directivas y Jefaturas UTP
-      if (!discrepancy) {
+      // 2. Leadership Allowance Checks
+      if (!discrepancia) {
         const esDirector = contrs.some(c => c.funcion_principal.toLowerCase().includes('director'));
         const esUTP = contrs.some(c => c.funcion_principal.toLowerCase().includes('utp') || c.funcion_principal.toLowerCase().includes('pedagógica') || c.funcion_principal.toLowerCase().includes('pedagógico'));
         
         if (esDirector) {
           const totalAsigDirector = remuns.reduce((sum, r) => sum + (r.asignacion_res_director || 0), 0);
           if (totalAsigDirector === 0) {
-            discrepancy = true;
+            discrepancia = true;
             mensaje = `Falta asignación directiva: Director/a registra $0 en Asig. Res. Director.`;
           }
         } else if (esUTP) {
           const totalAsigUTP = remuns.reduce((sum, r) => sum + (r.asignacion_resp_tec_ped || 0), 0);
           if (totalAsigUTP === 0) {
-            discrepancy = true;
+            discrepancia = true;
             mensaje = `Falta asignación técnico-pedagógica: Jefe UTP registra $0 en asignación Resp. Téc-Ped.`;
           }
         }
       }
     }
   } else if (totalPagadas > 0) {
-    discrepancy = true;
+    discrepancia = true;
     mensaje = `Pago sin contrato: Registrado pago de ${totalPagadas} hrs pero no tiene contrato activo en RR.HH.`;
   }
 
@@ -441,13 +451,13 @@ export function conciliarFuncionario(
     contratadas: totalContratadas,
     aula: totalAula,
     pagadas: totalPagadas,
-    discrepancia: discrepancy,
+    discrepancia,
     mensaje
   };
 }
 
 /**
- * Calcula el desglose final horaria para reportería (contrato vs aula vs no lectivas)
+ * Calculates teacher workload reconciliation (horas_no_destinadas = contrato - (aula + proporcion_no_lectiva))
  */
 export function calcularCargaDocente(
   funcionario: Funcionario,
@@ -455,6 +465,7 @@ export function calcularCargaDocente(
   establecimientos: Establecimiento[],
   asignaciones: AsignacionAula[]
 ) {
+  // Find all contracts for this teacher
   const teacherConts = contratos.filter(c => c.funcionario_run === funcionario.run);
   if (teacherConts.length === 0) {
     return {
@@ -472,13 +483,16 @@ export function calcularCargaDocente(
   teacherConts.forEach(c => {
     totalContrato += c.horas_totales;
 
+    // Find establishment to get IVM
     const est = establecimientos.find(e => e.rbd === c.rbd);
     const ivm = est ? est.ivm : 80;
 
+    // Find assignments for this contract
     const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
     const horasAula = teacherAsigs.reduce((sum, a) => sum + a.horas, 0);
     totalAula += horasAula;
 
+    // Determine non-pedagogical proportion based on Ley 20903 rules
     const tieneCursosIvmEspecial = teacherAsigs.some(a => 
       a.curso.includes('1°') || a.curso.includes('2°') || a.curso.includes('3°') || a.curso.includes('4°')
     );

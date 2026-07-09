@@ -1,12 +1,8 @@
-// src/lib/csvParser.ts
-
 // @ts-ignore
 import Papa from 'papaparse';
 import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion, CalidadJuridica, normalizarCargoDocente } from './types';
 
-/**
- * Normaliza un RUN chileno al formato estandarizado de la aplicación (12.345.678-K)
- */
+// Normalization function for RUN
 export function normalizarRun(runRaw: any): string {
   if (runRaw === undefined || runRaw === null) return '';
   const strVal = String(runRaw).trim();
@@ -24,9 +20,6 @@ export function normalizarRun(runRaw: any): string {
   return `${fmtCuerpo}-${dv}`;
 }
 
-/**
- * Procesa horas con coma decimal o guiones y las convierte a número flotante válido
- */
 export function parseDecimalHours(value: string | number | undefined | null): number {
   if (value === undefined || value === null) return 0;
   if (typeof value === 'number') return isNaN(value) ? 0 : value;
@@ -42,8 +35,8 @@ export interface CsvRow {
   RUN: string;
   Nombre: string;
   RBD: string;
-  CalidadJuridica: string;
-  Funcion: string;
+  CalidadJuridica: string; // Titular, Contrata
+  Funcion: string; // Docente Aula, Directivo, etc.
   HorasTotales: string;
   SubvencionRegular?: string;
   SEP?: string;
@@ -51,7 +44,7 @@ export interface CsvRow {
   Reforzamiento?: string;
   ProRetencion?: string;
   Otro?: string;
-  Estamento?: string;
+  Estamento?: string; // Optional stamento: Docente or Asistente
   [key: string]: any;
 }
 
@@ -62,9 +55,6 @@ export interface ParseResult {
   alertas: AlertaConciliacion[];
 }
 
-/**
- * Parsea y audita las nóminas de personal del SIGE
- */
 export function parsearNominaCsv(
   csvContent: string, 
   rbdContext: string,
@@ -73,13 +63,14 @@ export function parsearNominaCsv(
 ): ParseResult {
   let rows: CsvRow[] = [];
 
+  // Check if JSON
   const trimmed = csvContent.trim();
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
       const parsedJson = JSON.parse(trimmed);
       rows = Array.isArray(parsedJson) ? parsedJson : [parsedJson];
     } catch (e) {
-      // Fallback
+      // Fallback to csv parse if JSON fails
     }
   }
 
@@ -112,9 +103,10 @@ export function parsearNominaCsv(
 
     const run = normalizarRun(runRaw);
     
-    // Rutina de saneamiento de codificación corrupta (acentos y letra Ñ rotas)
+    // Clean corrupted encoding characters if any slipped through (e.g.  -> proper letters)
     const limpiarCaracteresCorruptos = (str: string): string => {
       if (!str) return '';
+      // Direct replacement for common chilean names/surnames/cargos that get corrupted
       let clean = str
         .replace(/PREZ/gi, 'PÉREZ')
         .replace(/GONZLEZ/gi, 'GONZÁLEZ')
@@ -129,6 +121,8 @@ export function parsearNominaCsv(
         .replace(/ASISTENTE\/TCNICO PRVULOS/gi, 'ASISTENTE/TÉCNICO PÁRVULOS')
         .replace(/ASISTENTE\/TECNICO PARVULOS/gi, 'ASISTENTE/TÉCNICO PÁRVULOS');
 
+      // If we find raw replacement characters, try contextual fixes:
+      // If it looks like TCNICO -> TÉCNICO, PRVULOS -> PÁRVULOS, JOS -> JOSÉ, PREZ -> PÉREZ
       clean = clean
         .replace(/ASISTENTE\/T\uFFFDCnico P\uFFFDRvulos/gi, 'ASISTENTE/TÉCNICO PÁRVULOS')
         .replace(/ASISTENTE\/T\uFFFDCnico P\uFFFDRvulo/gi, 'ASISTENTE/TÉCNICO PÁRVULA')
@@ -141,7 +135,7 @@ export function parsearNominaCsv(
         .replace(/GONZ\uFFFDLez/gi, 'GONZÁLEZ')
         .replace(/G\uFFFDMez/gi, 'GÓMEZ')
         .replace(/MU\uFFFDOz/gi, 'MUÑOZ')
-        .replace(/\uFFFD/g, 'Ñ');
+        .replace(/\uFFFD/g, 'Ñ'); // fallback general replacement
       return clean;
     };
 
@@ -162,6 +156,7 @@ export function parsearNominaCsv(
 
     const rbd = String(row.RBD || row.rbd || rbdContext).trim();
     
+    // Quality mapping logic: map to expanded CalidadJuridica
     const rawCal = String(row.CalidadJuridica || row.calidad_juridica || row.CALIDAD_JURIDICA || 'A contrata').trim();
     let calidad_juridica: CalidadJuridica = 'A contrata';
     if (rawCal.toLowerCase().includes('titular')) {
@@ -248,11 +243,12 @@ export function parsearNominaCsv(
       }
     }
 
+    // Sum subvenciones using float (parseFloat representation)
     let regular = parseDecimalHours(row.SubvencionRegular || row.subvencion_regular || row.Regular || row.regular);
     const sep = parseDecimalHours(row.SEP || row.sep);
     const pie = parseDecimalHours(row.PIE || row.pie);
     const reforzamiento = parseDecimalHours(row.Reforzamiento || row.reforzamiento);
-    const proRetencion = parseDecimalHours(row.ProRetencion || row.pro_retencion);
+    const proRetencion = parseDecimalHours(row.ProRetencion || row.pro_retencion || row.ProRetencion || row.pro_retencion);
     const otro = parseDecimalHours(row.Otro || row.otro);
 
     let sumaSubvenciones = regular + sep + pie + reforzamiento + proRetencion + otro;
@@ -261,8 +257,10 @@ export function parsearNominaCsv(
       sumaSubvenciones = horas_totales;
     }
 
+    // Create unique ID for contract
     const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
 
+    // Discard values map to null logic
     const cleanDiscardValue = (val: any): string | undefined => {
       if (val === undefined || val === null) return undefined;
       const clean = String(val).trim();
@@ -271,6 +269,7 @@ export function parsearNominaCsv(
       return clean;
     };
 
+    // Add unique Funcionario with estamento
     const titulo = cleanDiscardValue(
       row.Titulo || 
       row.titulo || 
@@ -284,7 +283,7 @@ export function parsearNominaCsv(
     );
 
     const genero = cleanDiscardValue(row.ASISTENTE_GENERO || row.asistente_genero || row.Genero || row.genero);
-    const fecha_nacimiento = cleanDiscardValue(row.FECHA_NACIMIENTO || row.fecha_nacimiento || row.FechaNacimiento || row.fecha_nac_nac);
+    const fecha_nacimiento = cleanDiscardValue(row.FECHA_NACIMIENTO || row.fecha_nacimiento || row.FechaNacimiento || row.fecha_nac);
 
     if (!funcionarios.some(f => f.run === run)) {
       funcionarios.push({ 
@@ -298,6 +297,7 @@ export function parsearNominaCsv(
       });
     }
 
+    // Add Contrato
     const nuevoContrato: Contrato = {
       id: contrato_id,
       funcionario_run: run,
@@ -316,6 +316,7 @@ export function parsearNominaCsv(
     };
     contratos.push(nuevoContrato);
 
+    // Add Financiamientos
     const agregarFondo = (origen: OrigenFondo, hrs: number) => {
       if (hrs > 0) {
         financiamientos.push({
@@ -334,6 +335,7 @@ export function parsearNominaCsv(
     agregarFondo('Pro-retención', proRetencion);
     agregarFondo('Otro', otro);
 
+    // Parse and cleanup SIGE-specific columns
     const cleanSigeNumber = (val: any): number => {
       if (val === undefined || val === null || String(val).trim() === '--' || String(val).trim() === '-') return 0;
       return parseDecimalHours(val);
@@ -348,7 +350,12 @@ export function parsearNominaCsv(
     const sector1 = cleanSigeString(row.SECTOR_FUNCION_1 || row.sector_funcion_1);
     const subSector1 = cleanSigeString(row.SUB_SECTOR_FUNCION_1 || row.sub_sector_funcion_1);
 
-    // 1. Alerta de Descalce Horario
+    // Dynamic classroom load assignment auto-precarga
+    if (horasAula > 0 && (sector1 || subSector1)) {
+      // Direct push to local in-memory DB or mocked allocations lists returned to page.tsx
+    }
+
+    // 1. Alerta de Descalce Horario (Suma de subvenciones no coincide con horas del contrato)
     if (Math.abs(sumaSubvenciones - horas_totales) > 0.01) {
       alertas.push({
         id: `al-descalce-${contrato_id}`,
@@ -363,12 +370,13 @@ export function parsearNominaCsv(
       });
     }
 
-    // 2. Alerta Normativa Proporción Ley 20.903
+    // 2. Control de Proporción Ley 20.903 (Semáforo Normativo)
     if (estamento === 'Docente' && horas_totales > 0 && horasAula > 0) {
       const pctLectivo = (horasAula / horas_totales) * 100;
-      const maxStandardPct = 65;
-      const maxSpecialPct = 60;
+      const maxStandardPct = 65; // Standard 65% classroom hours
+      const maxSpecialPct = 60;  // Special 60% classroom hours
       
+      // We can warn if it exceeds 65.01%. If it exceeds 65% it is an alert.
       if (pctLectivo > maxStandardPct + 0.01) {
         alertas.push({
           id: `al-ley20903-${contrato_id}`,
@@ -396,7 +404,7 @@ export function parsearNominaCsv(
       }
     }
 
-    // 3. Auditoría contra Control Previo
+    // 3. Control Previo Discrepancies
     if (controlPrevioJson) {
       const match = controlPrevioJson.find(c => normalizarRun(c.run) === run);
       if (match) {
@@ -433,9 +441,6 @@ export function parsearNominaCsv(
   return { funcionarios, contratos, financiamientos, alertas };
 }
 
-/**
- * Parsea el CSV/JSON del Libro de Remuneraciones mensual
- */
 export function parsearRemuneracionesCsv(csvContent: string): RegistroRemuneracion[] {
   let rows: any[] = [];
   const trimmed = csvContent.trim();
@@ -470,6 +475,7 @@ export function parsearRemuneracionesCsv(csvContent: string): RegistroRemuneraci
       ? 'P01_Administrativo' 
       : 'P02_Educacion';
 
+    // Parse Real-world payroll columns
     const dias_trabajados = row.DiasTrabajados || row.dias_trabajados || row.dias_trab || row.DiasTrab ? parseInt(row.DiasTrabajados || row.dias_trabajados || row.dias_trab || row.DiasTrab, 10) : undefined;
     const dias_licencia_medica = row.DiasLicenciaMedica || row.dias_licencia_medica || row.dias_lic_medica || row['Dias Lic. Médica'] || row.dias_lic ? parseInt(row.DiasLicenciaMedica || row.dias_licencia_medica || row.dias_lic_medica || row['Dias Lic. Médica'] || row.dias_lic, 10) : undefined;
     const inasistencias = row.Inasistencias || row.inasistencias || row.Inasist ? parseInt(row.Inasistencias || row.inasistencias || row.Inasist, 10) : undefined;

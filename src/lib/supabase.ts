@@ -1,5 +1,3 @@
-// src/lib/supabase.ts
-
 import { createClient } from '@supabase/supabase-js';
 import { 
   Establecimiento, 
@@ -88,7 +86,6 @@ export const DECRETOS_MINEDUC_INICIAL: PlanEstudioNorm[] = [
       { nombre: 'Ciencias Naturales', horasSugeridas: 4 },
       { nombre: 'Historia, Geografía y Ciencias Sociales', horasSugeridas: 4 },
       { nombre: 'Idioma Extranjero: Inglés', horasSugeridas: 3 },
-      // ... rest of asignaturas
       { nombre: 'Artes Visuales', horasSugeridas: 2 },
       { nombre: 'Música', horasSugeridas: 2 },
       { nombre: 'Educación Física y Salud', horasSugeridas: 4 },
@@ -147,6 +144,7 @@ const FUNCIONARIOS_MOCK_INICIAL: Funcionario[] = [
   { run: '18.901.234-5', nombre: 'Daniela Paz Contreras Sepúlveda', email: 'dcontreras@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Psicóloga' },
   { run: '10.876.543-2', nombre: 'Héctor Manuel Olivares Pinto', email: 'holivares@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
   { run: '17.654.321-0', nombre: 'Verónica Andrea Torres Castro', email: 'vtorres@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Auxiliar de Servicios' },
+  // Asesores
   { run: '11.111.111-1', nombre: 'Asesor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Asesor UATP' },
   { run: '22.222.222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Asesor UATP' },
 ];
@@ -213,24 +211,16 @@ const ALERTAS_MOCK_INICIAL: AlertaConciliacion[] = [
   }
 ];
 
-class DatabaseLocal {
-  // Capa de caché interna para mitigar cuellos de botella síncronos de localStorage
-  private _cache: Record<string, any> = {};
 
+class DatabaseLocal {
   private getStorageItem<T>(key: string, defaultValue: T): T {
     if (typeof window === 'undefined') return defaultValue;
-    if (this._cache[key] !== undefined) {
-      return this._cache[key];
-    }
     const item = localStorage.getItem(`slep_db_${key}`);
-    const parsed = item ? JSON.parse(item) : defaultValue;
-    this._cache[key] = parsed;
-    return parsed;
+    return item ? JSON.parse(item) : defaultValue;
   }
 
   private setStorageItem<T>(key: string, value: T): void {
     if (typeof window === 'undefined') return;
-    this._cache[key] = value; // Sincroniza la caché de forma inmediata
     localStorage.setItem(`slep_db_${key}`, JSON.stringify(value));
     localStorage.setItem('slep_db__timestamp', Date.now().toString());
     this.scheduleCloudSync();
@@ -610,6 +600,7 @@ export const api = {
         console.warn("⚠️ Error en Supabase, eliminando asignaciones por curso:", error);
       }
     }
+    // Fallback/Local sync
     const conts = dbLocal.contratos.filter(c => c.rbd === rbd);
     const contIds = conts.map(c => c.id);
     dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => !(a.curso === cursoNombre && contIds.includes(a.contrato_id)));

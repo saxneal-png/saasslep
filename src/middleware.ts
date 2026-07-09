@@ -1,13 +1,11 @@
-// src/proxy.ts
-
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const role = request.cookies.get('slep_sim_role')?.value;
   const path = request.nextUrl.pathname;
 
-  // Proteger carpetas especializadas bajo /sostenedor (recursos humanos y finanzas)
+  // Protect specialized subfolders under /sostenedor
   if (path.startsWith('/sostenedor/rrhh') || path.startsWith('/sostenedor/finanzas')) {
     if (role !== 'sostenedor_maestro') {
       if (role === 'profesional_slep') {
