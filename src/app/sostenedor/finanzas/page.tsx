@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'navigation'; // Next.js standard navigation wrapper
+import { useRouter } from 'next/navigation'; // ✅ Importación correcta
 import { api } from '@/lib/supabase';
 import { Establecimiento, PlanEstudioNorm, CursoDinamico, AsignacionAula } from '@/lib/types';
 
