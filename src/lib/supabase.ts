@@ -641,8 +641,15 @@ export const api = {
 export const dbLocal = new DatabaseLocal();
 
 export const api = { 
-  // ... todo tu código actual ...
+// ... (Todo tu código anterior) ...
+
+// Instancia de la base de datos
+export const dbLocal = new DatabaseLocal();
+
+// Exportación principal del objeto API
+export const api = {
+  // ... (tus funciones declaradas anteriormente) ...
 };
 
-// AGREGA ESTA LÍNEA PARA SOLUCIONAR EL ERROR:
+// Exportación de compatibilidad para solucionar el error del repositorio
 export const supabase = api;
