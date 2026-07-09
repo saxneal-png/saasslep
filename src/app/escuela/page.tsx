@@ -141,7 +141,6 @@ export default function DirectorDashboard() {
     const nuevaTarea: TareaReemplazo = {
       id: `task-${Date.now()}`,
       rbd,
-      funcionario_run_titular: cont.funcionario_run, // fallback legacy en base de datos
       funcionario_titular_run: cont.funcionario_run,
       funcionario_titular_nombre: nombreTitular,
       horas_a_cubrir: cont.horas_totales,
