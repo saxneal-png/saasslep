@@ -16,6 +16,13 @@ import {
 } from '@/lib/types';
 import { validarCargaDocente } from '@/lib/rulesEngine';
 
+// Reinsertar el formulario de creación de docentes dentro de 'dotacion'
+const handleGuardarDocente = async (docente: Funcionario) => {
+  await api.upsertFuncionario(docente);
+  // Refrescar lista local
+  setFuncionarios([...funcionarios.filter(f => f.run !== docente.run), docente]);
+};
+
 export default function DirectorDashboard() {
   const router = useRouter();
   const [rbd, setRbd] = useState<string>('');
