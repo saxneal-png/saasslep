@@ -1,3 +1,5 @@
+// src/lib/types.ts
+
 export interface Establecimiento {
   rbd: string; // Unique primary key
   nombre: string;
@@ -210,7 +212,6 @@ export function normalizarCargoDocente(rawCargo: string): string {
     return "ENCARGADO/A DE CONVIVENCIA";
   }
   
-  // Return the original clean uppercase version if it doesn't match, or return rawCargo
   return rawCargo;
 }
 
