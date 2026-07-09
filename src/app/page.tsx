@@ -1,4 +1,3 @@
-// src/app/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,7 +9,7 @@ import Image from 'next/image';
 export default function Home() {
   const router = useRouter();
   
-  // Estados de simulación de inicio de sesión
+  // Login Simulation states
   const [selectedRole, setSelectedRole] = useState<'sostenedor_maestro' | 'profesional_slep' | 'director_escuela'>('sostenedor_maestro');
   const [profesionalRun, setProfesionalRun] = useState('11.111.111-1');
   const [directorRbd, setDirectorRbd] = useState('10202');
@@ -29,7 +28,7 @@ export default function Home() {
   }, []);
 
   const handleLogin = () => {
-    // Almacena los parámetros de sesión simulada en cookies y almacenamiento local
+    // Save simulated session parameters to sessionStorage/localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem('slep_sim_role', selectedRole);
       document.cookie = `slep_sim_role=${selectedRole}; path=/`;
@@ -47,7 +46,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
-      {/* Encabezado Institucional */}
+      {/* Top Header Branding */}
       <header className="bg-slep-blue text-white shadow-md py-6 px-8 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-slep-gold opacity-10 rounded-full translate-x-20 -translate-y-20 pointer-events-none"></div>
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
@@ -64,7 +63,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Contenedor Principal */}
+      {/* Main Container */}
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-12 max-w-7xl mx-auto w-full">
         
         <div className="text-center max-w-2xl mb-10">
@@ -79,7 +78,7 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Caja de Autenticación Simulada */}
+        {/* Roles Selector & Simulated Authentication Box */}
         <div className="bg-white rounded-2xl shadow-xl border border-slate-200/80 p-8 w-full max-w-lg relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1.5 bg-slep-blue"></div>
           
@@ -88,7 +87,7 @@ export default function Home() {
           </h3>
 
           <div className="space-y-5">
-            {/* Opciones de Selección de Rol */}
+            {/* Role Radio Choices */}
             <div className="space-y-2">
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Selecciona tu Perfil de Acceso</label>
               
@@ -123,7 +122,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Parámetros adicionales según el rol seleccionado */}
+            {/* Simulated login parameters based on selected role */}
             {selectedRole === 'profesional_slep' && (
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
                 <label className="block text-xs font-bold text-slate-500">Seleccionar RUN de Asesor Técnico</label>
@@ -158,7 +157,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* Botón de ingreso */}
+            {/* Action button */}
             <button 
               onClick={handleLogin}
               className="w-full bg-slep-gold hover:bg-slep-gold-hover text-slep-blue-dark font-extrabold py-3.5 rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-2 text-sm"
@@ -168,7 +167,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Panel de Control de Sincronización Local */}
+        {/* Cloud Sync Control Panel */}
         <div className="bg-white rounded-2xl shadow-xl border border-slate-200/80 p-6 w-full max-w-lg mt-6 text-xs text-slate-700">
           <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <span>☁️</span> Control de Sincronización en la Nube
@@ -211,7 +210,7 @@ export default function Home() {
 
       </main>
 
-      {/* Pie de página */}
+      {/* Footer */}
       <footer className="bg-slate-100 border-t border-slate-200 py-6 text-center text-xs text-slate-500">
         © {new Date().getFullYear()} Servicio Local de Educación Pública Valle Diguillín • Área de Planificación y Control de Dotación
       </footer>
