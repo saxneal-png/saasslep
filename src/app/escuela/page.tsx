@@ -204,17 +204,31 @@ export default function EscuelaDashboard() {
 
   async function loadAllSchoolData() {
     await api.pullCloudSync();
-    const est = await api.getEstablecimientoByRbd(selectedRbd);
+    const [
+      est,
+      conts,
+      funcs,
+      asigs,
+      alts,
+      dynCursos,
+      customCargs,
+      plans,
+      tasks,
+      reemps
+    ] = await Promise.all([
+      api.getEstablecimientoByRbd(selectedRbd),
+      api.getContratos(selectedRbd),
+      api.getFuncionarios(),
+      api.getAsignacionesPorEstablecimiento(selectedRbd),
+      api.getAlertas(selectedRbd),
+      api.getCursosDinamicos(selectedRbd),
+      api.getCargosPorEstablecimiento(selectedRbd),
+      api.getPlanesEstudio(),
+      api.getTareasReemplazo(),
+      api.getReemplazosLicencias()
+    ]);
+
     setColegio(est || null);
-
-    const conts = await api.getContratos(selectedRbd);
-    const funcs = await api.getFuncionarios();
-    const asigs = await api.getAsignacionesPorEstablecimiento(selectedRbd);
-    const alts = await api.getAlertas(selectedRbd);
-    const dynCursos = await api.getCursosDinamicos(selectedRbd);
-    const customCargs = await api.getCargosPorEstablecimiento(selectedRbd);
-    const plans = await api.getPlanesEstudio();
-
     setContratos(conts);
     setFuncionarios(funcs);
     setAsignaciones(asigs);
@@ -222,11 +236,7 @@ export default function EscuelaDashboard() {
     setCursosDinamicos(dynCursos);
     setCargosPersonalizados(customCargs);
     setPlanesEstudio(plans);
-
-    const tasks = await api.getTareasReemplazo();
     setTareasReemplazo(tasks);
-
-    const reemps = await api.getReemplazosLicencias();
     setReemplazosList(reemps);
 
     if (dynCursos.length > 0) {

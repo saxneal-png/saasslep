@@ -181,17 +181,19 @@ export default function RRHHPage() {
 
   async function loadData() {
     await api.pullCloudSync();
-    const funcs = await api.getFuncionarios();
+    const [funcs, conts, tasks, coms, ests, reemps] = await Promise.all([
+      api.getFuncionarios(),
+      api.getContratos(),
+      api.getTareasReemplazo(),
+      api.getComunas(),
+      api.getEstablecimientos(),
+      api.getReemplazosLicencias()
+    ]);
     setFuncionarios(funcs);
-    const conts = await api.getContratos();
     setContratos(conts);
-    const tasks = await api.getTareasReemplazo();
     setTareas(tasks);
-    const coms = await api.getComunas();
     setComunas(coms);
-    const ests = await api.getEstablecimientos();
     setEscuelas(ests);
-    const reemps = await api.getReemplazosLicencias();
     setReemplazosList(reemps);
     if (ests.length > 0) {
       setRbd(ests[0].rbd);

@@ -221,24 +221,35 @@ export default function SostenedorDashboard() {
 
   async function loadAllData() {
     await api.pullCloudSync();
-    const ests = await api.getEstablecimientos();
-    const conts = await api.getContratos();
-    const funcs = await api.getFuncionarios();
-    const alts = await api.getAlertas();
-    const tuts = await api.getTodasLasTutelas();
-    const sups = await api.getSupervisores();
-    const plans = await api.getPlanesEstudio();
     
+    const [
+      ests,
+      conts,
+      funcs,
+      alts,
+      tuts,
+      sups,
+      plans,
+      coms
+    ] = await Promise.all([
+      api.getEstablecimientos(),
+      api.getContratos(),
+      api.getFuncionarios(),
+      api.getAlertas(),
+      api.getTodasLasTutelas(),
+      api.getSupervisores(),
+      api.getPlanesEstudio(),
+      api.getComunas()
+    ]);
+
     // Fetch dyn elements
     const asigs = dbLocal.asignacionesAula;
     const cargs = dbLocal.cargosPersonalizados;
-    const coms = await api.getComunas();
-    
-    const fins: FinanciamientoContrato[] = [];
-    for (const c of conts) {
-      const f = await api.getFinanciamientosPorContrato(c.id);
-      fins.push(...f);
-    }
+
+    const finsArrays = await Promise.all(
+      conts.map(c => api.getFinanciamientosPorContrato(c.id))
+    );
+    const fins = finsArrays.flat();
 
     setEstablecimientos(ests);
     setContratos(conts);

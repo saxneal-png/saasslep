@@ -159,32 +159,33 @@ export default function ProfesionalDashboard() {
     const rbds = await api.getTutelasPorProfesional(profesionalRun);
     setEscuelasAsignadasRbd(rbds);
 
-    const allEsts = await api.getEstablecimientos();
+    const [allEsts, allConts, funcs, allAlts, rems] = await Promise.all([
+      api.getEstablecimientos(),
+      api.getContratos(),
+      api.getFuncionarios(),
+      api.getAlertas(),
+      api.getRemuneraciones()
+    ]);
+
     const filteredEsts = allEsts.filter(e => rbds.includes(e.rbd));
     setEstablecimientos(filteredEsts);
 
-    const allConts = await api.getContratos();
     const filteredConts = allConts.filter(c => rbds.includes(c.rbd));
     setContratos(filteredConts);
 
-    const funcs = await api.getFuncionarios();
     setFuncionarios(funcs);
 
-    const allAlts = await api.getAlertas();
     const filteredAlts = allAlts.filter(a => rbds.includes(a.rbd));
     setAlertas(filteredAlts);
 
-    const fins: FinanciamientoContrato[] = [];
-    for (const c of filteredConts) {
-      const f = await api.getFinanciamientosPorContrato(c.id);
-      fins.push(...f);
-    }
+    const finsArrays = await Promise.all(
+      filteredConts.map(c => api.getFinanciamientosPorContrato(c.id))
+    );
+    const fins = finsArrays.flat();
     setFinanciamientos(fins);
 
     const allAsigs = dbLocal.asignacionesAula;
     setAsignaciones(allAsigs);
-
-    const rems = await api.getRemuneraciones();
     setRemuneraciones(rems);
   }
 
