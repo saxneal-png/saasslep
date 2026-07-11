@@ -3030,17 +3030,35 @@ export default function EscuelaDashboard() {
                             {pieFuncs.map(f => {
                               const contrs = contratos.filter(c => c.funcionario_run === f.run && c.rbd === selectedRbd);
                               const totHrs = contrs.reduce((sum, c) => sum + c.horas_totales, 0);
+                              const contrsIds = contrs.map(c => c.id);
+                              const assignedHrs = asignaciones
+                                .filter(a => contrsIds.includes(a.contrato_id))
+                                .reduce((sum, a) => sum + a.horas, 0);
+                              const remainingHrs = Math.max(0, totHrs - assignedHrs);
+
                               return (
-                                <div key={f.run} className="flex justify-between items-center p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-all">
+                                <div key={f.run} className="flex justify-between items-center p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-all gap-2">
                                   <div>
                                     <p className="font-bold text-slate-800">{f.nombre}</p>
                                     <p className="text-[10px] text-slate-500 font-medium">{f.cargo} • {f.estamento}</p>
                                     <p className="text-[9px] font-mono text-slate-400">{f.run}</p>
                                   </div>
-                                  <div className="text-right">
-                                    <span className="bg-blue-50 text-slep-blue border border-blue-200 font-mono font-bold px-2 py-1 rounded">
-                                      {totHrs} hrs contrato
+                                  <div className="text-right flex flex-col items-end gap-1 flex-shrink-0">
+                                    <span className="bg-slate-100 text-slate-650 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded border border-slate-200">
+                                      Contrato: {totHrs} hrs
                                     </span>
+                                    <span className="bg-blue-50 text-slep-blue font-mono text-[9px] font-bold px-1.5 py-0.5 rounded border border-blue-100">
+                                      Asignado: {assignedHrs} hrs
+                                    </span>
+                                    {remainingHrs > 0 ? (
+                                      <span className="bg-amber-100 text-amber-800 font-mono text-[9px] font-black px-1.5 py-0.5 rounded border border-amber-200">
+                                        Libres: {remainingHrs.toFixed(1)} hrs
+                                      </span>
+                                    ) : (
+                                      <span className="bg-emerald-100 text-emerald-800 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-250">
+                                        ✓ Completo
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               );
