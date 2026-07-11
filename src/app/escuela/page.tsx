@@ -1415,16 +1415,7 @@ export default function EscuelaDashboard() {
           >
             📋 Dotación Completa
           </button>
-          <button 
-            onClick={() => setActiveTab('conciliacion')}
-            className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all ${
-              activeTab === 'conciliacion' 
-                ? 'bg-slep-blue text-white shadow-sm' 
-                : 'text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            ⚖️ Conciliación de Horas
-          </button>
+
           <button 
             onClick={() => setActiveTab('especial')}
             className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all ${
@@ -2772,7 +2763,13 @@ export default function EscuelaDashboard() {
                     <tbody className="divide-y divide-slate-100">
                       {(() => {
                         const schoolConts = contratos.filter(c => c.rbd === selectedRbd);
-                        return schoolConts.map(c => {
+                        const sortedConts = [...schoolConts].sort((a, b) => {
+                          const fA = funcionarios.find(func => func.run === a.funcionario_run);
+                          const fB = funcionarios.find(func => func.run === b.funcionario_run);
+                          return (fA?.nombre || '').localeCompare(fB?.nombre || '');
+                        });
+
+                        return sortedConts.map(c => {
                           const f = funcionarios.find(func => func.run === c.funcionario_run);
                           if (!f) return null;
                           const cAsigs = asignaciones.filter(a => a.contrato_id === c.id);
@@ -2793,15 +2790,16 @@ export default function EscuelaDashboard() {
                           // Vacantes/Disponibles = total hours minus assignments and directiva/tecnica/other cargos
                           const vacantesHrs = Math.max(0, c.horas_totales - pedagogicas - dirHrs - tecHrs - otrasFuncionesHrs);
                           const coursesString = cAsigs.map(a => `${a.curso} (${a.asignatura})`).join(', ');
+                          const isDirector = f.cargo?.toUpperCase() === 'DIRECTOR';
 
                           return (
-                            <tr key={c.id} className="hover:bg-slate-50">
+                            <tr key={c.id} className={`hover:bg-slate-50 ${isDirector ? 'bg-rose-50/20 font-bold' : ''}`}>
                               <td className="p-3 pl-4">
                                 <button
                                   onClick={() => handleOpenEditFuncionario(f)}
-                                  className="text-slep-blue font-bold hover:underline text-left cursor-pointer"
+                                  className={`text-slep-blue hover:underline text-left cursor-pointer ${isDirector ? 'font-black text-rose-700' : 'font-bold'}`}
                                 >
-                                  {f.nombre}
+                                  {f.nombre} {isDirector && <span className="ml-1 bg-rose-100 text-rose-800 text-[9px] px-1.5 py-0.5 rounded uppercase font-black">Director</span>}
                                 </button>
                                 <p className="text-[10px] font-mono text-slate-400 mt-0.5">{f.run}</p>
                               </td>
@@ -3665,11 +3663,16 @@ export default function EscuelaDashboard() {
 
         </div>
 
-        {/* Modal: View / Edit / Print Funcionario */}
         {editingFuncionario && (() => {
           const relatedCont = contratos.find(c => c.funcionario_run === editingFuncionario.run);
           const teacherAsigs = asignaciones.filter(a => a.contrato_id === relatedCont?.id);
-          const leyCalculo = colegio && relatedCont ? validarCargaDocente(relatedCont, colegio, teacherAsigs, cargosPersonalizados) : null;
+          const tempCont = relatedCont ? {
+            ...relatedCont,
+            horas_totales: editContHoras,
+            horas_directivas: editContHorasDirectivas || 0,
+            horas_tecnico_pedagogicas: editContHorasTecPed || 0
+          } : undefined;
+          const leyCalculo = colegio && tempCont ? validarCargaDocente(tempCont, colegio, teacherAsigs, cargosPersonalizados) : null;
 
           return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
@@ -4010,11 +4013,12 @@ export default function EscuelaDashboard() {
               <div className="p-6 space-y-4 flex-1 text-xs">
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Configurable PIE Hours */}
-                  <div className="bg-slate-50 p-4 rounded-xl border flex flex-col justify-between gap-3 text-xs md:flex-row md:items-center">
+                  {/* Configurable PIE Hours (Read-only representation of the PIE Module) */}
+                  <div className="bg-slate-50 p-4 rounded-xl border flex flex-col justify-between gap-3 text-xs">
                     <div>
                       <span className="font-bold text-slate-700 font-black">Horas de Apoyo / Co-docencia PIE:</span>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Carga horaria semanal de apoyo SEP/PIE para este curso.</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Calculado dinámicamente y asignado en el módulo Educación Especial (PIE).</p>
+                      
                       {(() => {
                         const inputState = coursePieStudents[editingCurso.nombre] || { neet: 0, neep: 0 };
                         const courseIsJec = editingCurso.regimen === 'JEC';
@@ -4022,32 +4026,42 @@ export default function EscuelaDashboard() {
                         const incrementHours = inputState.neep * 3;
                         const projectedPieHours = baseHours + incrementHours;
                         
+                        // Active assignments for this course in the PIE module
+                        const coursePieAsigs = asignaciones.filter(a => a.curso === editingCurso.nombre && a.asignatura === 'Apoyo PIE');
+                        const totalAsignado = coursePieAsigs.reduce((sum, a) => sum + a.horas, 0);
+
                         return (
-                          <div className="mt-1.5 flex items-center gap-2">
-                            <span className="bg-blue-50 text-slep-blue font-bold px-2 py-0.5 rounded text-[10px] border border-blue-150/60">
-                              🧩 Proyectado PIE: {projectedPieHours} hrs
-                            </span>
-                            {projectedPieHours > 0 && projectedPieHours !== editCursoPIE && (
-                              <button
-                                type="button"
-                                onClick={() => setEditCursoPIE(projectedPieHours)}
-                                className="text-[10px] text-slep-blue hover:underline font-bold"
-                              >
-                                Usar Proyectado
-                              </button>
-                            )}
+                          <div className="mt-2 space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="bg-indigo-50 text-slep-blue font-bold px-2 py-0.5 rounded text-[10px] border border-indigo-150">
+                                Horas Exigidas PIE: {projectedPieHours} hrs
+                              </span>
+                              <span className={`font-bold px-2 py-0.5 rounded text-[10px] border ${totalAsignado >= projectedPieHours && projectedPieHours > 0 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>
+                                Total Asignado: {totalAsignado} hrs
+                              </span>
+                            </div>
+                            
+                            <div className="mt-1">
+                              <p className="text-[10px] font-bold text-slate-500">Docentes PIE Asignados:</p>
+                              {coursePieAsigs.length > 0 ? (
+                                <ul className="list-disc pl-4 text-[10px] text-slate-650 mt-0.5">
+                                  {coursePieAsigs.map(a => {
+                                    const cont = contratos.find(co => co.id === a.contrato_id);
+                                    const func = funcionarios.find(f => f.run === cont?.funcionario_run);
+                                    return (
+                                      <li key={a.id}>
+                                        {func ? func.nombre : 'Docente'} • <strong className="text-slate-800">{a.horas} hrs</strong>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              ) : (
+                                <p className="text-[10px] text-slate-400 italic mt-0.5">Ningún docente PIE asignado en este curso.</p>
+                              )}
+                            </div>
                           </div>
                         );
                       })()}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        value={editCursoPIE}
-                        onChange={(e) => setEditCursoPIE(parseFloat(e.target.value) || 0)}
-                        className="w-20 p-2 bg-white border rounded text-center font-bold text-slate-800 focus:outline-slep-blue"
-                      />
-                      <span className="font-semibold text-slate-600">hrs</span>
                     </div>
                   </div>
 

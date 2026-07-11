@@ -297,17 +297,22 @@ export function validarCargaDocente(
   // If Licencia Médica, the contract's teaching workload is logically frozen (does not count towards this teacher).
   
   // Let's check if the assignments contain any 1° a 4° Básico courses
-  const tieneCursosIvmEspecial = asignaciones.some(a => 
-    a.curso.includes('1°') || a.curso.includes('2°') || a.curso.includes('3°') || a.curso.includes('4°')
-  );
+  const tieneCursosIvmEspecial = asignaciones.some(a => {
+    const cName = (a.curso || '').toLowerCase();
+    const is1To4 = cName.includes('1°') || cName.includes('2°') || cName.includes('3°') || cName.includes('4°') ||
+                   cName.includes('1o') || cName.includes('2o') || cName.includes('3o') || cName.includes('4o');
+    const isBasico = cName.includes('bás') || cName.includes('bas') || cName.includes('primaria');
+    const isMedio = cName.includes('med') || cName.includes('sec');
+    return is1To4 && isBasico && !isMedio;
+  });
 
   // Calculate non-pedagogical hours from custom cargos assigned to this teacher
   const horasCargo = cargos
     .filter(c => c.funcionario_run === contrato.funcionario_run)
     .reduce((sum, c) => sum + c.horas, 0);
 
-  // The contract hours that can be split under Ley 20.903 are the total minus the non-pedagogical cargo hours
-  const horasEfectivasContrato = Math.max(0, contrato.horas_totales - horasCargo);
+  // The contract hours that can be split under Ley 20.903 are the total minus directivas, técnicas, and custom cargo hours
+  const horasEfectivasContrato = Math.max(0, contrato.horas_totales - (contrato.horas_directivas || 0) - (contrato.horas_tecnico_pedagogicas || 0) - horasCargo);
 
   const calculo = calcularLey20903(
     horasEfectivasContrato,
