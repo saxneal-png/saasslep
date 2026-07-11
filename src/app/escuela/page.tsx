@@ -3224,12 +3224,16 @@ export default function EscuelaDashboard() {
                         ? (baseHours + incrementHours)
                         : (c.horasPIE !== undefined ? c.horasPIE : (dec ? dec.horasPIEReglamentarias : 10));
                       
-                      // Active contracts with PIE financing
-                      const activeContractsPie = contratos.filter(cont => {
-                        const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === cont.id);
-                        return fins.some(f => f.origen_fondo === 'PIE');
+                      // Active contracts of PIE specialists in this school
+                      const eligibleContractsPie = contratos.filter(cont => {
+                        if (cont.rbd !== selectedRbd) return false;
+                        const func = funcionarios.find(f => f.run === cont.funcionario_run);
+                        if (!func) return false;
+                        const isSpecialistCargo = ['DOCENTE DIFERENCIAL', 'COORDINADOR/A PIE'].includes(func.cargo || '') || 
+                          ['Psicólogo', 'Psicóloga', 'Fonoaudiólogo', 'Fonoaudióloga', 'Psicopedagogo', 'Psicopedagoga', 'Terapeuta Ocupacional'].some(x => (func.cargo || '').includes(x));
+                        return isSpecialistCargo || func.cargo?.includes('PIE');
                       });
-                      const contractIdsPie = activeContractsPie.map(cont => cont.id);
+                      const contractIdsPie = eligibleContractsPie.map(cont => cont.id);
 
                       // Current assignments for this course by PIE teachers
                       const currentAsigsCurso = asignaciones.filter(
@@ -3323,15 +3327,13 @@ export default function EscuelaDashboard() {
                                   defaultValue=""
                                 >
                                   <option value="">-- Seleccionar --</option>
-                                  {activeContractsPie.map(cont => {
+                                  {eligibleContractsPie.map(cont => {
                                     const func = funcionarios.find(f => f.run === cont.funcionario_run);
-                                    const totalPieHrs = dbLocal.financiamientoContratos
-                                      .filter(fc => fc.contrato_id === cont.id && fc.origen_fondo === 'PIE')
-                                      .reduce((sum, fc) => sum + fc.horas, 0);
-                                    const assignedPieHrs = dbLocal.asignacionesAula
-                                      .filter(as => as.contrato_id === cont.id && as.asignatura === 'Apoyo PIE')
+                                    const totalContHrs = cont.horas_totales;
+                                    const assignedHrs = asignaciones
+                                      .filter(as => as.contrato_id === cont.id)
                                       .reduce((sum, as) => sum + as.horas, 0);
-                                    const dispHrs = totalPieHrs - assignedPieHrs;
+                                    const dispHrs = totalContHrs - assignedHrs;
 
                                     return (
                                       <option 
@@ -3375,16 +3377,14 @@ export default function EscuelaDashboard() {
                                       return;
                                     }
 
-                                    const selectedCont = activeContractsPie.find(cont => cont.id === cId);
+                                    const selectedCont = eligibleContractsPie.find(cont => cont.id === cId);
                                     if (!selectedCont) return;
 
-                                    const totalPieHrs = dbLocal.financiamientoContratos
-                                      .filter(fc => fc.contrato_id === selectedCont.id && fc.origen_fondo === 'PIE')
-                                      .reduce((sum, fc) => sum + fc.horas, 0);
-                                    const assignedPieHrs = dbLocal.asignacionesAula
-                                      .filter(as => as.contrato_id === selectedCont.id && as.asignatura === 'Apoyo PIE')
+                                    const totalContHrs = selectedCont.horas_totales;
+                                    const assignedHrs = asignaciones
+                                      .filter(as => as.contrato_id === selectedCont.id)
                                       .reduce((sum, as) => sum + as.horas, 0);
-                                    const dispHrs = totalPieHrs - assignedPieHrs;
+                                    const dispHrs = totalContHrs - assignedHrs;
 
                                     if (hrs > dispHrs + 0.01) {
                                       alert(`El docente solo cuenta con ${dispHrs.toFixed(1)} hrs disponibles.`);
@@ -3877,7 +3877,7 @@ export default function EscuelaDashboard() {
                   </div>
 
                   {/* Clases y Cursos Asignados (Horas Lectivas) */}
-                  {editingFuncionario.estamento === 'Docente' && (
+                  {(editingFuncionario.estamento === 'Docente' || teacherAsigs.length > 0) && (
                     <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-3">
                       <span className="font-bold text-slate-800 block">Clases y Cursos Asignados (Horas Lectivas)</span>
                       <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
