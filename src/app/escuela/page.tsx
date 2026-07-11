@@ -41,10 +41,16 @@ export default function EscuelaDashboard() {
   const [cargosPersonalizados, setCargosPersonalizados] = useState<CargoPersonalizado[]>([]);
   const [planesEstudio, setPlanesEstudio] = useState<PlanEstudioNorm[]>([]);
 
-  // Navigation tab state: 'docentes' | 'asistentes' | 'cursos' | 'compendio'
-  const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'dotacion' | 'conciliacion'>('docentes');
+  // Navigation tab state: 'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'especial'
+  const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'dotacion' | 'conciliacion' | 'especial'>('docentes');
   const [tareasReemplazo, setTareasReemplazo] = useState<TareaReemplazo[]>([]);
   const [taskReemplazoRun, setTaskReemplazoRun] = useState<{[key: string]: string}>({});
+
+  // PIE Program & Calculator States
+  const [pieNeetCount, setPieNeetCount] = useState<number>(5);
+  const [pieNeepCount, setPieNeepCount] = useState<number>(2);
+  const [pieIsJecOverride, setPieIsJecOverride] = useState<'default' | 'Sí' | 'No'>('default');
+  const [coursePieStudents, setCoursePieStudents] = useState<{[courseName: string]: { neet: number, neep: number }}>({});
 
 
   // Supervisor delegated mode
@@ -1418,6 +1424,16 @@ export default function EscuelaDashboard() {
             }`}
           >
             ⚖️ Conciliación de Horas
+          </button>
+          <button 
+            onClick={() => setActiveTab('especial')}
+            className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all ${
+              activeTab === 'especial' 
+                ? 'bg-slep-blue text-white shadow-sm' 
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            🧩 Ed. Especial (PIE)
           </button>
         </div>
 
@@ -3073,6 +3089,350 @@ export default function EscuelaDashboard() {
                     );
                   })()}
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'especial' && (
+              <div className="space-y-6">
+                
+                {/* Intro Card */}
+                <div className="bg-gradient-to-r from-slep-blue to-blue-800 text-white rounded-2xl p-6 shadow border border-blue-900">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-bold">🧩 Programa de Integración Escolar (PIE) - Decreto 170/2009</h2>
+                      <p className="text-xs text-blue-100 mt-1 font-medium">
+                        Herramienta de gestión y cálculo de horas de apoyo cronológicas y pedagógicas para NEET (Transitorias) y NEEP (Permanentes) según normativa del Ministerio de Educación de Chile.
+                      </p>
+                    </div>
+                    <div className="bg-white/10 px-4 py-2.5 rounded-xl border border-white/20 text-xs font-mono backdrop-blur-sm">
+                      <p>Establecimiento: <span className="font-bold text-yellow-350">{colegio?.nombre}</span></p>
+                      <p className="mt-0.5">RBD: <span className="font-bold text-yellow-350">{selectedRbd}</span></p>
+                      <p className="mt-0.5">Régimen: <span className="font-bold text-yellow-350">{colegio?.regimen}</span></p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grid for Calculator and PIE Team */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  
+                  {/* Calculator Panel */}
+                  <div className="bg-white rounded-xl shadow border border-slate-200/60 overflow-hidden flex flex-col justify-between">
+                    <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                      <h3 className="text-sm font-bold text-slate-800">🧮 Calculadora de Requerimientos PIE (Por Curso)</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Calcula las horas cronológicas y pedagógicas necesarias según matrícula NEE.</p>
+                    </div>
+                    
+                    <div className="p-6 space-y-4 flex-1">
+                      
+                      {/* JEC Option */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">¿Establecimiento con Jornada Escolar Completa (JEC)?</label>
+                        <div className="flex gap-2">
+                          {(['default', 'Sí', 'No'] as const).map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setPieIsJecOverride(opt)}
+                              className={`px-3 py-1.5 text-xs rounded-lg border font-bold transition-all ${
+                                pieIsJecOverride === opt
+                                  ? 'bg-slep-blue text-white border-slep-blue shadow-sm'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {opt === 'default' ? `Por defecto (${colegio?.regimen === 'JEC' ? 'JEC' : 'No JEC'})` : opt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* NEET Count */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-xs font-bold text-slate-700">Estudiantes con NEET (Necesidad Educativa Transitoria)</label>
+                          <span className="text-xs font-black text-slep-blue bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{pieNeetCount} alumnos</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="15"
+                          value={pieNeetCount}
+                          onChange={(e) => setPieNeetCount(parseInt(e.target.value))}
+                          className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slep-blue"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1 italic">Norma general: Máximo 5 por curso.</p>
+                      </div>
+
+                      {/* NEEP Count */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-xs font-bold text-slate-700">Estudiantes con NEEP (Necesidad Educativa Permanente)</label>
+                          <span className="text-xs font-black text-emerald-705 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">{pieNeepCount} alumnos</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="5"
+                          value={pieNeepCount}
+                          onChange={(e) => setPieNeepCount(parseInt(e.target.value))}
+                          className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1 italic">Norma general: Máximo 2 por curso.</p>
+                      </div>
+
+                    </div>
+
+                    {/* Calculation Output */}
+                    {(() => {
+                      const isJec = pieIsJecOverride === 'default' ? (colegio?.regimen === 'JEC') : (pieIsJecOverride === 'Sí');
+                      const baseHours = (pieNeetCount > 0 || pieNeepCount > 0) ? (isJec ? 10 : 7) : 0;
+                      const incrementHours = pieNeepCount * 3;
+                      const totalPieHours = baseHours + incrementHours;
+                      const teacherMinPedag = totalPieHours > 0 ? (isJec ? 8 : 6) : 0;
+                      const assistantProportional = totalPieHours > 0 ? parseFloat(((isJec ? 5.3 : 3.3) * (pieNeetCount / 5)).toFixed(1)) : 0;
+
+                      return (
+                        <div className="p-6 bg-slate-50 border-t border-slate-100 rounded-b-xl space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-center">
+                              <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Horas Cronológicas Totales</p>
+                              <p className="text-2xl font-black text-slate-800 mt-1">{totalPieHours} hrs</p>
+                              <p className="text-[9px] text-slate-400 mt-1">({baseHours} base + {incrementHours} permanentes)</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-center">
+                              <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Docente Especialista (Mínimo)</p>
+                              <p className="text-2xl font-black text-slep-blue mt-1">{teacherMinPedag} hrs</p>
+                              <p className="text-[9px] text-slate-400 mt-1">Pedagógicas de apoyo directo</p>
+                            </div>
+                          </div>
+
+                          <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-xs text-blue-905">
+                            <h4 className="font-bold flex items-center gap-1 mb-1">
+                              ℹ️ Desglose Normativo y Proporciones
+                            </h4>
+                            <ul className="list-disc pl-4 space-y-1 text-[11px] leading-relaxed">
+                              <li>El docente de educación especial debe realizar al menos <strong>{isJec ? '8' : '6'} horas pedagógicas</strong> en el aula.</li>
+                              <li>Tiempo proporcional para profesionales asistentes (Psicólogo, Fonoaudiólogo, etc.): <strong>{assistantProportional} hrs</strong> cronológicas (calculado sobre {isJec ? '5.3' : '3.3'} hrs por grupo de 5 NEET).</li>
+                              <li>Total curso: <strong>{totalPieHours} horas cronológicas</strong> semanales destinadas al trabajo colaborativo, co-enseñanza y atención directa de estudiantes PIE.</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* PIE Professionals Team */}
+                  <div className="bg-white rounded-xl shadow border border-slate-200/60 overflow-hidden flex flex-col">
+                    <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-800">🧑‍🏫 Equipo y Recursos PIE del Establecimiento</h3>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Profesionales y docentes con financiamiento o dedicación PIE.</p>
+                      </div>
+                      <span className="bg-slep-blue/10 text-slep-blue font-bold px-2 py-0.5 rounded text-[10px]">
+                        Dotación Especialista
+                      </span>
+                    </div>
+
+                    <div className="p-6 flex-1 overflow-y-auto max-h-[360px] text-xs">
+                      {(() => {
+                        const pieFuncs = funcionarios.filter(f => {
+                          const hasPieContract = contratos.some(c => 
+                            c.funcionario_run === f.run && 
+                            c.rbd === selectedRbd && 
+                            (c.horas_totales > 0)
+                          );
+                          const isSpecialistCargo = ['DOCENTE DIFERENCIAL', 'COORDINADOR/A PIE'].includes(f.cargo || '') || 
+                            ['Psicólogo', 'Psicóloga', 'Fonoaudiólogo', 'Fonoaudióloga', 'Psicopedagogo', 'Psicopedagoga', 'Terapeuta Ocupacional'].some(x => (f.cargo || '').includes(x));
+                          
+                          return hasPieContract && (isSpecialistCargo || f.cargo?.includes('PIE'));
+                        });
+
+                        if (pieFuncs.length === 0) {
+                          return (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
+                              <p className="italic text-center">No se encontraron docentes diferenciales o asistentes de apoyo asignados a este RBD en la base de datos de personal.</p>
+                              <p className="text-[10px] mt-2 text-slate-450 text-center">Para ver profesionales aquí, asegúrese de registrarlos con cargos como "DOCENTE DIFERENCIAL", "COORDINADOR/A PIE", "Psicólogo" u otros.</p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="space-y-3">
+                            {pieFuncs.map(f => {
+                              const contrs = contratos.filter(c => c.funcionario_run === f.run && c.rbd === selectedRbd);
+                              const totHrs = contrs.reduce((sum, c) => sum + c.horas_totales, 0);
+                              return (
+                                <div key={f.run} className="flex justify-between items-center p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-all">
+                                  <div>
+                                    <p className="font-bold text-slate-800">{f.nombre}</p>
+                                    <p className="text-[10px] text-slate-500 font-medium">{f.cargo} • {f.estamento}</p>
+                                    <p className="text-[9px] font-mono text-slate-400">{f.run}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="bg-blue-50 text-slep-blue border border-blue-200 font-mono font-bold px-2 py-1 rounded">
+                                      {totHrs} hrs contrato
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Course Allocations Matrix */}
+                <div className="bg-white rounded-xl shadow border border-slate-200/60 overflow-hidden">
+                  <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                    <h3 className="text-sm font-bold text-slate-800">🏫 Matriz de Cobertura y Asignación de Horas PIE por Curso</h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Ingresa la matrícula NEE de cada curso para evaluar el cumplimiento de la cobertura horaria de apoyos.</p>
+                  </div>
+                  
+                  <div className="overflow-x-auto">
+                    {cursosDinamicos.length === 0 ? (
+                      <div className="p-12 text-center text-slate-400 italic text-xs">
+                        No hay cursos creados en este establecimiento. Vaya a la pestaña de "Cursos y Carga Horaria" para agregar cursos.
+                      </div>
+                    ) : (
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-400 uppercase font-black">
+                            <th className="p-4 pl-6">Curso</th>
+                            <th className="p-4 text-center">Régimen</th>
+                            <th className="p-4 text-center w-28">Estudiantes NEET</th>
+                            <th className="p-4 text-center w-28">Estudiantes NEEP</th>
+                            <th className="p-4 text-center">Hrs PIE Requeridas (Norma)</th>
+                            <th className="p-4 text-center">Hrs PIE Asignadas (Docentes)</th>
+                            <th className="p-4 text-center pr-6">Cumplimiento</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {cursosDinamicos.map(curso => {
+                            const inputState = coursePieStudents[curso.nombre] || { neet: 0, neep: 0 };
+                            
+                            // 1. Calculate Required
+                            const courseIsJec = curso.regimen === 'JEC';
+                            const baseHours = (inputState.neet > 0 || inputState.neep > 0) ? (courseIsJec ? 10 : 7) : 0;
+                            const incrementHours = inputState.neep * 3;
+                            const requiredHours = baseHours + incrementHours;
+
+                            // 2. Calculate Assigned (Docentes diferenciales assigned to this course)
+                            const courseAsigs = asignaciones.filter(a => a.curso === curso.nombre);
+                            const assignedPIEHours = courseAsigs.reduce((sum, a) => {
+                              const contract = contratos.find(c => c.id === a.contrato_id);
+                              if (!contract) return sum;
+                              const teacher = funcionarios.find(f => f.run === contract.funcionario_run);
+                              const isPieStaff = teacher?.cargo === 'DOCENTE DIFERENCIAL' || teacher?.cargo === 'COORDINADOR/A PIE';
+                              return isPieStaff ? sum + a.horas : sum;
+                            }, 0);
+
+                            const isSatisfied = assignedPIEHours >= requiredHours;
+
+                            return (
+                              <tr key={curso.nombre} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="p-4 pl-6 font-bold text-slate-800">
+                                  {curso.nombre}
+                                  <p className="text-[9px] text-slate-400 font-medium font-mono mt-0.5">{curso.nivel}</p>
+                                </td>
+                                <td className="p-4 text-center">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    courseIsJec ? 'bg-indigo-50 text-indigo-750 border border-indigo-200' : 'bg-slate-100 text-slate-600'
+                                  }`}>
+                                    {curso.regimen}
+                                  </span>
+                                </td>
+                                <td className="p-4 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button 
+                                      type="button"
+                                      onClick={() => {
+                                        const newVal = Math.max(0, inputState.neet - 1);
+                                        setCoursePieStudents(prev => ({
+                                          ...prev,
+                                          [curso.nombre]: { ...inputState, neet: newVal }
+                                        }));
+                                      }}
+                                      className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-250 font-black text-slate-650 flex items-center justify-center"
+                                    >
+                                      -
+                                    </button>
+                                    <span className="w-6 font-bold font-mono text-slate-800 text-center">{inputState.neet}</span>
+                                    <button 
+                                      type="button"
+                                      onClick={() => {
+                                        const newVal = Math.min(15, inputState.neet + 1);
+                                        setCoursePieStudents(prev => ({
+                                          ...prev,
+                                          [curso.nombre]: { ...inputState, neet: newVal }
+                                        }));
+                                      }}
+                                      className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-250 font-black text-slate-650 flex items-center justify-center"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="p-4 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button 
+                                      type="button"
+                                      onClick={() => {
+                                        const newVal = Math.max(0, inputState.neep - 1);
+                                        setCoursePieStudents(prev => ({
+                                          ...prev,
+                                          [curso.nombre]: { ...inputState, neep: newVal }
+                                        }));
+                                      }}
+                                      className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-250 font-black text-slate-650 flex items-center justify-center"
+                                    >
+                                      -
+                                    </button>
+                                    <span className="w-6 font-bold font-mono text-slate-800 text-center">{inputState.neep}</span>
+                                    <button 
+                                      type="button"
+                                      onClick={() => {
+                                        const newVal = Math.min(5, inputState.neep + 1);
+                                        setCoursePieStudents(prev => ({
+                                          ...prev,
+                                          [curso.nombre]: { ...inputState, neep: newVal }
+                                        }));
+                                      }}
+                                      className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-250 font-black text-slate-650 flex items-center justify-center"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="p-4 text-center font-mono font-bold text-slate-805">
+                                  {requiredHours > 0 ? `${requiredHours} hrs` : '0 hrs'}
+                                </td>
+                                <td className="p-4 text-center font-mono font-bold text-emerald-600 bg-emerald-50/20">
+                                  {assignedPIEHours > 0 ? `${assignedPIEHours} hrs` : '0 hrs'}
+                                </td>
+                                <td className="p-4 pr-6 text-center">
+                                  {requiredHours === 0 ? (
+                                    <span className="text-[10px] text-slate-400 font-medium italic">Sin apoyos requeridos</span>
+                                  ) : isSatisfied ? (
+                                    <span className="bg-emerald-100 text-emerald-800 border border-emerald-250 font-bold px-2 py-0.5 rounded text-[10px]">
+                                      {`✓ Cubierto (${assignedPIEHours} >= ${requiredHours})`}
+                                    </span>
+                                  ) : (
+                                    <span className="bg-rose-100 text-rose-800 border border-rose-200 font-bold px-2 py-0.5 rounded text-[10px]">
+                                      {`⚠️ Faltan ${requiredHours - assignedPIEHours} hrs`}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+
               </div>
             )}
 
