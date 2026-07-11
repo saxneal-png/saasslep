@@ -2416,7 +2416,14 @@ export default function EscuelaDashboard() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {cursosDinamicos.map(c => {
                       const dec = planesEstudio.find(p => p.nivel === c.nivel && p.regimen === c.regimen);
-                      const hrsRequeridas = c.horasPIE !== undefined ? c.horasPIE : (dec ? dec.horasPIEReglamentarias : 10);
+                      
+                      const inputState = coursePieStudents[c.nombre] || { neet: 0, neep: 0 };
+                      const courseIsJec = c.regimen === 'JEC';
+                      const baseHours = (inputState.neet > 0 || inputState.neep > 0) ? (courseIsJec ? 10 : 7) : 0;
+                      const incrementHours = inputState.neep * 3;
+                      const hrsRequeridas = (inputState.neet > 0 || inputState.neep > 0)
+                        ? (baseHours + incrementHours)
+                        : (c.horasPIE !== undefined ? c.horasPIE : (dec ? dec.horasPIEReglamentarias : 10));
                       
                       // Active contracts with PIE financing
                       const activeContractsPie = contratos.filter(cont => {
