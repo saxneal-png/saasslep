@@ -3131,27 +3131,6 @@ export default function EscuelaDashboard() {
                     
                     <div className="p-6 space-y-4 flex-1">
                       
-                      {/* JEC Option */}
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">¿Establecimiento con Jornada Escolar Completa (JEC)?</label>
-                        <div className="flex gap-2">
-                          {(['default', 'Sí', 'No'] as const).map((opt) => (
-                            <button
-                              key={opt}
-                              type="button"
-                              onClick={() => setPieIsJecOverride(opt)}
-                              className={`px-3 py-1.5 text-xs rounded-lg border font-bold transition-all ${
-                                pieIsJecOverride === opt
-                                  ? 'bg-slep-blue text-white border-slep-blue shadow-sm'
-                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              {opt === 'default' ? `Por defecto (${colegio?.regimen === 'JEC' ? 'JEC' : 'No JEC'})` : opt}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
                       {/* NEET Count */}
                       <div>
                         <div className="flex justify-between items-center mb-1">
@@ -3190,7 +3169,7 @@ export default function EscuelaDashboard() {
 
                     {/* Calculation Output */}
                     {(() => {
-                      const isJec = pieIsJecOverride === 'default' ? (colegio?.regimen === 'JEC') : (pieIsJecOverride === 'Sí');
+                      const isJec = colegio?.regimen === 'JEC';
                       const baseHours = (pieNeetCount > 0 || pieNeepCount > 0) ? (isJec ? 10 : 7) : 0;
                       const incrementHours = pieNeepCount * 3;
                       const totalPieHours = baseHours + incrementHours;
@@ -4052,10 +4031,34 @@ export default function EscuelaDashboard() {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Configurable PIE Hours */}
-                  <div className="bg-slate-50 p-4 rounded-xl border flex justify-between items-center gap-4 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-xl border flex flex-col justify-between gap-3 text-xs md:flex-row md:items-center">
                     <div>
                       <span className="font-bold text-slate-700 font-black">Horas de Apoyo / Co-docencia PIE:</span>
                       <p className="text-[10px] text-slate-400 mt-0.5">Carga horaria semanal de apoyo SEP/PIE para este curso.</p>
+                      {(() => {
+                        const inputState = coursePieStudents[editingCurso.nombre] || { neet: 0, neep: 0 };
+                        const courseIsJec = editingCurso.regimen === 'JEC';
+                        const baseHours = (inputState.neet > 0 || inputState.neep > 0) ? (courseIsJec ? 10 : 7) : 0;
+                        const incrementHours = inputState.neep * 3;
+                        const projectedPieHours = baseHours + incrementHours;
+                        
+                        return (
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <span className="bg-blue-50 text-slep-blue font-bold px-2 py-0.5 rounded text-[10px] border border-blue-150/60">
+                              🧩 Proyectado PIE: {projectedPieHours} hrs
+                            </span>
+                            {projectedPieHours > 0 && projectedPieHours !== editCursoPIE && (
+                              <button
+                                type="button"
+                                onClick={() => setEditCursoPIE(projectedPieHours)}
+                                className="text-[10px] text-slep-blue hover:underline font-bold"
+                              >
+                                Usar Proyectado
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="flex items-center gap-2">
                       <input
