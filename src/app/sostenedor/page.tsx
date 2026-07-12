@@ -2935,6 +2935,11 @@ export default function SostenedorDashboard() {
                     const name = estObj ? estObj.nombre : `Colegio / RBD ${rbd}`;
                     const isChecked = pendingIngest.selectedSchools.includes(rbd);
                     
+                    const schoolFuncs = pendingIngest.funcionarios.filter(f => 
+                      pendingIngest.contratos.some(c => c.funcionario_run === f.run && c.rbd === rbd)
+                    ).length;
+                    const schoolConts = pendingIngest.contratos.filter(c => c.rbd === rbd).length;
+                    
                     return (
                       <label 
                         key={rbd} 
@@ -2954,7 +2959,13 @@ export default function SostenedorDashboard() {
                         />
                         <div>
                           <span className="font-bold text-slate-800 block">{name}</span>
-                          <span className="text-[10px] text-slate-500 font-mono">RBD: {rbd}</span>
+                          <div className="flex gap-2 text-[10px] text-slate-500 mt-0.5">
+                            <span>RBD: <span className="font-mono">{rbd}</span></span>
+                            <span>•</span>
+                            <span>{schoolFuncs} {schoolFuncs === 1 ? 'Funcionario' : 'Funcionarios'}</span>
+                            <span>•</span>
+                            <span>{schoolConts} {schoolConts === 1 ? 'Contrato' : 'Contratos'}</span>
+                          </div>
                         </div>
                       </label>
                     );

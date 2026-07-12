@@ -480,29 +480,155 @@ export function parsearArchivoExcelOJson(
     const rawRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
     if (rawRows.length === 0) return;
 
-    for (let i = 1; i < rawRows.length; i++) {
+    // Find the header row by searching for "run", "r.u.n.", "rut"
+    let headerRowIdx = -1;
+    for (let i = 0; i < Math.min(rawRows.length, 12); i++) {
+      const row = rawRows[i];
+      if (!row || !Array.isArray(row)) continue;
+      const hasRun = row.some(cell => {
+        const val = String(cell || '').trim().toLowerCase();
+        return val === 'run' || val === 'r.u.n.' || val === 'rut' || val.includes('r.u.n') || val === 'r.u.n';
+      });
+      if (hasRun) {
+        headerRowIdx = i;
+        break;
+      }
+    }
+
+    // Default indices mapping (as fallback / manual user specs)
+    let idxRun = 0;
+    let idxPat = 1;
+    let idxMat = 2;
+    let idxNom = 3;
+    let idxSexo = 4;
+    let idxLeg = 5;
+    let idxActivo = 8;
+    let idxProg = 9;
+    let idxComuna = 10;
+    let idxCentroCosto = 11;
+    let idxRbd = 12;
+    let idxCargo = 13;
+    let idxTipoContrato = 15;
+    let idxHoras = 16;
+
+    // If we found a header row, map indices dynamically based on names
+    if (headerRowIdx !== -1) {
+      const headers = rawRows[headerRowIdx].map(cell => String(cell || '').trim().toLowerCase());
+      
+      const findIndex = (kws: string[]) => {
+        return headers.findIndex(h => kws.some(kw => h.includes(kw)));
+      };
+
+      const findExactIndex = (kws: string[]) => {
+        return headers.findIndex(h => kws.some(kw => h === kw));
+      };
+
+      let r = findExactIndex(['run', 'r.u.n.', 'rut', 'r.u.n']);
+      if (r === -1) r = findIndex(['run', 'rut']);
+      if (r !== -1) idxRun = r;
+
+      let pat = findIndex(['paterno']);
+      if (pat !== -1) idxPat = pat;
+
+      let mat = findIndex(['materno']);
+      if (mat !== -1) idxMat = mat;
+
+      let nom = findExactIndex(['nombre', 'nombres']);
+      if (nom === -1) nom = findIndex(['nombre', 'nombres']);
+      if (nom !== -1) idxNom = nom;
+
+      let sex = findIndex(['sexo', 'genero', 'género']);
+      if (sex !== -1) idxSexo = sex;
+
+      let leg = findIndex(['legislac', 'laboral', 'ley']);
+      if (leg !== -1) idxLeg = leg;
+
+      let act = findIndex(['principal', 'activo', 'estado']);
+      if (act !== -1) idxActivo = act;
+
+      let prog = findIndex(['programa', 'subvencion', 'subvención']);
+      if (prog !== -1) idxProg = prog;
+
+      let com = findIndex(['comuna']);
+      if (com !== -1) idxComuna = com;
+
+      let cc = findIndex(['centro costo', 'centro_costo', 'establecimiento', 'colegio']);
+      if (cc !== -1) idxCentroCosto = cc;
+
+      let rbd = findIndex(['rbd']);
+      if (rbd !== -1) idxRbd = rbd;
+
+      let crg = findIndex(['cargo', 'función', 'funcion']);
+      if (crg !== -1) idxCargo = crg;
+
+      let tc = findIndex(['tipo contrato', 'calidad']);
+      if (tc !== -1) idxTipoContrato = tc;
+
+      let hrs = findIndex(['horas']);
+      if (hrs !== -1) idxHoras = hrs;
+    } else {
+      // No header found. Let's auto-detect between original file format vs user custom format
+      // by inspecting the first row with a valid RUN.
+      let firstDataRow: any[] | null = null;
+      for (let i = 0; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        if (!row || !Array.isArray(row)) continue;
+        const run = normalizarRun(row[0]);
+        if (run && run.length > 5) {
+          firstDataRow = row;
+          break;
+        }
+      }
+
+      if (firstDataRow) {
+        const col10Val = String(firstDataRow[10] || '').toUpperCase();
+        const col11Val = String(firstDataRow[11] || '').toUpperCase();
+        
+        const looksLikeCC = col10Val.includes('COLEGIO') || col10Val.includes('ESCUELA') || col10Val.includes('LICEO') || col10Val.includes('CENTRO');
+        const looksLikeCargo = col11Val.includes('DOCENTE') || col11Val.includes('AULA') || col11Val.includes('ASISTENTE') || col11Val.includes('AUXILIAR');
+        
+        if (looksLikeCC || looksLikeCargo) {
+          // Original spreadsheet format:
+          idxComuna = -1;
+          idxCentroCosto = 10;
+          idxCargo = 11;
+          idxTipoContrato = 12;
+          idxHoras = 13;
+          idxRbd = -1;
+        }
+      }
+    }
+
+    const startRow = headerRowIdx !== -1 ? headerRowIdx + 1 : 1;
+
+    for (let i = startRow; i < rawRows.length; i++) {
       const row = rawRows[i];
       if (!row || !Array.isArray(row)) continue;
 
-      const runRaw = row[0];
+      const runRaw = idxRun !== -1 ? row[idxRun] : undefined;
       if (runRaw === undefined || runRaw === null || runRaw === '' || String(runRaw).trim() === 'NaN') {
+        continue;
+      }
+
+      // If the row contains header names, skip it
+      if (String(runRaw).toLowerCase().includes('run') || String(runRaw).toLowerCase().includes('r.u.n')) {
         continue;
       }
 
       const run = normalizarRun(runRaw);
       if (!run) continue;
 
-      const apePat = String(row[1] || '').trim();
-      const apeMat = String(row[2] || '').trim();
-      const nombres = String(row[3] || '').trim();
+      const apePat = idxPat !== -1 ? String(row[idxPat] || '').trim() : '';
+      const apeMat = idxMat !== -1 ? String(row[idxMat] || '').trim() : '';
+      const nombres = idxNom !== -1 ? String(row[idxNom] || '').trim() : '';
       const nombreCompleto = `${nombres} ${apePat} ${apeMat}`.replace(/\s+/g, ' ').trim();
 
-      const sexVal = String(row[4] || '').trim().toUpperCase();
+      const sexVal = idxSexo !== -1 ? String(row[idxSexo] || '').trim().toUpperCase() : '';
       let genero = sexVal;
       if (sexVal === 'M' || sexVal.startsWith('MASC')) genero = 'Masculino';
       else if (sexVal === 'F' || sexVal.startsWith('FEM')) genero = 'Femenino';
 
-      const legLab = String(row[5] || '').trim();
+      const legLab = idxLeg !== -1 ? String(row[idxLeg] || '').trim() : '';
       let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
       if (legLab.toLowerCase().includes('docente')) {
         estamento = 'Docente';
@@ -520,27 +646,53 @@ export function parsearArchivoExcelOJson(
         legislacion_laboral = 'Asistentes de la educación';
       }
 
-      const principalActivo = String(row[8] || '').trim().toUpperCase();
+      const principalActivo = idxActivo !== -1 ? String(row[idxActivo] || '').trim().toUpperCase() : '';
       let estado: EstadoContrato = 'Activo';
       if (principalActivo === 'NO' || principalActivo === 'INACTIVO' || principalActivo === '0') {
         estado = 'Pendiente_Aprobacion';
       }
 
-      const programa = String(row[9] || '').trim();
-      const comunaRaw = String(row[10] || '').trim();
-      const centroCosto = String(row[11] || '').trim();
-      const rbdVal = String(row[12] || '').trim();
-      const cargoRaw = String(row[13] || '').trim();
-      const tipoContrato = String(row[15] || '').trim();
-      const horasRaw = row[16];
+      const programa = idxProg !== -1 ? String(row[idxProg] || '').trim() : '';
+      const comunaRaw = idxComuna !== -1 ? String(row[idxComuna] || '').trim() : '';
+      const centroCosto = idxCentroCosto !== -1 ? String(row[idxCentroCosto] || '').trim() : '';
+      const rbdVal = idxRbd !== -1 ? String(row[idxRbd] || '').trim() : '';
+      const cargoRaw = idxCargo !== -1 ? String(row[idxCargo] || '').trim() : '';
+      const tipoContrato = idxTipoContrato !== -1 ? String(row[idxTipoContrato] || '').trim() : '';
+      const horasRaw = idxHoras !== -1 ? row[idxHoras] : 0;
 
       let rbd = rbdVal || '';
       if (!rbd && centroCosto) {
-        let hash = 0;
-        for (let i = 0; i < centroCosto.length; i++) {
-          hash = centroCosto.charCodeAt(i) + ((hash << 5) - hash);
+        // Try mapping from schoolNameToRbdMap
+        const cleanString = (str: string): string => {
+          return str
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/n[°ºo]\s*\d+/g, "")
+            .replace(/[^a-z0-9]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        };
+
+        const cleanCC = cleanString(centroCosto);
+        let foundRbd = '';
+        for (const [dbName, dbRbd] of Object.entries(schoolNameToRbdMap)) {
+          const cleanDbName = cleanString(dbName);
+          if (cleanDbName === cleanCC || cleanDbName.includes(cleanCC) || cleanCC.includes(cleanDbName)) {
+            foundRbd = dbRbd;
+            break;
+          }
         }
-        rbd = String(900000 + Math.abs(hash % 100000));
+        if (foundRbd) {
+          rbd = foundRbd;
+        } else {
+          // Fallback to hashing
+          let hash = 0;
+          for (let i = 0; i < centroCosto.length; i++) {
+            hash = centroCosto.charCodeAt(i) + ((hash << 5) - hash);
+          }
+          rbd = String(900000 + Math.abs(hash % 100000));
+        }
       }
 
       if (!rbd) {
@@ -548,7 +700,16 @@ export function parsearArchivoExcelOJson(
       }
 
       let comuna = comunaRaw.charAt(0).toUpperCase() + comunaRaw.slice(1).toLowerCase().trim();
-      if (!comuna) comuna = 'Chillán Viejo';
+      if (!comuna) {
+        const ccLower = centroCosto.toLowerCase();
+        if (ccLower.includes('bulnes')) comuna = 'Bulnes';
+        else if (ccLower.includes('carmen')) comuna = 'El Carmen';
+        else if (ccLower.includes('pemuco')) comuna = 'Pemuco';
+        else if (ccLower.includes('yungay')) comuna = 'Yungay';
+        else if (ccLower.includes('quillon') || ccLower.includes('quillón')) comuna = 'Quillón';
+        else if (ccLower.includes('san ignacio')) comuna = 'San Ignacio';
+        else comuna = 'Chillán Viejo';
+      }
 
       if (rbd && centroCosto) {
         if (!establecimientos.some(e => e.rbd === rbd)) {
@@ -575,7 +736,6 @@ export function parsearArchivoExcelOJson(
         };
         funcionarios.push(func);
       } else {
-        // Update fields if they were missing
         if (!func.genero && genero) func.genero = genero;
         if (!func.cargo && cargoRaw) func.cargo = cargoRaw;
       }
