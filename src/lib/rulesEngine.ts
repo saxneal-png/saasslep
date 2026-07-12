@@ -296,8 +296,8 @@ export function validarCargaDocente(
   // If replacement, it inherits the same, but let's check its own capacity.
   // If Licencia Médica, the contract's teaching workload is logically frozen (does not count towards this teacher).
   
-  // Let's check if the assignments contain any 1° a 4° Básico courses
-  const tieneCursosIvmEspecial = asignaciones.some(a => {
+  // 1. Calculate assigned hours per level category
+  const asignacionesEspeciales = asignaciones.filter(a => {
     const cName = (a.curso || '').toLowerCase();
     const is1To4 = cName.includes('1°') || cName.includes('2°') || cName.includes('3°') || cName.includes('4°') ||
                    cName.includes('1o') || cName.includes('2o') || cName.includes('3o') || cName.includes('4o');
@@ -305,6 +305,10 @@ export function validarCargaDocente(
     const isMedio = cName.includes('med') || cName.includes('sec');
     return is1To4 && isBasico && !isMedio;
   });
+
+  const hrsEspeciales = asignacionesEspeciales.reduce((sum, a) => sum + a.horas, 0);
+  const totalAsignadas = asignaciones.reduce((sum, a) => sum + a.horas, 0);
+  const propEspecial = totalAsignadas > 0 ? hrsEspeciales / totalAsignadas : 0;
 
   // Calculate non-pedagogical hours from custom cargos assigned to this teacher
   const horasCargo = cargos
@@ -314,14 +318,30 @@ export function validarCargaDocente(
   // The contract hours that can be split under Ley 20.903 are the total minus directivas, técnicas, and custom cargo hours
   const horasEfectivasContrato = Math.max(0, contrato.horas_totales - (contrato.horas_directivas || 0) - (contrato.horas_tecnico_pedagogicas || 0) - horasCargo);
 
-  const calculo = calcularLey20903(
-    horasEfectivasContrato,
-    establecimiento.ivm,
-    tieneCursosIvmEspecial
-  );
+  const esEspecialEscuela = establecimiento.ivm > 80;
+  
+  // Calculate weighted proportion (combination of 60/40 and 65/35 depending on courses)
+  const proporcionLectiva = esEspecialEscuela
+    ? parseFloat(((propEspecial * 60) + ((1 - propEspecial) * 65)).toFixed(2))
+    : 65;
+  const proporcionNoLectiva = esEspecialEscuela
+    ? parseFloat(((propEspecial * 40) + ((1 - propEspecial) * 35)).toFixed(2))
+    : 35;
 
-  // Set the total contract hours back on the calculation
-  calculo.horasContrato = contrato.horas_totales;
+  const horasLectivasMaximas = parseFloat(((horasEfectivasContrato * proporcionLectiva) / 100).toFixed(2));
+  const horasNoLectivasMinimas = parseFloat(((horasEfectivasContrato * proporcionNoLectiva) / 100).toFixed(2));
+
+  const calculo: ResultadoProporcionHoraria = {
+    horasContrato: contrato.horas_totales,
+    horasLectivasMaximas,
+    horasNoLectivasMinimas,
+    horasLectivasAsignadas: 0,
+    horasDisponibles: contrato.horas_totales,
+    leyEspecialAplicada: esEspecialEscuela && propEspecial > 0,
+    cumpleLey20903: true,
+    proporcionLectiva,
+    proporcionNoLectiva
+  };
 
   // If Licence, active teaching load is 0
   const horasLectivasAsignadas = contrato.estado === 'Licencia Médica' 
