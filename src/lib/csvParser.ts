@@ -480,24 +480,9 @@ export function parsearArchivoExcelOJson(
     const rawRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
     if (rawRows.length === 0) return;
 
-    // Find the header row
-    let headerRowIdx = -1;
-    let headers: string[] = [];
-    for (let i = 0; i < Math.min(rawRows.length, 12); i++) {
-      const row = rawRows[i];
-      if (!row || !Array.isArray(row)) continue;
-      const lowerRow = row.map(cell => String(cell || '').trim().toLowerCase());
-      if (lowerRow.some(cell => cell.includes('rbd') || cell.includes('r.u.n.') || cell.includes('run') || cell.includes('rut'))) {
-        headerRowIdx = i;
-        headers = row.map(cell => String(cell || '').trim());
-        break;
-      }
-    }
-
-    if (headerRowIdx === -1) {
-      headerRowIdx = 0;
-      headers = rawRows[0].map((cell: any) => String(cell || '').trim());
-    }
+    // Force Row 1 (index 0) as the headerRowIdx
+    const headerRowIdx = 0;
+    const headers = rawRows[0] ? rawRows[0].map((cell: any) => String(cell || '').trim()) : [];
 
     const rows: any[] = [];
     for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
@@ -610,20 +595,22 @@ export function parsearArchivoExcelOJson(
         const cargoRaw = cargoKey ? String(row[cargoKey] || '').trim() : 'Docente de Aula';
         
         // Estamento detection based on Legislación Laboral or Cargo
-        const legKey = headers.find(h => h.toLowerCase().includes('legislación laboral') || h.toLowerCase().includes('legislacion laboral') || h.toLowerCase().includes('ley') || h.toLowerCase().includes('estatuto'));
+        const legKey = headers.find(h => h.toLowerCase().includes('legislac') || h.toLowerCase().includes('laboral') || h.toLowerCase().includes('ley') || h.toLowerCase().includes('estatuto'));
         const legVal = legKey && row[legKey] ? String(row[legKey]).trim().toLowerCase() : '';
 
         let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
-        if (forceEstamento) {
-          estamento = forceEstamento;
-        } else if (legVal.includes('docente') || legVal.includes('estatuto')) {
+        if (legVal.includes('docente') || legVal.includes('estatuto')) {
           estamento = 'Docente';
-        } else if (legVal.includes('asistente')) {
+        } else if (legVal.includes('asistente') || legVal.includes('auxiliar')) {
           estamento = 'Asistente de la Educación';
         } else {
-          const c = cargoRaw.toLowerCase();
-          if (c.includes('docente') || c.includes('profesor') || c.includes('director') || c.includes('utp') || c.includes('educadora')) {
-            estamento = 'Docente';
+          if (forceEstamento) {
+            estamento = forceEstamento;
+          } else {
+            const c = cargoRaw.toLowerCase();
+            if (c.includes('docente') || c.includes('profesor') || c.includes('director') || c.includes('utp') || c.includes('educadora')) {
+              estamento = 'Docente';
+            }
           }
         }
 
@@ -685,7 +672,7 @@ export function parsearArchivoExcelOJson(
 
         const rbdKey = headers.find(h => h.toLowerCase() === 'rbd' || h.toLowerCase().includes('rbd_establecimiento'));
         const ccKey = headers.find(h => h.toLowerCase().includes('centro costo') || h.toLowerCase().includes('centro_costo') || h.toLowerCase().includes('establecimiento') || h.toLowerCase() === 'colegio');
-        const comunaKey = headers.find(h => h.toLowerCase() === 'comuna' || h.toLowerCase().includes('comuna_esta') || h.toLowerCase() === 'comuna');
+        const comunaKey = headers.find(h => h.toLowerCase().includes('comuna'));
 
         let rbd = rbdContext;
         let schoolName = '';
@@ -698,12 +685,31 @@ export function parsearArchivoExcelOJson(
           schoolComuna = String(row[comunaKey]).trim();
         }
 
+        const cleanString = (str: string): string => {
+          return str
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") // Remove accents
+            .replace(/n[°ºo]\s*\d+/g, "") // Remove "N° XX" or "N°XX"
+            .replace(/[^a-z0-9]/g, " ") // Keep only alphanumeric
+            .replace(/\s+/g, " ") // Normalize spaces
+            .trim();
+        };
+
         if (rbdKey && row[rbdKey]) {
           rbd = String(row[rbdKey]).trim();
         } else if (schoolName) {
-          const cleanNameKey = schoolName.toLowerCase().trim();
-          if (schoolNameToRbdMap[cleanNameKey]) {
-            rbd = schoolNameToRbdMap[cleanNameKey];
+          const cleanNameKey = cleanString(schoolName);
+          let foundRbd = '';
+          for (const [dbName, dbRbd] of Object.entries(schoolNameToRbdMap)) {
+            const cleanDbName = cleanString(dbName);
+            if (cleanDbName === cleanNameKey || cleanDbName.includes(cleanNameKey) || cleanNameKey.includes(cleanDbName)) {
+              foundRbd = dbRbd;
+              break;
+            }
+          }
+          if (foundRbd) {
+            rbd = foundRbd;
           } else {
             let hash = 0;
             for (let i = 0; i < schoolName.length; i++) {
