@@ -1,7 +1,7 @@
 // @ts-ignore
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion, CalidadJuridica, normalizarCargoDocente, Establecimiento } from './types';
+import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion, CalidadJuridica, normalizarCargoDocente, Establecimiento, EstadoContrato, LegislacionLaboral } from './types';
 
 // Normalization function for RUN
 export function normalizarRun(runRaw: any): string {
@@ -497,23 +497,55 @@ export function parsearArchivoExcelOJson(
       const nombres = String(row[3] || '').trim();
       const nombreCompleto = `${nombres} ${apePat} ${apeMat}`.replace(/\s+/g, ' ').trim();
 
-      const legLab = String(row[5] || '').trim().toLowerCase();
+      const sexVal = String(row[4] || '').trim().toUpperCase();
+      let genero = sexVal;
+      if (sexVal === 'M' || sexVal.startsWith('MASC')) genero = 'Masculino';
+      else if (sexVal === 'F' || sexVal.startsWith('FEM')) genero = 'Femenino';
+
+      const legLab = String(row[5] || '').trim();
       let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
-      if (legLab.includes('docente')) {
+      if (legLab.toLowerCase().includes('docente')) {
         estamento = 'Docente';
-      } else if (legLab.includes('asistente') || legLab.includes('auxiliar')) {
+      } else if (legLab.toLowerCase().includes('asistente') || legLab.toLowerCase().includes('auxiliar')) {
         estamento = 'Asistente de la Educación';
       } else if (forceEstamento) {
         estamento = forceEstamento;
       }
 
-      const horas = parseDecimalHours(row[16]);
+      let legislacion_laboral: LegislacionLaboral = estamento === 'Docente' ? 'Estatuto docente' : 'Asistentes de la educación';
+      const legLabClean = legLab.toLowerCase();
+      if (legLabClean.includes('docente')) {
+        legislacion_laboral = 'Estatuto docente';
+      } else if (legLabClean.includes('asistente') || legLabClean.includes('auxiliar')) {
+        legislacion_laboral = 'Asistentes de la educación';
+      }
+
+      const principalActivo = String(row[8] || '').trim().toUpperCase();
+      let estado: EstadoContrato = 'Activo';
+      if (principalActivo === 'NO' || principalActivo === 'INACTIVO' || principalActivo === '0') {
+        estado = 'Pendiente_Aprobacion';
+      }
+
       const programa = String(row[9] || '').trim();
       const comunaRaw = String(row[10] || '').trim();
       const centroCosto = String(row[11] || '').trim();
       const rbdVal = String(row[12] || '').trim();
+      const cargoRaw = String(row[13] || '').trim();
+      const tipoContrato = String(row[15] || '').trim();
+      const horasRaw = row[16];
 
-      const rbd = rbdVal || rbdContext;
+      let rbd = rbdVal || '';
+      if (!rbd && centroCosto) {
+        let hash = 0;
+        for (let i = 0; i < centroCosto.length; i++) {
+          hash = centroCosto.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        rbd = String(900000 + Math.abs(hash % 100000));
+      }
+
+      if (!rbd) {
+        rbd = rbdContext;
+      }
 
       let comuna = comunaRaw.charAt(0).toUpperCase() + comunaRaw.slice(1).toLowerCase().trim();
       if (!comuna) comuna = 'Chillán Viejo';
@@ -537,14 +569,29 @@ export function parsearArchivoExcelOJson(
           run,
           nombre: nombreCompleto || 'Funcionario Sin Nombre',
           estamento,
-          cargo: estamento === 'Docente' ? 'Docente de Aula' : 'Asistente',
+          cargo: cargoRaw || (estamento === 'Docente' ? 'Docente de Aula' : 'Asistente'),
+          genero,
           tramo: 'Sin Tramo'
         };
         funcionarios.push(func);
+      } else {
+        // Update fields if they were missing
+        if (!func.genero && genero) func.genero = genero;
+        if (!func.cargo && cargoRaw) func.cargo = cargoRaw;
       }
 
-      // Add or update Contrato (Aggregation logic)
+      // Quality mapping
+      let calidad_juridica: CalidadJuridica = 'A contrata';
+      const tipoContClean = tipoContrato.toLowerCase();
+      if (tipoContClean.includes('titular')) calidad_juridica = 'Titular';
+      else if (tipoContClean.includes('plazo fijo') || tipoContClean.includes('plazofijo')) calidad_juridica = 'Plazo fijo';
+      else if (tipoContClean.includes('indefinido')) calidad_juridica = 'Indefinido';
+      else if (tipoContClean.includes('reemplazo')) calidad_juridica = 'Reemplazo';
+      else if (tipoContClean.includes('habilitacion') || tipoContClean.includes('habilitación')) calidad_juridica = 'Habilitación especial';
+
+      // Add or update Contrato (Consolidación)
       let contrato = contratos.find(c => c.funcionario_run === run && c.rbd === rbd);
+      const horas = parseDecimalHours(horasRaw);
       
       if (!contrato) {
         const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -552,11 +599,11 @@ export function parsearArchivoExcelOJson(
           id: contrato_id,
           funcionario_run: run,
           rbd,
-          calidad_juridica: 'A contrata', 
+          calidad_juridica, 
           funcion_principal: func.cargo || 'Funcionario',
-          estado: 'Activo',
+          estado,
           horas_totales: 0,
-          legislacion_laboral: estamento === 'Docente' ? 'Estatuto docente' : 'Asistentes de la educación'
+          legislacion_laboral
         };
         contratos.push(nuevoContrato);
         contrato = nuevoContrato;
@@ -573,7 +620,8 @@ export function parsearArchivoExcelOJson(
         if (progKey.includes('sep')) origen = 'SEP';
         else if (progKey.includes('pie')) origen = 'PIE';
         else if (progKey.includes('reforzamiento')) origen = 'Reforzamiento';
-        else if (progKey.includes('retencion')) origen = 'Pro-retención';
+        else if (progKey.includes('retencion') || progKey.includes('retención')) origen = 'Pro-retención';
+        else if (progKey.includes('bicentenario')) origen = 'Liceos Bicentenarios';
         else if (progKey) origen = 'Otro';
 
         const finId = `f-${contrato.id}-${origen.replace(/\s+/g, '')}`;
