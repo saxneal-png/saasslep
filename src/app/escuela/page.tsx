@@ -3991,7 +3991,27 @@ export default function EscuelaDashboard() {
                       .filter(cp => cp.funcionario_run === editingFuncionario.run)
                       .reduce((sum, cp) => sum + cp.horas, 0);
                     const otrasHrsAsignadas = dirHrs + tecHrs + otrasFuncionesHrs;
-                    const vacantesHrs = Math.max(0, editContHoras - pedagogicas - otrasHrsAsignadas);
+                    const horasEfectivas = Math.max(0, editContHoras - otrasHrsAsignadas);
+
+                    // Separate pedagogical hours per cycle
+                    const asignacionesEspeciales = teacherAsigs.filter(a => {
+                      const cName = (a.curso || '').toLowerCase();
+                      const is1To4 = cName.includes('1°') || cName.includes('2°') || cName.includes('3°') || cName.includes('4°') ||
+                                     cName.includes('1o') || cName.includes('2o') || cName.includes('3o') || cName.includes('4o');
+                      const isBasico = cName.includes('bás') || cName.includes('bas') || cName.includes('primaria');
+                      const isMedio = cName.includes('med') || cName.includes('sec');
+                      return is1To4 && isBasico && !isMedio;
+                    });
+                    const pedagogicasEspeciales = asignacionesEspeciales.reduce((sum, a) => sum + a.horas, 0);
+                    const pedagogicasEstandar = Math.max(0, pedagogicas - pedagogicasEspeciales);
+
+                    // Calculate required non-lectiva planning hours for each pool
+                    const noLectivasRequeridasEspecial = parseFloat((pedagogicasEspeciales * 40 / 60).toFixed(1));
+                    const noLectivasRequeridasEstandar = parseFloat((pedagogicasEstandar * 35 / 65).toFixed(1));
+                    const noLectivasTotalesRequeridas = parseFloat((noLectivasRequeridasEspecial + noLectivasRequeridasEstandar).toFixed(1));
+                    
+                    const totalLectivaNoLectivaUsada = parseFloat((pedagogicas + noLectivasTotalesRequeridas).toFixed(1));
+                    const vacantesHrs = Math.max(0, horasEfectivas - totalLectivaNoLectivaUsada);
 
                     return (
                       <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm space-y-4">
@@ -3999,74 +4019,70 @@ export default function EscuelaDashboard() {
                           <span className="font-bold text-slate-800">Proporcionalidad Horaria Aula / Ley 20.903</span>
                           {leyCalculo.leyEspecialAplicada ? (
                             <span className="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-[9px] uppercase tracking-wider border border-amber-200 animate-pulse">
-                              Excepción 60/40 Aplicada (Concentración {'>'} 80% en 1° a 4° Básico) 🌟
+                              Carga Horaria Mixta Activa (IVM {'>'} 80% en Primer Ciclo) 🌟
                             </span>
                           ) : (
-                            <span className="bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded text-[9px]">
+                            <span className="bg-slate-100 text-slate-650 font-bold px-2 py-0.5 rounded text-[9px]">
                               Estándar 65/35 (Proporción General)
                             </span>
                           )}
                         </div>
 
-                        {/* Breakdown grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                          <div className="bg-blue-50/40 border border-blue-100 p-2 rounded-lg">
-                            <p className="text-[9px] text-slate-400 font-bold uppercase">Lectivas Aula Max.</p>
-                            <p className="text-base font-black text-slep-blue mt-0.5">{leyCalculo.horasLectivasMaximas} hrs</p>
-                            <p className="text-[8px] text-slate-400">Ratio {leyCalculo.proporcionLectiva}%</p>
+                        {/* Separate pools representation */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {/* Special cycle 60/40 */}
+                          <div className="border rounded-xl p-3 bg-slate-50/50 space-y-2">
+                            <p className="font-bold text-slate-700 text-[11px] border-b pb-1">🍎 Primer Ciclo Básico (Excepción 60/40)</p>
+                            <div className="grid grid-cols-2 gap-2 text-center">
+                              <div className="bg-white p-2 rounded border border-slate-150">
+                                <span className="block text-[8px] uppercase text-slate-400 font-bold">Aula Asignadas</span>
+                                <strong className="text-xs text-slate-800">{pedagogicasEspeciales} hrs</strong>
+                              </div>
+                              <div className="bg-white p-2 rounded border border-slate-150">
+                                <span className="block text-[8px] uppercase text-slate-400 font-bold">Planificación Req.</span>
+                                <strong className="text-xs text-slate-800">{noLectivasRequeridasEspecial} hrs</strong>
+                              </div>
+                            </div>
                           </div>
-                          <div className="bg-slate-50 border p-2 rounded-lg">
-                            <p className="text-[9px] text-slate-400 font-bold uppercase">No Lectivas Min.</p>
-                            <p className="text-base font-black text-slate-800 mt-0.5">{leyCalculo.horasNoLectivasMinimas} hrs</p>
-                            <p className="text-[8px] text-slate-400">Ratio {leyCalculo.proporcionNoLectiva}%</p>
-                          </div>
-                          <div className="bg-indigo-50/40 border border-indigo-100 p-2 rounded-lg">
-                            <p className="text-[9px] text-slate-400 font-bold uppercase">Aula Asignadas</p>
-                            <p className="text-base font-black text-indigo-700 mt-0.5">{pedagogicas} hrs</p>
-                            <p className="text-[8px] text-indigo-400">Asignadas a cursos</p>
-                          </div>
-                          <div className={`border p-2 rounded-lg ${vacantesHrs > 0.05 ? 'bg-amber-50 border-amber-200' : 'bg-slate-50'}`}>
-                            <p className="text-[9px] text-slate-400 font-bold uppercase">Horas Vacantes</p>
-                            <p className={`text-base font-black mt-0.5 ${vacantesHrs > 0.05 ? 'text-amber-800' : 'text-slate-500'}`}>
-                              {vacantesHrs.toFixed(1)} hrs
-                            </p>
-                            <p className="text-[8px] text-slate-400">Por destinar</p>
+
+                          {/* Standard cycle 65/35 */}
+                          <div className="border rounded-xl p-3 bg-slate-50/50 space-y-2">
+                            <p className="font-bold text-slate-700 text-[11px] border-b pb-1">🏫 Otros Niveles (Estándar 65/35)</p>
+                            <div className="grid grid-cols-2 gap-2 text-center">
+                              <div className="bg-white p-2 rounded border border-slate-150">
+                                <span className="block text-[8px] uppercase text-slate-400 font-bold">Aula Asignadas</span>
+                                <strong className="text-xs text-slate-800">{pedagogicasEstandar} hrs</strong>
+                              </div>
+                              <div className="bg-white p-2 rounded border border-slate-150">
+                                <span className="block text-[8px] uppercase text-slate-400 font-bold">Planificación Req.</span>
+                                <strong className="text-xs text-slate-800">{noLectivasRequeridasEstandar} hrs</strong>
+                              </div>
+                            </div>
                           </div>
                         </div>
 
-                        {/* Comparison of Proportions */}
-                        {(() => {
-                          const horasEfectivas = Math.max(0, editContHoras - dirHrs - tecHrs - otrasFuncionesHrs);
-                          const standardMaxLect = parseFloat((horasEfectivas * 0.65).toFixed(1));
-                          const standardMinNoLect = parseFloat((horasEfectivas * 0.35).toFixed(1));
-                          const especialMaxLect = parseFloat((horasEfectivas * 0.60).toFixed(1));
-                          const especialMinNoLect = parseFloat((horasEfectivas * 0.40).toFixed(1));
-
-                          return (
-                            <div className="bg-slate-50 border border-slate-200/60 rounded-lg p-3 text-xs space-y-2">
-                              <p className="font-bold text-slate-700">⚖️ Proyecciones de Proporcionalidad (Sobre {horasEfectivas} hrs de docencia efectiva)</p>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div className={`p-2.5 rounded-lg border text-[11px] ${!leyCalculo.leyEspecialAplicada ? 'bg-blue-50 border-blue-200 font-medium' : 'bg-white border-slate-200'}`}>
-                                  <div className="flex justify-between items-center mb-1">
-                                    <span className="font-bold text-slate-800">Estándar 65 / 35 {!leyCalculo.leyEspecialAplicada && '⭐ (Activa)'}</span>
-                                  </div>
-                                  <p className="text-[10px] text-slate-550">Lectivas Máx: <strong className="text-slate-700">{standardMaxLect} hrs</strong></p>
-                                  <p className="text-[10px] text-slate-550">No Lectivas Mín: <strong className="text-slate-700">{standardMinNoLect} hrs</strong></p>
-                                </div>
-                                <div className={`p-2.5 rounded-lg border text-[11px] ${leyCalculo.leyEspecialAplicada ? 'bg-amber-50 border-amber-300 font-medium animate-pulse' : 'bg-white border-slate-200'}`}>
-                                  <div className="flex justify-between items-center mb-1">
-                                    <span className="font-bold text-slate-800">Excepción 60 / 40 {leyCalculo.leyEspecialAplicada && '⭐ (Activa)'}</span>
-                                  </div>
-                                  <p className="text-[10px] text-slate-550">Lectivas Máx: <strong className="text-slate-700">{especialMaxLect} hrs</strong></p>
-                                  <p className="text-[10px] text-slate-550">No Lectivas Mín: <strong className="text-slate-700">{especialMinNoLect} hrs</strong></p>
-                                </div>
-                              </div>
-                              <p className="text-[9px] text-slate-400 italic">
-                                * La proporción 60/40 aplica si el docente dicta clases en 1° a 4° Básico y la vulnerabilidad (IVM) del colegio es superior al 80%.
-                              </p>
+                        {/* Consolidated Resumen */}
+                        <div className="border border-slate-200/60 rounded-xl p-3 bg-blue-50/10 space-y-2">
+                          <p className="font-bold text-slate-700 text-[11px] border-b pb-1">📊 Resumen de Jornada y Conciliación</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                            <div className="bg-white p-2 rounded border">
+                              <span className="block text-[8px] uppercase text-slate-400">Total Aula</span>
+                              <strong className="text-indigo-700">{pedagogicas} hrs</strong>
                             </div>
-                          );
-                        })()}
+                            <div className="bg-white p-2 rounded border">
+                              <span className="block text-[8px] uppercase text-slate-400">Planif. Total</span>
+                              <strong className="text-slate-700">{noLectivasTotalesRequeridas} hrs</strong>
+                            </div>
+                            <div className="bg-white p-2 rounded border">
+                              <span className="block text-[8px] uppercase text-slate-400">Docencia Total</span>
+                              <strong className="text-slate-800">{totalLectivaNoLectivaUsada} / {horasEfectivas} hrs</strong>
+                            </div>
+                            <div className={`p-2 rounded border font-bold ${vacantesHrs > 0.05 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`}>
+                              <span className="block text-[8px] uppercase text-slate-450">Horas Vacantes</span>
+                              <strong>{vacantesHrs.toFixed(1)} hrs</strong>
+                            </div>
+                          </div>
+                        </div>
 
                         {/* Other hours distribution block */}
                         <div className="bg-slate-50 border rounded-lg p-3 text-xs space-y-1">
@@ -4092,8 +4108,8 @@ export default function EscuelaDashboard() {
                         }`}>
                           <span>
                             {leyCalculo.cumpleLey20903 
-                              ? '✓ Cumple con la reglamentación legal de docencia de aula.' 
-                              : `⚠️ Exceso detectado: Se asignan ${pedagogicas} hrs de aula frente al máximo legal de ${leyCalculo.horasLectivasMaximas} hrs.`}
+                              ? '✓ Cumple con la proporción legal de aula y planificación.' 
+                              : `⚠️ Exceso detectado: La jornada total de docencia requerida (${totalLectivaNoLectivaUsada} hrs) supera las horas efectivas del contrato (${horasEfectivas} hrs).`}
                           </span>
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             leyCalculo.cumpleLey20903 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
@@ -4247,6 +4263,88 @@ export default function EscuelaDashboard() {
                     </div>
                   </div>
                 </div>
+
+                {/* Validador de Proporción Ley 20.903 */}
+                {(() => {
+                  const isFirstCycle = ['1° Básico', '2° Básico', '3° Básico', '4° Básico', '1°', '2°', '3°', '4°']
+                    .some(x => editingCurso.nombre.includes(x)) &&
+                    (editingCurso.nombre.toLowerCase().includes('bás') || editingCurso.nombre.toLowerCase().includes('bas') || editingCurso.nombre.toLowerCase().includes('primaria')) &&
+                    !editingCurso.nombre.toLowerCase().includes('med');
+
+                  if (!isFirstCycle) return null;
+
+                  // Find unique contracts assigned to this course
+                  const assignedContRuns = Array.from(new Set(editCursoAsignaciones.map(a => {
+                    const cont = contratos.find(c => c.id === a.contrato_id);
+                    return cont ? cont.funcionario_run : null;
+                  }).filter(Boolean)));
+
+                  const overloadingTeachers = assignedContRuns.map(run => {
+                    const cont = contratos.find(c => c.funcionario_run === run);
+                    if (!cont) return null;
+                    const func = funcionarios.find(f => f.run === run);
+                    if (!func || func.estamento !== 'Docente') return null;
+
+                    // Get other assignments excluding this course
+                    const otherCourseAsigs = asignaciones.filter(a => a.contrato_id === cont.id && a.curso !== editingCurso.nombre);
+                    // Add the current modal assignments for this contract
+                    const thisCourseAsigs = editCursoAsignaciones.filter(a => a.contrato_id === cont.id);
+                    const tempAsigs = [...otherCourseAsigs, ...thisCourseAsigs];
+
+                    const metrics = colegio ? validarCargaDocente(cont, colegio, tempAsigs, cargosPersonalizados) : null;
+                    if (metrics && !metrics.cumpleLey20903) {
+                      return {
+                        nombre: func.nombre,
+                        maxLect: metrics.horasLectivasMaximas,
+                        asigLect: metrics.horasLectivasAsignadas,
+                        exceso: parseFloat((metrics.horasLectivasAsignadas - metrics.horasLectivasMaximas).toFixed(1)),
+                        ratio: metrics.proporcionLectiva
+                      };
+                    }
+                    return null;
+                  }).filter(Boolean);
+
+                  return (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 text-xs">
+                      <div className="flex justify-between items-center">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-1">
+                          ⚖️ Validador de Proporcionalidad Docente (Primer Ciclo Básico)
+                        </h4>
+                        {colegio && colegio.ivm > 80 ? (
+                          <span className="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-[9px] uppercase border border-amber-250 animate-pulse">
+                            Excepción 60/40 Activa (IVM {colegio.ivm}%) 🌟
+                          </span>
+                        ) : (
+                          <span className="bg-slate-200 text-slate-650 font-bold px-2 py-0.5 rounded text-[9px]">
+                            Estándar 65/35 Activo (IVM {colegio ? colegio.ivm : 0}%)
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        Cualquier docente asignado a este curso tendrá sus horas calculadas proporcionalmente bajo el ratio de este curso para las horas dictadas aquí.
+                      </p>
+                      
+                      {overloadingTeachers.length > 0 ? (
+                        <div className="mt-2 space-y-1.5">
+                          {overloadingTeachers.map((t: any, idx) => (
+                            <div key={idx} className="bg-red-50 border border-red-200 text-red-900 px-3 py-2 rounded-lg flex justify-between items-center animate-bounce">
+                              <span>
+                                ⚠️ El docente <strong>{t.nombre}</strong> excede su jornada lectiva máxima. (Ratio aplicado: {t.ratio}%)
+                              </span>
+                              <span className="bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded text-[10px]">
+                                Asignadas: {t.asigLect} / {t.maxLect} hrs (+{t.exceso} hrs de exceso)
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 px-3 py-2 rounded-lg text-[10px] font-semibold">
+                          ✓ Todos los docentes asignados cumplen con la proporción legal de docencia de aula.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Table of Subjects */}
                 <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
