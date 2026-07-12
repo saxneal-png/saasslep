@@ -563,7 +563,7 @@ export function parsearArchivoExcelOJson(
 
     const hasRun = headersLower.some(h => h.includes('run') || h.includes('r.u.n.') || h.includes('rut'));
     if (hasRun) {
-      rows.forEach(row => {
+      rows.forEach((row, idx) => {
         const runKey = headers.find(h => h.toLowerCase().includes('run') || h.toLowerCase().includes('r.u.n.') || h.toLowerCase().includes('rut'));
         if (!runKey || !row[runKey]) return;
         const run = normalizarRun(row[runKey]);
@@ -589,7 +589,7 @@ export function parsearArchivoExcelOJson(
           genero = genero.toUpperCase().startsWith('M') ? 'Masculino' : genero.toUpperCase().startsWith('F') ? 'Femenino' : genero;
         }
 
-        const ingresoKey = headers.find(h => h.toLowerCase().includes('ingreso') || h.toLowerCase().includes('fecha de ingreso') || h.toLowerCase() === 'fecha_ingreso');
+        const ingresoKey = headers.find(h => h.toLowerCase().includes('ingreso') || h.toLowerCase().includes('fecha de ingreso') || h.toLowerCase() === 'fecha_ingreso' || h.toLowerCase() === 'ingreso');
         const fecha_ingreso = ingresoKey ? String(row[ingresoKey] || '').trim() : undefined;
 
         const tramoKey = headers.find(h => h.toLowerCase().includes('tramo'));
@@ -607,9 +607,18 @@ export function parsearArchivoExcelOJson(
 
         const cargoKey = headers.find(h => h.toLowerCase() === 'cargo' || h.toLowerCase().includes('función') || h.toLowerCase().includes('funcion') || h.toLowerCase() === 'cargo/funcion');
         const cargoRaw = cargoKey ? String(row[cargoKey] || '').trim() : 'Docente de Aula';
+        
+        // Estamento detection based on Legislación Laboral or Cargo
+        const legKey = headers.find(h => h.toLowerCase().includes('legislación laboral') || h.toLowerCase().includes('legislacion laboral') || h.toLowerCase().includes('ley') || h.toLowerCase().includes('estatuto'));
+        const legVal = legKey && row[legKey] ? String(row[legKey]).trim().toLowerCase() : '';
+
         let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
         if (forceEstamento) {
           estamento = forceEstamento;
+        } else if (legVal.includes('docente') || legVal.includes('estatuto')) {
+          estamento = 'Docente';
+        } else if (legVal.includes('asistente')) {
+          estamento = 'Asistente de la Educación';
         } else {
           const c = cargoRaw.toLowerCase();
           if (c.includes('docente') || c.includes('profesor') || c.includes('director') || c.includes('utp') || c.includes('educadora')) {
@@ -654,15 +663,23 @@ export function parsearArchivoExcelOJson(
         if (regularCols.length > 1) {
           regular = regularCols.reduce((sum, col) => sum + parseFormulaHours(row[col]), 0);
         }
-        const pieCols = headers.filter(h => h.toLowerCase().includes('pie'));
+        const pieCols = headers.filter(h => h.toLowerCase().includes('pie') && h.toLowerCase() !== 'programa');
         if (pieCols.length > 1) {
           pie = pieCols.reduce((sum, col) => sum + parseFormulaHours(row[col]), 0);
         }
 
-        let sumaSubvenciones = regular + sep + pie;
-        if (sumaSubvenciones === 0 && horas_totales > 0) {
-          regular = horas_totales;
-          sumaSubvenciones = horas_totales;
+        // Program column logic
+        if (regular === 0 && sep === 0 && pie === 0 && horas_totales > 0) {
+          const programKey = headers.find(h => h.toLowerCase() === 'programa');
+          const programVal = programKey && row[programKey] ? String(row[programKey]).trim().toLowerCase() : '';
+          
+          if (programVal.includes('pie')) {
+            pie = horas_totales;
+          } else if (programVal.includes('sep')) {
+            sep = horas_totales;
+          } else {
+            regular = horas_totales;
+          }
         }
 
         const rbdKey = headers.find(h => h.toLowerCase() === 'rbd' || h.toLowerCase().includes('rbd_establecimiento'));
@@ -683,7 +700,24 @@ export function parsearArchivoExcelOJson(
           schoolComuna = String(row[comunaKey]).trim();
         }
 
-        const cleanComuna = schoolComuna.charAt(0).toUpperCase() + schoolComuna.slice(1).toLowerCase();
+        let cleanComuna = schoolComuna.charAt(0).toUpperCase() + schoolComuna.slice(1).toLowerCase().trim();
+        if (cleanComuna.toLowerCase().startsWith('chillan')) {
+          cleanComuna = 'Chillán';
+        } else if (cleanComuna.toLowerCase().startsWith('yungay')) {
+          cleanComuna = 'Yungay';
+        } else if (cleanComuna.toLowerCase().includes('carmen')) {
+          cleanComuna = 'El Carmen';
+        } else if (cleanComuna.toLowerCase().includes('coihueco')) {
+          cleanComuna = 'Coihueco';
+        } else if (cleanComuna.toLowerCase().includes('pemuco')) {
+          cleanComuna = 'Pemuco';
+        } else if (cleanComuna.toLowerCase().includes('pinto')) {
+          cleanComuna = 'Pinto';
+        } else if (cleanComuna.toLowerCase().includes('quillon') || cleanComuna.toLowerCase().includes('quillón')) {
+          cleanComuna = 'Quillón';
+        } else if (cleanComuna.toLowerCase().includes('san ignacio')) {
+          cleanComuna = 'San Ignacio';
+        }
 
         if (rbd && schoolName) {
           if (!establecimientos.some(e => e.rbd === rbd)) {
@@ -710,7 +744,7 @@ export function parsearArchivoExcelOJson(
           });
         }
 
-        const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
+        const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}-${idx}`;
         const legislacion_laboral = estamento === 'Docente' ? 'Estatuto docente' : 'Asistentes de la educación';
         
         const aulaKey = headers.find(h => h.toLowerCase().includes('horas aula') || h.toLowerCase().includes('horas_aula') || h.toLowerCase() === 'aula');

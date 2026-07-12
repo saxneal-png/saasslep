@@ -494,6 +494,75 @@ export const api = {
     }
   },
 
+  upsertFuncionariosBulk: async (funcionarios: Funcionario[]): Promise<void> => {
+    const list = funcionarios.map(f => {
+      const dataObj = { ...f };
+      if (dataObj.estamento === 'Docente' || dataObj.estamento === 'Asistente de la Educación') {
+        dataObj.grupo_estamento = 'P02_Educacion';
+      }
+      return dataObj;
+    });
+    
+    const batchSize = 100;
+    for (let i = 0; i < list.length; i += batchSize) {
+      const batch = list.slice(i, i + batchSize);
+      const { error } = await supabase.from('funcionarios').upsert(batch);
+      if (error) {
+        console.warn("⚠️ Error en Supabase bulk funcionarios, guardando en local:", error);
+        const current = dbLocal.funcionarios;
+        for (const item of batch) {
+          const idx = current.findIndex(f => f.run === item.run);
+          if (idx >= 0) current[idx] = { ...current[idx], ...item };
+          else current.push(item);
+        }
+        dbLocal.funcionarios = current;
+      }
+    }
+  },
+
+  upsertContratosCompletoBulk: async (
+    contratos: Contrato[], 
+    financiamientos: FinanciamientoContrato[]
+  ): Promise<void> => {
+    const batchSize = 100;
+    for (let i = 0; i < contratos.length; i += batchSize) {
+      const batch = contratos.slice(i, i + batchSize);
+      const { error } = await supabase.from('contratos').upsert(batch);
+      if (error) {
+        console.warn("⚠️ Error en Supabase bulk contratos:", error);
+        const current = dbLocal.contratos;
+        for (const item of batch) {
+          const idx = current.findIndex(c => c.id === item.id);
+          if (idx >= 0) current[idx] = item;
+          else current.push(item);
+        }
+        dbLocal.contratos = current;
+      }
+    }
+
+    const contratoIds = contratos.map(c => c.id);
+    for (let i = 0; i < contratoIds.length; i += batchSize) {
+      const batchIds = contratoIds.slice(i, i + batchSize);
+      const { error } = await supabase.from('financiamientos').delete().in('contrato_id', batchIds);
+      if (error) {
+        console.warn("⚠️ Error in bulk delete financiamientos:", error);
+      }
+    }
+
+    for (let i = 0; i < financiamientos.length; i += batchSize) {
+      const batch = financiamientos.slice(i, i + batchSize);
+      if (batch.length > 0) {
+        const { error } = await supabase.from('financiamientos').insert(batch);
+        if (error) {
+          console.warn("⚠️ Error in bulk insert financiamientos:", error);
+          let localFins = dbLocal.financiamientoContratos.filter(f => !contratoIds.includes(f.contrato_id));
+          localFins.push(...financiamientos);
+          dbLocal.financiamientoContratos = localFins;
+        }
+      }
+    }
+  },
+
   deleteFuncionario: async (run: string): Promise<void> => {
     const { error } = await supabase.from('funcionarios').delete().eq('run', run);
     if (error) {

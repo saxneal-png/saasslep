@@ -583,7 +583,7 @@ export default function SostenedorDashboard() {
     if (!pendingIngest) return;
     const { funcionarios, contratos, financiamientos, alertas, establecimientos, selectedSchools, targetEstamento, isAsistente } = pendingIngest;
     
-    setIngestProgress(0);
+    setIngestProgress(5);
     try {
       const filteredEsts = establecimientos.filter(e => selectedSchools.includes(e.rbd));
       const filteredConts = contratos.filter(c => selectedSchools.includes(c.rbd));
@@ -595,38 +595,34 @@ export default function SostenedorDashboard() {
       });
       const filteredAlts = alertas.filter(a => selectedSchools.includes(a.rbd));
 
-      const totalItems = filteredEsts.length + filteredFuncs.length + filteredConts.length + filteredAlts.length;
-      let processed = 0;
-
-      const updateProgress = () => {
-        processed++;
-        setIngestProgress(Math.round((processed / Math.max(totalItems, 1)) * 100));
-      };
-
+      // 1. Create Comunas & Establishments
+      setIngestProgress(15);
       for (const est of filteredEsts) {
         if (est.comuna) {
           await api.addComuna(est.comuna);
         }
         await api.upsertEstablecimiento(est);
-        updateProgress();
       }
 
-      for (const f of filteredFuncs) {
-        await api.upsertFuncionario(f);
-        updateProgress();
+      // 2. Create Funcionarios in Bulk
+      setIngestProgress(40);
+      if (filteredFuncs.length > 0) {
+        await (api as any).upsertFuncionariosBulk(filteredFuncs);
       }
 
-      for (const c of filteredConts) {
-        const cFins = filteredFins.filter(f => f.contrato_id === c.id);
-        await api.upsertContratoCompleto(c, cFins);
-        updateProgress();
+      // 3. Create Contratos & Financiamientos in Bulk
+      setIngestProgress(75);
+      if (filteredConts.length > 0) {
+        await (api as any).upsertContratosCompletoBulk(filteredConts, filteredFins);
       }
 
+      // 4. Create Alertas
+      setIngestProgress(90);
       for (const a of filteredAlts) {
         await api.crearAlerta(a);
-        updateProgress();
       }
 
+      setIngestProgress(100);
       await loadAllData();
       
       const successMsg = `✅ Éxito: Se procesaron y confirmaron ${filteredConts.length} contratos y ${filteredEsts.length} establecimientos.`;
@@ -2843,6 +2839,61 @@ export default function SostenedorDashboard() {
                   <span className="text-base font-bold text-slate-800">{pendingIngest.contratos.length}</span>
                 </div>
               </div>
+
+              {/* Comunas Selector */}
+              {(() => {
+                const uniqueComunas = Array.from(new Set(
+                  pendingIngest.schoolsList.map(rbd => {
+                    const est = establecimientos.find(e => e.rbd === rbd) || pendingIngest.establecimientos.find(e => e.rbd === rbd);
+                    return est?.comuna;
+                  }).filter(Boolean)
+                ));
+
+                if (uniqueComunas.length <= 1) return null;
+
+                return (
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold text-slate-500">Selección rápida por Comuna:</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {uniqueComunas.map(comuna => {
+                        const rbdListForComuna = pendingIngest.schoolsList.filter(rbd => {
+                          const est = establecimientos.find(e => e.rbd === rbd) || pendingIngest.establecimientos.find(e => e.rbd === rbd);
+                          return est?.comuna === comuna;
+                        });
+
+                        const isAllSelected = rbdListForComuna.every(rbd => pendingIngest.selectedSchools.includes(rbd));
+                        const isSomeSelected = rbdListForComuna.some(rbd => pendingIngest.selectedSchools.includes(rbd)) && !isAllSelected;
+
+                        return (
+                          <button
+                            key={comuna}
+                            type="button"
+                            disabled={ingestProgress !== null}
+                            onClick={() => {
+                              let updated = [...pendingIngest.selectedSchools];
+                              if (isAllSelected) {
+                                updated = updated.filter(rbd => !rbdListForComuna.includes(rbd));
+                              } else {
+                                updated = Array.from(new Set([...updated, ...rbdListForComuna]));
+                              }
+                              setPendingIngest(prev => prev ? { ...prev, selectedSchools: updated } : null);
+                            }}
+                            className={`px-2.5 py-1 text-[10px] rounded-md font-bold transition-all border cursor-pointer ${
+                              isAllSelected 
+                                ? 'bg-slep-blue text-white border-slep-blue' 
+                                : isSomeSelected
+                                ? 'bg-blue-50 text-slep-blue border-blue-200'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            📍 {comuna} ({rbdListForComuna.length})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
