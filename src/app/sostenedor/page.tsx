@@ -479,12 +479,18 @@ export default function SostenedorDashboard() {
           { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
         ];
 
+        const schoolMap: Record<string, string> = {};
+        establecimientos.forEach(e => {
+          schoolMap[e.nombre.toLowerCase().trim()] = e.rbd;
+        });
+
         const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts, establecimientos: newEsts } = parsearArchivoExcelOJson(
           buffer,
           file.name,
           '10201',
           controlPrevioMock,
-          targetEstamento
+          targetEstamento,
+          schoolMap
         );
 
         const fileSchools = Array.from(new Set([
@@ -546,12 +552,18 @@ export default function SostenedorDashboard() {
       const buffer = event.target?.result as ArrayBuffer;
       try {
         const controlPrevioMock: any[] = [];
+        const schoolMap: Record<string, string> = {};
+        establecimientos.forEach(e => {
+          schoolMap[e.nombre.toLowerCase().trim()] = e.rbd;
+        });
+
         const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts, establecimientos: newEsts } = parsearArchivoExcelOJson(
           buffer,
           file.name,
           '10201',
           controlPrevioMock,
-          targetEstamento
+          targetEstamento,
+          schoolMap
         );
 
         const fileSchools = Array.from(new Set([

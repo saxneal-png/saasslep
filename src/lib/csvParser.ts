@@ -448,7 +448,8 @@ export function parsearArchivoExcelOJson(
   fileName: string,
   rbdContext: string,
   controlPrevioJson?: Array<{ run: string; funcion?: string; horas?: number }>,
-  forceEstamento?: 'Docente' | 'Asistente de la Educación'
+  forceEstamento?: 'Docente' | 'Asistente de la Educación',
+  schoolNameToRbdMap: Record<string, string> = {}
 ): ParseResult {
   const funcionarios: Funcionario[] = [];
   const contratos: Contrato[] = [];
@@ -690,14 +691,26 @@ export function parsearArchivoExcelOJson(
         let schoolName = '';
         let schoolComuna = 'Chillán Viejo';
 
-        if (rbdKey && row[rbdKey]) {
-          rbd = String(row[rbdKey]).trim();
-        }
         if (ccKey && row[ccKey]) {
           schoolName = String(row[ccKey]).trim();
         }
         if (comunaKey && row[comunaKey]) {
           schoolComuna = String(row[comunaKey]).trim();
+        }
+
+        if (rbdKey && row[rbdKey]) {
+          rbd = String(row[rbdKey]).trim();
+        } else if (schoolName) {
+          const cleanNameKey = schoolName.toLowerCase().trim();
+          if (schoolNameToRbdMap[cleanNameKey]) {
+            rbd = schoolNameToRbdMap[cleanNameKey];
+          } else {
+            let hash = 0;
+            for (let i = 0; i < schoolName.length; i++) {
+              hash = schoolName.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            rbd = String(900000 + Math.abs(hash % 100000));
+          }
         }
 
         let cleanComuna = schoolComuna.charAt(0).toUpperCase() + schoolComuna.slice(1).toLowerCase().trim();

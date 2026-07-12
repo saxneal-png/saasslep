@@ -293,12 +293,18 @@ export default function ProfesionalDashboard() {
           { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
         ];
 
+        const schoolMap: Record<string, string> = {};
+        establecimientos.forEach(e => {
+          schoolMap[e.nombre.toLowerCase().trim()] = e.rbd;
+        });
+
         const parsed = parsearArchivoExcelOJson(
           buffer,
           file.name,
           escuelasAsignadasRbd[0] || '10202',
           controlPrevioMock,
-          targetEstamento
+          targetEstamento,
+          schoolMap
         );
 
         if (parsed.establecimientos && parsed.establecimientos.length > 0) {
@@ -378,12 +384,18 @@ export default function ProfesionalDashboard() {
       const buffer = event.target?.result as ArrayBuffer;
       try {
         const controlPrevioMock: any[] = [];
+        const schoolMap: Record<string, string> = {};
+        establecimientos.forEach(e => {
+          schoolMap[e.nombre.toLowerCase().trim()] = e.rbd;
+        });
+
         const parsed = parsearArchivoExcelOJson(
           buffer,
           file.name,
           escuelasAsignadasRbd[0] || '10202',
           controlPrevioMock,
-          targetEstamento
+          targetEstamento,
+          schoolMap
         );
 
         if (parsed.establecimientos && parsed.establecimientos.length > 0) {
