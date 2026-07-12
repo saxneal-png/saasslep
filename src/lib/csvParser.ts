@@ -480,132 +480,29 @@ export function parsearArchivoExcelOJson(
     const rawRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
     if (rawRows.length === 0) return;
 
-    // Find the header row by searching for "run", "r.u.n.", "rut"
-    let headerRowIdx = -1;
-    for (let i = 0; i < Math.min(rawRows.length, 12); i++) {
-      const row = rawRows[i];
-      if (!row || !Array.isArray(row)) continue;
-      const hasRun = row.some(cell => {
-        const val = String(cell || '').trim().toLowerCase();
-        return val === 'run' || val === 'r.u.n.' || val === 'rut' || val.includes('r.u.n') || val === 'r.u.n';
-      });
-      if (hasRun) {
-        headerRowIdx = i;
-        break;
-      }
-    }
+    // Fuerza este mapa de índices basado en la estructura real de tu archivo:
+    const idxRun = 0;
+    const idxPat = 1;
+    const idxMat = 2;
+    const idxNom = 3;
+    const idxSexo = 4;
+    const idxLeg = 5;
+    const idxActivo = 8;
+    const idxProg = 9;
+    const idxComuna = 10;
+    const idxCentroCosto = 11;
+    const idxRbd = 12;
+    const idxCargo = 13;
+    const idxTipoContrato = 15;
+    const idxHoras = 16;
 
-    // Default indices mapping (as fallback / manual user specs)
-    let idxRun = 0;
-    let idxPat = 1;
-    let idxMat = 2;
-    let idxNom = 3;
-    let idxSexo = 4;
-    let idxLeg = 5;
-    let idxActivo = 8;
-    let idxProg = 9;
-    let idxComuna = 10;
-    let idxCentroCosto = 11;
-    let idxRbd = 12;
-    let idxCargo = 13;
-    let idxTipoContrato = 15;
-    let idxHoras = 16;
-
-    // If we found a header row, map indices dynamically based on names
-    if (headerRowIdx !== -1) {
-      const headers = rawRows[headerRowIdx].map(cell => String(cell || '').trim().toLowerCase());
-      
-      const findIndex = (kws: string[]) => {
-        return headers.findIndex(h => kws.some(kw => h.includes(kw)));
-      };
-
-      const findExactIndex = (kws: string[]) => {
-        return headers.findIndex(h => kws.some(kw => h === kw));
-      };
-
-      let r = findExactIndex(['run', 'r.u.n.', 'rut', 'r.u.n']);
-      if (r === -1) r = findIndex(['run', 'rut']);
-      if (r !== -1) idxRun = r;
-
-      let pat = findIndex(['paterno']);
-      if (pat !== -1) idxPat = pat;
-
-      let mat = findIndex(['materno']);
-      if (mat !== -1) idxMat = mat;
-
-      let nom = findExactIndex(['nombre', 'nombres']);
-      if (nom === -1) nom = findIndex(['nombre', 'nombres']);
-      if (nom !== -1) idxNom = nom;
-
-      let sex = findIndex(['sexo', 'genero', 'género']);
-      if (sex !== -1) idxSexo = sex;
-
-      let leg = findIndex(['legislac', 'laboral', 'ley']);
-      if (leg !== -1) idxLeg = leg;
-
-      let act = findIndex(['principal', 'activo', 'estado']);
-      if (act !== -1) idxActivo = act;
-
-      let prog = findIndex(['programa', 'subvencion', 'subvención']);
-      if (prog !== -1) idxProg = prog;
-
-      let com = findIndex(['comuna']);
-      if (com !== -1) idxComuna = com;
-
-      let cc = findIndex(['centro costo', 'centro_costo', 'establecimiento', 'colegio']);
-      if (cc !== -1) idxCentroCosto = cc;
-
-      let rbd = findIndex(['rbd']);
-      if (rbd !== -1) idxRbd = rbd;
-
-      let crg = findIndex(['cargo', 'función', 'funcion']);
-      if (crg !== -1) idxCargo = crg;
-
-      let tc = findIndex(['tipo contrato', 'calidad']);
-      if (tc !== -1) idxTipoContrato = tc;
-
-      let hrs = findIndex(['horas']);
-      if (hrs !== -1) idxHoras = hrs;
-    } else {
-      // No header found. Let's auto-detect between original file format vs user custom format
-      // by inspecting the first row with a valid RUN.
-      let firstDataRow: any[] | null = null;
-      for (let i = 0; i < rawRows.length; i++) {
-        const row = rawRows[i];
-        if (!row || !Array.isArray(row)) continue;
-        const run = normalizarRun(row[0]);
-        if (run && run.length > 5) {
-          firstDataRow = row;
-          break;
-        }
-      }
-
-      if (firstDataRow) {
-        const col10Val = String(firstDataRow[10] || '').toUpperCase();
-        const col11Val = String(firstDataRow[11] || '').toUpperCase();
-        
-        const looksLikeCC = col10Val.includes('COLEGIO') || col10Val.includes('ESCUELA') || col10Val.includes('LICEO') || col10Val.includes('CENTRO');
-        const looksLikeCargo = col11Val.includes('DOCENTE') || col11Val.includes('AULA') || col11Val.includes('ASISTENTE') || col11Val.includes('AUXILIAR');
-        
-        if (looksLikeCC || looksLikeCargo) {
-          // Original spreadsheet format:
-          idxComuna = -1;
-          idxCentroCosto = 10;
-          idxCargo = 11;
-          idxTipoContrato = 12;
-          idxHoras = 13;
-          idxRbd = -1;
-        }
-      }
-    }
-
-    const startRow = headerRowIdx !== -1 ? headerRowIdx + 1 : 1;
+    const startRow = 1;
 
     for (let i = startRow; i < rawRows.length; i++) {
       const row = rawRows[i];
       if (!row || !Array.isArray(row)) continue;
 
-      const runRaw = idxRun !== -1 ? row[idxRun] : undefined;
+      const runRaw = row[idxRun];
       if (runRaw === undefined || runRaw === null || runRaw === '' || String(runRaw).trim() === 'NaN') {
         continue;
       }
@@ -618,17 +515,17 @@ export function parsearArchivoExcelOJson(
       const run = normalizarRun(runRaw);
       if (!run) continue;
 
-      const apePat = idxPat !== -1 ? String(row[idxPat] || '').trim() : '';
-      const apeMat = idxMat !== -1 ? String(row[idxMat] || '').trim() : '';
-      const nombres = idxNom !== -1 ? String(row[idxNom] || '').trim() : '';
+      const apePat = String(row[idxPat] || '').trim();
+      const apeMat = String(row[idxMat] || '').trim();
+      const nombres = String(row[idxNom] || '').trim();
       const nombreCompleto = `${nombres} ${apePat} ${apeMat}`.replace(/\s+/g, ' ').trim();
 
-      const sexVal = idxSexo !== -1 ? String(row[idxSexo] || '').trim().toUpperCase() : '';
+      const sexVal = String(row[idxSexo] || '').trim().toUpperCase();
       let genero = sexVal;
       if (sexVal === 'M' || sexVal.startsWith('MASC')) genero = 'Masculino';
       else if (sexVal === 'F' || sexVal.startsWith('FEM')) genero = 'Femenino';
 
-      const legLab = idxLeg !== -1 ? String(row[idxLeg] || '').trim() : '';
+      const legLab = String(row[idxLeg] || '').trim();
       let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
       if (legLab.toLowerCase().includes('docente')) {
         estamento = 'Docente';
@@ -646,19 +543,19 @@ export function parsearArchivoExcelOJson(
         legislacion_laboral = 'Asistentes de la educación';
       }
 
-      const principalActivo = idxActivo !== -1 ? String(row[idxActivo] || '').trim().toUpperCase() : '';
+      const principalActivo = String(row[idxActivo] || '').trim().toUpperCase();
       let estado: EstadoContrato = 'Activo';
       if (principalActivo === 'NO' || principalActivo === 'INACTIVO' || principalActivo === '0') {
         estado = 'Pendiente_Aprobacion';
       }
 
-      const programa = idxProg !== -1 ? String(row[idxProg] || '').trim() : '';
-      const comunaRaw = idxComuna !== -1 ? String(row[idxComuna] || '').trim() : '';
-      const centroCosto = idxCentroCosto !== -1 ? String(row[idxCentroCosto] || '').trim() : '';
-      const rbdVal = idxRbd !== -1 ? String(row[idxRbd] || '').trim() : '';
-      const cargoRaw = idxCargo !== -1 ? String(row[idxCargo] || '').trim() : '';
-      const tipoContrato = idxTipoContrato !== -1 ? String(row[idxTipoContrato] || '').trim() : '';
-      const horasRaw = idxHoras !== -1 ? row[idxHoras] : 0;
+      const programa = String(row[idxProg] || '').trim();
+      const comunaRaw = String(row[idxComuna] || '').trim();
+      const centroCosto = String(row[idxCentroCosto] || '').trim();
+      const rbdVal = String(row[idxRbd] || '').trim();
+      const cargoRaw = String(row[idxCargo] || '').trim();
+      const tipoContrato = String(row[idxTipoContrato] || '').trim();
+      const horasRaw = row[idxHoras];
 
       let rbd = rbdVal || '';
       if (!rbd && centroCosto) {
