@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { api, dbLocal, supabase } from '@/lib/supabase';
-import { parsearNominaCsv, normalizarRun, parsearRemuneracionesCsv } from '@/lib/csvParser';
+import { parsearNominaCsv, normalizarRun, parsearRemuneracionesCsv, parsearArchivoExcelOJson } from '@/lib/csvParser';
 import { 
   Establecimiento, 
   Funcionario, 
@@ -452,49 +452,53 @@ export default function SostenedorDashboard() {
   };
 
   const processNominaFile = (file: File) => {
-    // Read first 1000 characters to detect scheme (DOC_RUN vs ASISTENTE_RUN)
-    const tempReader = new FileReader();
-    tempReader.onload = (e) => {
-      const headerSample = e.target?.result as string;
-      const isAsistente = headerSample.includes('ASISTENTE_RUN') || headerSample.includes('asistente_run');
-      const encoding = isAsistente ? 'UTF-8' : 'ISO-8859-1';
+    const isAsistente = file.name.toLowerCase().includes('asis') || file.name.toLowerCase().includes('asistente');
+    const targetEstamento = isAsistente ? 'Asistente de la Educación' : 'Docente';
 
-      const mainReader = new FileReader();
-      mainReader.onload = async (event) => {
-        const text = event.target?.result as string;
-        try {
-          const controlPrevioMock = [
-            { run: '12.345.678-9', funcion: 'Docente de Aula', horas: 44 },
-            { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
-          ];
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const buffer = event.target?.result as ArrayBuffer;
+      try {
+        const controlPrevioMock = [
+          { run: '12.345.678-9', funcion: 'Docente de Aula', horas: 44 },
+          { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
+        ];
 
-          const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts } = parsearNominaCsv(
-            text,
-            '10201',
-            controlPrevioMock,
-            isAsistente ? 'Asistente de la Educación' : 'Docente'
-          );
+        const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts, establecimientos: newEsts } = parsearArchivoExcelOJson(
+          buffer,
+          file.name,
+          '10201',
+          controlPrevioMock,
+          targetEstamento
+        );
 
-          for (const f of newFuncs) {
-            await api.upsertFuncionario(f);
+        if (newEsts && newEsts.length > 0) {
+          for (const est of newEsts) {
+            if (est.comuna) {
+              await api.addComuna(est.comuna);
+            }
+            await api.upsertEstablecimiento(est);
           }
-          for (const c of newConts) {
-            const cFins = newFins.filter(f => f.contrato_id === c.id);
-            await api.upsertContratoCompleto(c, cFins);
-          }
-          for (const a of newAlts) {
-            await api.crearAlerta(a);
-          }
-
-          await loadAllData();
-          setImportLogs(`✅ Éxito: Se procesaron ${newConts.length} registros (${isAsistente ? 'Asistentes' : 'Docentes'}) y se generaron ${newAlts.length} alertas.`);
-        } catch (err: any) {
-          setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
         }
-      };
-      mainReader.readAsText(file, encoding);
+
+        for (const f of newFuncs) {
+          await api.upsertFuncionario(f);
+        }
+        for (const c of newConts) {
+          const cFins = newFins.filter(f => f.contrato_id === c.id);
+          await api.upsertContratoCompleto(c, cFins);
+        }
+        for (const a of newAlts) {
+          await api.crearAlerta(a);
+        }
+
+        await loadAllData();
+        setImportLogs(`✅ Éxito: Se procesaron ${newConts.length} registros (${targetEstamento})${newEsts?.length ? `, ${newEsts.length} establecimientos` : ''} y se generaron ${newAlts.length} alertas.`);
+      } catch (err: any) {
+        setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
+      }
     };
-    tempReader.readAsText(file.slice(0, 1000), 'UTF-8');
+    reader.readAsArrayBuffer(file);
   };
 
   const handleDragAsis = (e: React.DragEvent) => {
@@ -524,44 +528,48 @@ export default function SostenedorDashboard() {
   };
 
   const processAsistenteFile = (file: File) => {
-    const tempReader = new FileReader();
-    tempReader.onload = (e) => {
-      const headerSample = e.target?.result as string;
-      const isAsistente = headerSample.includes('ASISTENTE_RUN') || headerSample.includes('asistente_run');
-      const encoding = isAsistente ? 'UTF-8' : 'ISO-8859-1';
+    const targetEstamento = 'Asistente de la Educación';
 
-      const mainReader = new FileReader();
-      mainReader.onload = async (event) => {
-        const text = event.target?.result as string;
-        try {
-          const controlPrevioMock: any[] = [];
-          const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts } = parsearNominaCsv(
-            text,
-            '10201',
-            controlPrevioMock,
-            isAsistente ? 'Asistente de la Educación' : 'Docente'
-          );
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const buffer = event.target?.result as ArrayBuffer;
+      try {
+        const controlPrevioMock: any[] = [];
+        const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts, establecimientos: newEsts } = parsearArchivoExcelOJson(
+          buffer,
+          file.name,
+          '10201',
+          controlPrevioMock,
+          targetEstamento
+        );
 
-          for (const f of newFuncs) {
-            await api.upsertFuncionario(f);
+        if (newEsts && newEsts.length > 0) {
+          for (const est of newEsts) {
+            if (est.comuna) {
+              await api.addComuna(est.comuna);
+            }
+            await api.upsertEstablecimiento(est);
           }
-          for (const c of newConts) {
-            const cFins = newFins.filter(f => f.contrato_id === c.id);
-            await api.upsertContratoCompleto(c, cFins);
-          }
-          for (const a of newAlts) {
-            await api.crearAlerta(a);
-          }
-
-          await loadAllData();
-          setImportLogsAsis(`✅ Éxito: Se procesaron ${newConts.length} registros (${isAsistente ? 'Asistentes' : 'Docentes'}) y se generaron ${newAlts.length} alertas.`);
-        } catch (err: any) {
-          setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
         }
-      };
-      mainReader.readAsText(file, encoding);
+
+        for (const f of newFuncs) {
+          await api.upsertFuncionario(f);
+        }
+        for (const c of newConts) {
+          const cFins = newFins.filter(f => f.contrato_id === c.id);
+          await api.upsertContratoCompleto(c, cFins);
+        }
+        for (const a of newAlts) {
+          await api.crearAlerta(a);
+        }
+
+        await loadAllData();
+        setImportLogsAsis(`✅ Éxito: Se procesaron ${newConts.length} registros (${targetEstamento})${newEsts?.length ? `, ${newEsts.length} establecimientos` : ''} y se generaron ${newAlts.length} alertas.`);
+      } catch (err: any) {
+        setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
+      }
     };
-    tempReader.readAsText(file.slice(0, 1000), 'UTF-8');
+    reader.readAsArrayBuffer(file);
   };
 
   // Drag-and-drop Plan Estudio JSON
@@ -1617,7 +1625,7 @@ export default function SostenedorDashboard() {
               <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                 <span>📥</span> Cargar Nómina Docentes (Profesores)
               </h2>
-              <p className="text-xs text-slate-500 mt-1">Sube el archivo físico `.csv` o `.json` con la nómina de docentes.</p>
+              <p className="text-xs text-slate-500 mt-1">Sube el archivo físico `.csv`, `.json` o Excel (`.xlsx`, `.xls`) con la nómina de docentes.</p>
 
               <div 
                 onDragEnter={handleDrag} 
@@ -1632,13 +1640,13 @@ export default function SostenedorDashboard() {
                 <input 
                   ref={fileInputRef}
                   type="file" 
-                  accept=".csv,.json"
+                  accept=".csv,.json,.xlsx,.xls"
                   className="hidden" 
                   onChange={handleFileChange}
                 />
                 <span className="text-2xl block mb-2">👨‍🏫</span>
                 <p className="text-xs font-bold text-slate-700">Arrastra nómina de Docentes o haz clic</p>
-                <p className="text-[10px] text-slate-500 mt-1">Soporta formatos .CSV y .JSON únicamente</p>
+                <p className="text-[10px] text-slate-500 mt-1">Soporta formatos .CSV, .JSON y Excel (.xlsx, .xls)</p>
               </div>
 
               {importLogs && (
@@ -1653,7 +1661,7 @@ export default function SostenedorDashboard() {
               <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                 <span>📥</span> Cargar Nómina Asistentes de la Educación
               </h2>
-              <p className="text-xs text-slate-500 mt-1">Sube el archivo físico `.csv` o `.json` con asistentes, psicólogos, administrativos, etc.</p>
+              <p className="text-xs text-slate-500 mt-1">Sube el archivo físico `.csv`, `.json` o Excel (`.xlsx`, `.xls`) con asistentes, psicólogos, administrativos, etc.</p>
 
               <div 
                 onDragEnter={handleDragAsis} 
@@ -1668,13 +1676,13 @@ export default function SostenedorDashboard() {
                 <input 
                   ref={fileInputRefAsis}
                   type="file" 
-                  accept=".csv,.json"
+                  accept=".csv,.json,.xlsx,.xls"
                   className="hidden" 
                   onChange={handleFileChangeAsis}
                 />
                 <span className="text-2xl block mb-2">🤝</span>
                 <p className="text-xs font-bold text-slate-700">Arrastra nómina de Asistentes o haz clic</p>
-                <p className="text-[10px] text-slate-500 mt-1">Soporta formatos .CSV and .JSON únicamente</p>
+                <p className="text-[10px] text-slate-500 mt-1">Soporta formatos .CSV, .JSON y Excel (.xlsx, .xls)</p>
               </div>
 
               {importLogsAsis && (

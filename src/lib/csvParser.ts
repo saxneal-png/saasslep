@@ -1,6 +1,7 @@
 // @ts-ignore
 import Papa from 'papaparse';
-import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion, CalidadJuridica, normalizarCargoDocente } from './types';
+import * as XLSX from 'xlsx';
+import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion, CalidadJuridica, normalizarCargoDocente, Establecimiento } from './types';
 
 // Normalization function for RUN
 export function normalizarRun(runRaw: any): string {
@@ -53,6 +54,7 @@ export interface ParseResult {
   contratos: Contrato[];
   financiamientos: FinanciamientoContrato[];
   alertas: AlertaConciliacion[];
+  establecimientos?: Establecimiento[];
 }
 
 export function parsearNominaCsv(
@@ -439,6 +441,299 @@ export function parsearNominaCsv(
   });
 
   return { funcionarios, contratos, financiamientos, alertas };
+}
+
+export function parsearArchivoExcelOJson(
+  fileBuffer: ArrayBuffer,
+  fileName: string,
+  rbdContext: string,
+  controlPrevioJson?: Array<{ run: string; funcion?: string; horas?: number }>,
+  forceEstamento?: 'Docente' | 'Asistente de la Educación'
+): ParseResult {
+  const funcionarios: Funcionario[] = [];
+  const contratos: Contrato[] = [];
+  const financiamientos: FinanciamientoContrato[] = [];
+  const alertas: AlertaConciliacion[] = [];
+  const establecimientos: Establecimiento[] = [];
+
+  // Check if it's JSON or text first
+  let isJson = false;
+  let jsonString = '';
+  try {
+    const decoder = new TextDecoder('utf-8');
+    jsonString = decoder.decode(fileBuffer).trim();
+    if (jsonString.startsWith('{') || jsonString.startsWith('[')) {
+      isJson = true;
+    }
+  } catch (e) {}
+
+  if (isJson) {
+    return parsearNominaCsv(jsonString, rbdContext, controlPrevioJson, forceEstamento);
+  }
+
+  // Parse using SheetJS (XLSX/XLS or CSV)
+  const workbook = XLSX.read(fileBuffer, { type: 'array' });
+  
+  workbook.SheetNames.forEach(sheetName => {
+    const sheet = workbook.Sheets[sheetName];
+    const rawRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
+    if (rawRows.length === 0) return;
+
+    // Find the header row
+    let headerRowIdx = -1;
+    let headers: string[] = [];
+    for (let i = 0; i < Math.min(rawRows.length, 12); i++) {
+      const row = rawRows[i];
+      if (!row || !Array.isArray(row)) continue;
+      const lowerRow = row.map(cell => String(cell || '').trim().toLowerCase());
+      if (lowerRow.some(cell => cell.includes('rbd') || cell.includes('r.u.n.') || cell.includes('run') || cell.includes('rut'))) {
+        headerRowIdx = i;
+        headers = row.map(cell => String(cell || '').trim());
+        break;
+      }
+    }
+
+    if (headerRowIdx === -1) {
+      headerRowIdx = 0;
+      headers = rawRows[0].map((cell: any) => String(cell || '').trim());
+    }
+
+    const rows: any[] = [];
+    for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
+      const row = rawRows[i];
+      if (!row || !Array.isArray(row)) continue;
+      const obj: any = {};
+      let hasData = false;
+      headers.forEach((header, colIdx) => {
+        if (!header) return;
+        const val = row[colIdx];
+        obj[header] = val !== undefined ? val : '';
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          hasData = true;
+        }
+      });
+      if (hasData) {
+        rows.push(obj);
+      }
+    }
+
+    const headersLower = headers.map(h => h.toLowerCase());
+    const hasRbd = headersLower.some(h => h === 'rbd');
+    const hasEstablecimientoName = headersLower.some(h => h.includes('establecimiento') || h.includes('colegio') || h.includes('nombre'));
+    const isEstablishmentSheet = hasRbd && hasEstablecimientoName && !headersLower.some(h => h.includes('run') || h.includes('r.u.n.') || h.includes('rut') || h.includes('contrato'));
+
+    if (isEstablishmentSheet) {
+      rows.forEach(row => {
+        const rbdKey = headers.find(h => h.toLowerCase() === 'rbd');
+        const nameKey = headers.find(h => h.toLowerCase().includes('establecimiento') || h.toLowerCase().includes('colegio') || h.toLowerCase() === 'nombre');
+        const comunaKey = headers.find(h => h.toLowerCase().includes('comuna'));
+        
+        if (!rbdKey || !row[rbdKey]) return;
+        const rbd = String(row[rbdKey]).trim();
+        const nombre = nameKey ? String(row[nameKey] || '').trim() : 'Establecimiento ' + rbd;
+        
+        let comuna = 'Chillán Viejo';
+        if (comunaKey && row[comunaKey]) {
+          comuna = String(row[comunaKey]).trim();
+        } else {
+          const normSheet = sheetName.toLowerCase();
+          if (normSheet.includes('bulnes')) comuna = 'Bulnes';
+          else if (normSheet.includes('chillan viejo') || normSheet.includes('chillán viejo')) comuna = 'Chillán Viejo';
+          else if (normSheet.includes('el carmen')) comuna = 'El Carmen';
+          else if (normSheet.includes('pemuco')) comuna = 'Pemuco';
+          else if (normSheet.includes('san ignacio')) comuna = 'San Ignacio';
+          else if (normSheet.includes('yungay')) comuna = 'Yungay';
+          else if (normSheet.includes('quillon') || normSheet.includes('quillón')) comuna = 'Quillón';
+        }
+
+        const cleanComuna = comuna.charAt(0).toUpperCase() + comuna.slice(1).toLowerCase();
+        
+        if (!establecimientos.some(e => e.rbd === rbd)) {
+          establecimientos.push({
+            rbd,
+            nombre,
+            ivm: 75.0,
+            comuna: cleanComuna,
+            regimen: 'JEC'
+          });
+        }
+      });
+      return;
+    }
+
+    const hasRun = headersLower.some(h => h.includes('run') || h.includes('r.u.n.') || h.includes('rut'));
+    if (hasRun) {
+      rows.forEach(row => {
+        const runKey = headers.find(h => h.toLowerCase().includes('run') || h.toLowerCase().includes('r.u.n.') || h.toLowerCase().includes('rut'));
+        if (!runKey || !row[runKey]) return;
+        const run = normalizarRun(row[runKey]);
+        if (!run) return;
+
+        let nombre = 'Funcionario Sin Nombre';
+        const nameKey = headers.find(h => h.toLowerCase() === 'nombre' || h.toLowerCase() === 'nombres' || h.toLowerCase() === 'nombres/apellidos');
+        const paternoKey = headers.find(h => h.toLowerCase().includes('paterno'));
+        const maternoKey = headers.find(h => h.toLowerCase().includes('materno'));
+        
+        if (paternoKey || maternoKey) {
+          const nom = nameKey ? String(row[nameKey] || '').trim() : '';
+          const pat = paternoKey ? String(row[paternoKey] || '').trim() : '';
+          const mat = maternoKey ? String(row[maternoKey] || '').trim() : '';
+          nombre = `${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim();
+        } else if (nameKey) {
+          nombre = String(row[nameKey]).trim();
+        }
+
+        const sexKey = headers.find(h => h.toLowerCase() === 'sexo' || h.toLowerCase() === 'genero' || h.toLowerCase() === 'género');
+        let genero = sexKey ? String(row[sexKey] || '').trim() : undefined;
+        if (genero) {
+          genero = genero.toUpperCase().startsWith('M') ? 'Masculino' : genero.toUpperCase().startsWith('F') ? 'Femenino' : genero;
+        }
+
+        const ingresoKey = headers.find(h => h.toLowerCase().includes('ingreso') || h.toLowerCase().includes('fecha de ingreso') || h.toLowerCase() === 'fecha_ingreso');
+        const fecha_ingreso = ingresoKey ? String(row[ingresoKey] || '').trim() : undefined;
+
+        const tramoKey = headers.find(h => h.toLowerCase().includes('tramo'));
+        let tramo: any = tramoKey ? String(row[tramoKey] || '').trim() : undefined;
+        if (tramo) {
+          const tr = tramo.toLowerCase();
+          if (tr.includes('inicial')) tramo = 'Inicial';
+          else if (tr.includes('temprano')) tramo = 'Temprano';
+          else if (tr.includes('avanzado')) tramo = 'Avanzado';
+          else if (tr.includes('experto i') || tr.includes('experto 1')) tramo = 'Experto I';
+          else if (tr.includes('experto ii') || tr.includes('experto 2')) tramo = 'Experto II';
+          else if (tr.includes('acceso')) tramo = 'Acceso';
+          else tramo = 'Sin Tramo';
+        }
+
+        const cargoKey = headers.find(h => h.toLowerCase() === 'cargo' || h.toLowerCase().includes('función') || h.toLowerCase().includes('funcion') || h.toLowerCase() === 'cargo/funcion');
+        const cargoRaw = cargoKey ? String(row[cargoKey] || '').trim() : 'Docente de Aula';
+        let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
+        if (forceEstamento) {
+          estamento = forceEstamento;
+        } else {
+          const c = cargoRaw.toLowerCase();
+          if (c.includes('docente') || c.includes('profesor') || c.includes('director') || c.includes('utp') || c.includes('educadora')) {
+            estamento = 'Docente';
+          }
+        }
+
+        const cargo = estamento === 'Docente' ? normalizarCargoDocente(cargoRaw) : cargoRaw;
+
+        const contratoKey = headers.find(h => h.toLowerCase().includes('contrato') || h.toLowerCase().includes('calidad') || h.toLowerCase() === 'tipo contrato' || h.toLowerCase() === 'calidad juridica');
+        const rawContrato = contratoKey ? String(row[contratoKey] || '').trim().toLowerCase() : 'a contrata';
+        let calidad_juridica: CalidadJuridica = 'A contrata';
+        if (rawContrato.includes('titular')) calidad_juridica = 'Titular';
+        else if (rawContrato.includes('plazo fijo')) calidad_juridica = 'Plazo fijo';
+        else if (rawContrato.includes('indefinido')) calidad_juridica = 'Indefinido';
+        else if (rawContrato.includes('reemplazo pie')) calidad_juridica = 'Reemplazo PIE';
+        else if (rawContrato.includes('reemplazo sep')) calidad_juridica = 'Reemplazo SEP';
+        else if (rawContrato.includes('reemplazo')) calidad_juridica = 'Reemplazo';
+        else if (rawContrato.includes('habilitacion') || rawContrato.includes('habilitación')) calidad_juridica = 'Habilitación especial';
+
+        const parseFormulaHours = (val: any): number => {
+          if (val === undefined || val === null || val === '') return 0;
+          const str = String(val).trim();
+          if (str.includes('+')) {
+            return str.split('+').reduce((sum, part) => sum + parseDecimalHours(part), 0);
+          }
+          return parseDecimalHours(val);
+        };
+
+        const hoursKey = headers.find(h => h.toLowerCase().includes('horas contrato') || h.toLowerCase().includes('horas_contrato') || h.toLowerCase().includes('horas totales') || h.toLowerCase() === 'horas');
+        const horas_totales = hoursKey ? parseFormulaHours(row[hoursKey]) : 30;
+
+        const regularKey = headers.find(h => h.toLowerCase().includes('regular') || h.toLowerCase() === 'subvencion regular' || h.toLowerCase() === 'normal');
+        const sepKey = headers.find(h => h.toLowerCase() === 'sep' || h.toLowerCase().includes('sep') || h.toLowerCase() === 'subvencion sep');
+        const pieKey = headers.find(h => h.toLowerCase() === 'pie' || h.toLowerCase().includes('pie') || h.toLowerCase() === 'subvencion pie');
+        
+        let regular = regularKey ? parseFormulaHours(row[regularKey]) : 0;
+        let sep = sepKey ? parseFormulaHours(row[sepKey]) : 0;
+        let pie = pieKey ? parseFormulaHours(row[pieKey]) : 0;
+
+        const regularCols = headers.filter(h => h.toLowerCase().includes('regular') || h.toLowerCase().includes('normal'));
+        if (regularCols.length > 1) {
+          regular = regularCols.reduce((sum, col) => sum + parseFormulaHours(row[col]), 0);
+        }
+        const pieCols = headers.filter(h => h.toLowerCase().includes('pie'));
+        if (pieCols.length > 1) {
+          pie = pieCols.reduce((sum, col) => sum + parseFormulaHours(row[col]), 0);
+        }
+
+        let sumaSubvenciones = regular + sep + pie;
+        if (sumaSubvenciones === 0 && horas_totales > 0) {
+          regular = horas_totales;
+          sumaSubvenciones = horas_totales;
+        }
+
+        const ccKey = headers.find(h => h.toLowerCase().includes('centro costo') || h.toLowerCase().includes('establecimiento') || h.toLowerCase() === 'rbd');
+        let rbd = rbdContext;
+        if (ccKey && row[ccKey]) {
+          const ccVal = String(row[ccKey]).trim();
+          if (/^\d+$/.test(ccVal)) {
+            rbd = ccVal;
+          }
+        }
+
+        if (!funcionarios.some(f => f.run === run)) {
+          funcionarios.push({
+            run,
+            nombre,
+            estamento,
+            cargo,
+            genero,
+            fecha_ingreso_sistema: fecha_ingreso,
+            fecha_ingreso_establecimiento: fecha_ingreso,
+            tramo: tramo || 'Sin Tramo'
+          });
+        }
+
+        const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
+        const legislacion_laboral = estamento === 'Docente' ? 'Estatuto docente' : 'Asistentes de la educación';
+        
+        const aulaKey = headers.find(h => h.toLowerCase().includes('horas aula') || h.toLowerCase().includes('horas_aula') || h.toLowerCase() === 'aula');
+        const horas_aula = aulaKey ? parseFormulaHours(row[aulaKey]) : undefined;
+
+        contratos.push({
+          id: contrato_id,
+          funcionario_run: run,
+          rbd,
+          calidad_juridica,
+          funcion_principal: cargo,
+          estado: 'Activo',
+          horas_totales,
+          legislacion_laboral,
+          horas_aula
+        });
+
+        if (regular > 0) {
+          financiamientos.push({
+            id: `f-${contrato_id}-Regular`,
+            contrato_id,
+            origen_fondo: 'Subvención Regular',
+            horas: regular
+          });
+        }
+        if (sep > 0) {
+          financiamientos.push({
+            id: `f-${contrato_id}-SEP`,
+            contrato_id,
+            origen_fondo: 'SEP',
+            horas: sep
+          });
+        }
+        if (pie > 0) {
+          financiamientos.push({
+            id: `f-${contrato_id}-PIE`,
+            contrato_id,
+            origen_fondo: 'PIE',
+            horas: pie
+          });
+        }
+      });
+    }
+  });
+
+  return { funcionarios, contratos, financiamientos, alertas, establecimientos };
 }
 
 export function parsearRemuneracionesCsv(csvContent: string): RegistroRemuneracion[] {

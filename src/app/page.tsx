@@ -14,6 +14,10 @@ export default function Home() {
   const [profesionalRun, setProfesionalRun] = useState('11.111.111-1');
   const [directorRbd, setDirectorRbd] = useState('10202');
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
+  
+  const [usuario, setUsuario] = useState('');
+  const [contrasena, setContrasena] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     async function loadSchools() {
@@ -28,6 +32,12 @@ export default function Home() {
   }, []);
 
   const handleLogin = () => {
+    if (usuario.trim() !== '16445435' || contrasena !== '123456') {
+      setErrorMsg('⚠️ RUN de usuario o Contraseña incorrectos.');
+      return;
+    }
+    setErrorMsg('');
+
     // Save simulated session parameters to sessionStorage/localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem('slep_sim_role', selectedRole);
@@ -155,6 +165,34 @@ export default function Home() {
                   )}
                 </select>
               </div>
+            )}
+
+            {/* Login Credentials Inputs */}
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">RUN de Usuario</label>
+                <input 
+                  type="text" 
+                  placeholder="Ej: 16445435"
+                  className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm"
+                  value={usuario}
+                  onChange={(e) => setUsuario(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Contraseña</label>
+                <input 
+                  type="password" 
+                  placeholder="••••••"
+                  className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm"
+                  value={contrasena}
+                  onChange={(e) => setContrasena(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {errorMsg && (
+              <p className="text-xs text-rose-500 font-semibold">{errorMsg}</p>
             )}
 
             {/* Action button */}

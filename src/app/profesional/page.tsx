@@ -15,7 +15,7 @@ import {
   Funcionario,
   RegistroRemuneracion
 } from '@/lib/types';
-import { parsearNominaCsv, parsearRemuneracionesCsv } from '@/lib/csvParser';
+import { parsearNominaCsv, parsearRemuneracionesCsv, parsearArchivoExcelOJson } from '@/lib/csvParser';
 import { conciliarFuncionario, calcularCargaDocente } from '@/lib/rulesEngine';
 
 export default function ProfesionalDashboard() {
@@ -281,57 +281,67 @@ export default function ProfesionalDashboard() {
   };
 
   const processNominaFile = (file: File) => {
-    const tempReader = new FileReader();
-    tempReader.onload = (e) => {
-      const headerSample = e.target?.result as string;
-      const isAsistente = headerSample.includes('ASISTENTE_RUN') || headerSample.includes('asistente_run');
-      const encoding = isAsistente ? 'UTF-8' : 'ISO-8859-1';
+    const isAsistente = file.name.toLowerCase().includes('asis') || file.name.toLowerCase().includes('asistente');
+    const targetEstamento = isAsistente ? 'Asistente de la Educación' : 'Docente';
 
-      const mainReader = new FileReader();
-      mainReader.onload = async (event) => {
-        const text = event.target?.result as string;
-        try {
-          const controlPrevioMock = [
-            { run: '12.345.678-9', funcion: 'Docente de Aula', horas: 44 },
-            { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
-          ];
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const buffer = event.target?.result as ArrayBuffer;
+      try {
+        const controlPrevioMock = [
+          { run: '12.345.678-9', funcion: 'Docente de Aula', horas: 44 },
+          { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
+        ];
 
-          const parsed = parsearNominaCsv(text, escuelasAsignadasRbd[0] || '10202', controlPrevioMock, isAsistente ? 'Asistente de la Educación' : 'Docente');
+        const parsed = parsearArchivoExcelOJson(
+          buffer,
+          file.name,
+          escuelasAsignadasRbd[0] || '10202',
+          controlPrevioMock,
+          targetEstamento
+        );
 
-          const invalidRows = parsed.contratos.filter(c => !escuelasAsignadasRbd.includes(c.rbd));
-          if (invalidRows.length > 0) {
-            const badRbds = Array.from(new Set(invalidRows.map(c => c.rbd)));
-            alert(`❌ Error de Permiso: No tiene autorización para subir nóminas de los establecimientos con RBD: ${badRbds.join(', ')}. Solo puede administrar las escuelas asignadas a su tutela.`);
-            return;
+        if (parsed.establecimientos && parsed.establecimientos.length > 0) {
+          for (const est of parsed.establecimientos) {
+            if (est.comuna) {
+              await api.addComuna(est.comuna);
+            }
+            await api.upsertEstablecimiento(est);
           }
-
-          for (const f of parsed.funcionarios) {
-            await api.upsertFuncionario(f);
-          }
-          for (const c of parsed.contratos) {
-            const cFins = parsed.financiamientos.filter(f => f.contrato_id === c.id);
-            await api.upsertContratoCompleto(c, cFins);
-          }
-          for (const a of parsed.alertas) {
-            await api.crearAlerta(a);
-          }
-
-          const allConts = await api.getContratos();
-          const filteredConts = allConts.filter(c => escuelasAsignadasRbd.includes(c.rbd));
-          setContratos(filteredConts);
-
-          const allAlts = await api.getAlertas();
-          const filteredAlts = allAlts.filter(a => escuelasAsignadasRbd.includes(a.rbd));
-          setAlertas(filteredAlts);
-
-          setImportLogs(`✅ Éxito: Se procesaron ${parsed.contratos.length} registros (${isAsistente ? 'Asistentes' : 'Docentes'}) para tus escuelas supervisadas.`);
-        } catch (err: any) {
-          setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
         }
-      };
-      mainReader.readAsText(file, encoding);
+
+        const invalidRows = parsed.contratos.filter(c => !escuelasAsignadasRbd.includes(c.rbd));
+        if (invalidRows.length > 0) {
+          const badRbds = Array.from(new Set(invalidRows.map(c => c.rbd)));
+          alert(`❌ Error de Permiso: No tiene autorización para subir nóminas de los establecimientos con RBD: ${badRbds.join(', ')}. Solo puede administrar las escuelas asignadas a su tutela.`);
+          return;
+        }
+
+        for (const f of parsed.funcionarios) {
+          await api.upsertFuncionario(f);
+        }
+        for (const c of parsed.contratos) {
+          const cFins = parsed.financiamientos.filter(f => f.contrato_id === c.id);
+          await api.upsertContratoCompleto(c, cFins);
+        }
+        for (const a of parsed.alertas) {
+          await api.crearAlerta(a);
+        }
+
+        const allConts = await api.getContratos();
+        const filteredConts = allConts.filter(c => escuelasAsignadasRbd.includes(c.rbd));
+        setContratos(filteredConts);
+
+        const allAlts = await api.getAlertas();
+        const filteredAlts = allAlts.filter(a => escuelasAsignadasRbd.includes(a.rbd));
+        setAlertas(filteredAlts);
+
+        setImportLogs(`✅ Éxito: Se procesaron ${parsed.contratos.length} registros (${targetEstamento})${parsed.establecimientos?.length ? `, ${parsed.establecimientos.length} establecimientos` : ''} para tus escuelas supervisadas.`);
+      } catch (err: any) {
+        setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
+      }
     };
-    tempReader.readAsText(file.slice(0, 1000), 'UTF-8');
+    reader.readAsArrayBuffer(file);
   };
 
   const handleDragAsis = (e: React.DragEvent) => {
@@ -361,53 +371,62 @@ export default function ProfesionalDashboard() {
   };
 
   const processAsistenteFile = (file: File) => {
-    const tempReader = new FileReader();
-    tempReader.onload = (e) => {
-      const headerSample = e.target?.result as string;
-      const isAsistente = headerSample.includes('ASISTENTE_RUN') || headerSample.includes('asistente_run');
-      const encoding = isAsistente ? 'UTF-8' : 'ISO-8859-1';
+    const targetEstamento = 'Asistente de la Educación';
 
-      const mainReader = new FileReader();
-      mainReader.onload = async (event) => {
-        const text = event.target?.result as string;
-        try {
-          const controlPrevioMock: any[] = [];
-          const parsed = parsearNominaCsv(text, escuelasAsignadasRbd[0] || '10202', controlPrevioMock, isAsistente ? 'Asistente de la Educación' : 'Docente');
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const buffer = event.target?.result as ArrayBuffer;
+      try {
+        const controlPrevioMock: any[] = [];
+        const parsed = parsearArchivoExcelOJson(
+          buffer,
+          file.name,
+          escuelasAsignadasRbd[0] || '10202',
+          controlPrevioMock,
+          targetEstamento
+        );
 
-          const invalidRows = parsed.contratos.filter(c => !escuelasAsignadasRbd.includes(c.rbd));
-          if (invalidRows.length > 0) {
-            const badRbds = Array.from(new Set(invalidRows.map(c => c.rbd)));
-            alert(`❌ Error de Permiso: No tiene autorización para subir nóminas de los establecimientos con RBD: ${badRbds.join(', ')}.`);
-            return;
+        if (parsed.establecimientos && parsed.establecimientos.length > 0) {
+          for (const est of parsed.establecimientos) {
+            if (est.comuna) {
+              await api.addComuna(est.comuna);
+            }
+            await api.upsertEstablecimiento(est);
           }
-
-          for (const f of parsed.funcionarios) {
-            await api.upsertFuncionario(f);
-          }
-          for (const c of parsed.contratos) {
-            const cFins = parsed.financiamientos.filter(f => f.contrato_id === c.id);
-            await api.upsertContratoCompleto(c, cFins);
-          }
-          for (const a of parsed.alertas) {
-            await api.crearAlerta(a);
-          }
-
-          const allConts = await api.getContratos();
-          const filteredConts = allConts.filter(c => escuelasAsignadasRbd.includes(c.rbd));
-          setContratos(filteredConts);
-
-          const allAlts = await api.getAlertas();
-          const filteredAlts = allAlts.filter(a => escuelasAsignadasRbd.includes(a.rbd));
-          setAlertas(filteredAlts);
-
-          setImportLogsAsis(`✅ Éxito: Se procesaron ${parsed.contratos.length} registros (${isAsistente ? 'Asistentes' : 'Docentes'}) para tus escuelas supervisadas.`);
-        } catch (err: any) {
-          setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
         }
-      };
-      mainReader.readAsText(file, encoding);
+
+        const invalidRows = parsed.contratos.filter(c => !escuelasAsignadasRbd.includes(c.rbd));
+        if (invalidRows.length > 0) {
+          const badRbds = Array.from(new Set(invalidRows.map(c => c.rbd)));
+          alert(`❌ Error de Permiso: No tiene autorización para subir nóminas de los establecimientos con RBD: ${badRbds.join(', ')}.`);
+          return;
+        }
+
+        for (const f of parsed.funcionarios) {
+          await api.upsertFuncionario(f);
+        }
+        for (const c of parsed.contratos) {
+          const cFins = parsed.financiamientos.filter(f => f.contrato_id === c.id);
+          await api.upsertContratoCompleto(c, cFins);
+        }
+        for (const a of parsed.alertas) {
+          await api.crearAlerta(a);
+        }
+
+        const allConts = await api.getContratos();
+        const filteredConts = allConts.filter(c => escuelasAsignadasRbd.includes(c.rbd));
+        setContratos(filteredConts);
+
+        const allAlts = await api.getAlertas();
+        const filteredAlts = allAlts.filter(a => escuelasAsignadasRbd.includes(a.rbd));
+        setAlertas(filteredAlts);
+
+        setImportLogsAsis(`✅ Éxito: Se procesaron ${parsed.contratos.length} registros (${targetEstamento})${parsed.establecimientos?.length ? `, ${parsed.establecimientos.length} establecimientos` : ''} para tus escuelas supervisadas.`);
+      } catch (err: any) {
+        setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
+      }
     };
-    tempReader.readAsText(file.slice(0, 1000), 'UTF-8');
+    reader.readAsArrayBuffer(file);
   };
 
   const filteredEsts = establecimientos.filter(e => 
@@ -879,7 +898,7 @@ export default function ProfesionalDashboard() {
               <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                 <span>📥</span> Cargar Nómina Docentes (Drag & Drop)
               </h2>
-              <p className="text-xs text-slate-500 mt-1">Cargue el archivo de personal docente (.csv o .json) de sus escuelas asignadas.</p>
+              <p className="text-xs text-slate-500 mt-1">Cargue el archivo de personal docente (.csv, .json, .xlsx, .xls) de sus escuelas asignadas.</p>
 
               <div 
                 onDragEnter={handleDrag} 
@@ -894,7 +913,7 @@ export default function ProfesionalDashboard() {
                 <input 
                   ref={fileInputRef}
                   type="file" 
-                  accept=".csv,.json"
+                  accept=".csv,.json,.xlsx,.xls"
                   className="hidden" 
                   onChange={handleFileChange}
                 />
@@ -914,7 +933,7 @@ export default function ProfesionalDashboard() {
               <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                 <span>📥</span> Cargar Nómina Asistentes (Drag & Drop)
               </h2>
-              <p className="text-xs text-slate-500 mt-1">Cargue el archivo de asistentes (.csv o .json) de sus escuelas asignadas.</p>
+              <p className="text-xs text-slate-500 mt-1">Cargue el archivo de asistentes (.csv, .json, .xlsx, .xls) de sus escuelas asignadas.</p>
 
               <div 
                 onDragEnter={handleDragAsis} 
@@ -929,7 +948,7 @@ export default function ProfesionalDashboard() {
                 <input 
                   ref={fileInputRefAsis}
                   type="file" 
-                  accept=".csv,.json"
+                  accept=".csv,.json,.xlsx,.xls"
                   className="hidden" 
                   onChange={handleFileChangeAsis}
                 />
