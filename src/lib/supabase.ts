@@ -421,6 +421,42 @@ export const api = {
     }
   },
 
+  upsertEstablecimientosBulk: async (establecimientos: Establecimiento[]): Promise<void> => {
+    try {
+      const { error } = await supabase.from('establecimientos').upsert(establecimientos);
+      if (error) throw error;
+    } catch (error) {
+      console.warn("⚠️ Error en Supabase bulk establecimientos, guardando en local:", error);
+      const list = dbLocal.establecimientos;
+      for (const est of establecimientos) {
+        const idx = list.findIndex(e => e.rbd === est.rbd);
+        if (idx >= 0) {
+          list[idx] = est;
+        } else {
+          list.push(est);
+        }
+      }
+      dbLocal.establecimientos = list;
+    }
+  },
+
+  upsertComunasBulk: async (comunas: string[]): Promise<void> => {
+    const payload = comunas.map(c => ({ nombre: c }));
+    try {
+      const { error } = await supabase.from('comunas').upsert(payload);
+      if (error) throw error;
+    } catch (error) {
+      console.warn("⚠️ Error en Supabase bulk comunas, guardando en local:", error);
+      const list = [...dbLocal.comunas];
+      for (const c of comunas) {
+        if (!list.includes(c)) {
+          list.push(c);
+        }
+      }
+      dbLocal.comunas = list;
+    }
+  },
+
   deleteEstablecimiento: async (rbd: string): Promise<void> => {
     try {
       const { error } = await supabase.from('establecimientos').delete().eq('rbd', rbd);
@@ -734,6 +770,25 @@ export const api = {
         alertas.push(alerta);
         dbLocal.alertas = alertas;
       }
+    }
+  },
+
+  crearAlertasBulk: async (alertas: AlertaConciliacion[]): Promise<void> => {
+    try {
+      const { error } = await supabase.from('alertas_conciliacion').upsert(alertas);
+      if (error) throw error;
+    } catch (error) {
+      console.warn("⚠️ Error en Supabase bulk alertas, guardando en local:", error);
+      const list = dbLocal.alertas;
+      for (const a of alertas) {
+        const idx = list.findIndex(al => al.id === a.id);
+        if (idx >= 0) {
+          list[idx] = a;
+        } else {
+          list.push(a);
+        }
+      }
+      dbLocal.alertas = list;
     }
   },
 

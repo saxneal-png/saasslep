@@ -609,11 +609,12 @@ export default function SostenedorDashboard() {
 
       // 1. Create Comunas & Establishments
       setIngestProgress(15);
-      for (const est of filteredEsts) {
-        if (est.comuna) {
-          await api.addComuna(est.comuna);
-        }
-        await api.upsertEstablecimiento(est);
+      const uniqueComunas = Array.from(new Set(filteredEsts.map(e => e.comuna).filter(Boolean)));
+      if (uniqueComunas.length > 0) {
+        await (api as any).upsertComunasBulk(uniqueComunas);
+      }
+      if (filteredEsts.length > 0) {
+        await (api as any).upsertEstablecimientosBulk(filteredEsts);
       }
 
       // 2. Create Funcionarios in Bulk
@@ -630,8 +631,8 @@ export default function SostenedorDashboard() {
 
       // 4. Create Alertas
       setIngestProgress(90);
-      for (const a of filteredAlts) {
-        await api.crearAlerta(a);
+      if (filteredAlts.length > 0) {
+        await (api as any).crearAlertasBulk(filteredAlts);
       }
 
       setIngestProgress(100);
