@@ -521,6 +521,7 @@ export function parsearArchivoExcelOJson(
     const idxTipoContrato = getIndex(['tipo contrato', 'tipo_contrato', 'calidad'], 14);
     const idxHoras = getIndex(['horas contrato', 'horas_contrato', 'horas'], 15);
     const idxActivo = getIndex(['principal activo', 'activo', 'estado'], -1);
+    const idxTotalHaberes = getIndex(['total haberes', 'total_haberes', 'sueldo liquido', 'sueldo_liquido', 'sueldo', 'haberes'], -1);
 
     const startRow = headerRowIdx + 1;
 
@@ -658,8 +659,17 @@ export function parsearArchivoExcelOJson(
         }
       }
 
-      // Add or update Funcionario
+      // Add or update Funcionario with completeness prioritization
       let func = funcionarios.find(f => f.run === run);
+      
+      const getCompletenessScore = (est: string, cargo: string, tr: string) => {
+        let score = 0;
+        if (est && est.trim() !== '') score++;
+        if (cargo && cargo.trim() !== '' && cargo !== 'Docente de Aula' && cargo !== 'Asistente') score++;
+        if (tr && tr.trim() !== '' && tr !== 'Sin Tramo') score++;
+        return score;
+      };
+
       if (!func) {
         func = {
           run,
@@ -671,66 +681,85 @@ export function parsearArchivoExcelOJson(
         };
         funcionarios.push(func);
       } else {
-        if (!func.genero && genero) func.genero = genero;
-        if (!func.cargo && cargoRaw) func.cargo = cargoRaw;
-        if ((!func.tramo || func.tramo === 'Sin Tramo') && tramo !== 'Sin Tramo') func.tramo = tramo;
-      }
-
-      // Quality mapping
-      let calidad_juridica: CalidadJuridica = 'A contrata';
-      const tipoContClean = tipoContrato.toLowerCase();
-      if (tipoContClean.includes('titular')) calidad_juridica = 'Titular';
-      else if (tipoContClean.includes('plazo fijo') || tipoContClean.includes('plazofijo')) calidad_juridica = 'Plazo fijo';
-      else if (tipoContClean.includes('indefinido')) calidad_juridica = 'Indefinido';
-      else if (tipoContClean.includes('reemplazo')) calidad_juridica = 'Reemplazo';
-      else if (tipoContClean.includes('habilitacion') || tipoContClean.includes('habilitación')) calidad_juridica = 'Habilitación especial';
-
-      // Add or update Contrato (Consolidación)
-      let contrato = contratos.find(c => c.funcionario_run === run && c.rbd === rbd);
-      const horas = parseDecimalHours(horasRaw);
-      
-      if (!contrato) {
-        const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
-        const nuevoContrato: Contrato = {
-          id: contrato_id,
-          funcionario_run: run,
-          rbd,
-          calidad_juridica, 
-          funcion_principal: func.cargo || 'Funcionario',
-          estado,
-          horas_totales: 0,
-          legislacion_laboral
-        };
-        contratos.push(nuevoContrato);
-        contrato = nuevoContrato;
-      }
-      
-      // Aggregate hours
-      contrato.horas_totales += horas;
-
-      // Financiamiento aggregation logic
-      if (horas > 0) {
-        let progKey = programa.toLowerCase();
-        let origen: OrigenFondo = 'Subvención Regular';
+        const existingScore = getCompletenessScore(func.estamento || '', func.cargo || '', func.tramo || '');
+        const currentScore = getCompletenessScore(estamento, cargoRaw, tramo);
         
-        if (progKey.includes('sep')) origen = 'SEP';
-        else if (progKey.includes('pie')) origen = 'PIE';
-        else if (progKey.includes('reforzamiento')) origen = 'Reforzamiento';
-        else if (progKey.includes('retencion') || progKey.includes('retención')) origen = 'Pro-retención';
-        else if (progKey.includes('bicentenario')) origen = 'Liceos Bicentenarios';
-        else if (progKey) origen = 'Otro';
-
-        const finId = `f-${contrato.id}-${origen.replace(/\s+/g, '')}`;
-        let financiamiento = financiamientos.find(f => f.id === finId);
-        if (financiamiento) {
-          financiamiento.horas += horas;
+        if (currentScore > existingScore) {
+          func.estamento = estamento;
+          if (cargoRaw) func.cargo = cargoRaw;
+          if (genero) func.genero = genero;
+          if (tramo && tramo !== 'Sin Tramo') func.tramo = tramo;
+          if (nombreCompleto && nombreCompleto !== 'Funcionario Sin Nombre') func.nombre = nombreCompleto;
         } else {
-          financiamientos.push({
-            id: finId,
-            contrato_id: contrato.id,
-            origen_fondo: origen,
-            horas: horas
-          });
+          if (!func.genero && genero) func.genero = genero;
+          if (!func.cargo && cargoRaw) func.cargo = cargoRaw;
+          if ((!func.tramo || func.tramo === 'Sin Tramo') && tramo !== 'Sin Tramo') func.tramo = tramo;
+        }
+      }
+
+      // Relevance filter check on Total Haberes / Sueldo Líquido
+      const totalHaberesRaw = idxTotalHaberes !== -1 ? row[idxTotalHaberes] : undefined;
+      const totalHaberes = parseDecimalHours(totalHaberesRaw);
+      const isRelevanceZero = idxTotalHaberes !== -1 && (totalHaberes === 0 || totalHaberesRaw === null || totalHaberesRaw === '');
+
+      // Create/update Contratos & Financiamientos ONLY if not relevance zero
+      if (!isRelevanceZero) {
+        // Quality mapping
+        let calidad_juridica: CalidadJuridica = 'A contrata';
+        const tipoContClean = tipoContrato.toLowerCase();
+        if (tipoContClean.includes('titular')) calidad_juridica = 'Titular';
+        else if (tipoContClean.includes('plazo fijo') || tipoContClean.includes('plazofijo')) calidad_juridica = 'Plazo fijo';
+        else if (tipoContClean.includes('indefinido')) calidad_juridica = 'Indefinido';
+        else if (tipoContClean.includes('reemplazo')) calidad_juridica = 'Reemplazo';
+        else if (tipoContClean.includes('habilitacion') || tipoContClean.includes('habilitación')) calidad_juridica = 'Habilitación especial';
+
+        // Add or update Contrato (Consolidación)
+        let contrato = contratos.find(c => c.funcionario_run === run && c.rbd === rbd);
+        const horas = parseDecimalHours(horasRaw);
+        
+        if (!contrato) {
+          const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
+          const nuevoContrato: Contrato = {
+            id: contrato_id,
+            funcionario_run: run,
+            rbd,
+            calidad_juridica, 
+            funcion_principal: func.cargo || 'Funcionario',
+            estado,
+            horas_totales: 0,
+            legislacion_laboral
+          };
+          contratos.push(nuevoContrato);
+          contrato = nuevoContrato;
+        }
+        
+        // Aggregate hours
+        contrato.horas_totales += horas;
+
+        // Financiamiento aggregation logic
+        if (horas > 0) {
+          let progKey = programa.toLowerCase();
+          let origen: OrigenFondo = 'Subvención Regular';
+          
+          if (progKey.includes('sep')) origen = 'SEP';
+          else if (progKey.includes('pie')) origen = 'PIE';
+          else if (progKey.includes('reforzamiento')) origen = 'Reforzamiento';
+          else if (progKey.includes('retencion') || progKey.includes('retención')) origen = 'Pro-retención';
+          else if (progKey.includes('bicentenario')) origen = 'Liceos Bicentenarios';
+          else if (progKey) origen = 'Otro';
+
+          const finId = `f-${contrato.id}-${origen.replace(/\s+/g, '')}`;
+          let financiamiento = financiamientos.find(f => f.id === finId);
+          if (financiamiento) {
+            financiamiento.horas += horas;
+          } else {
+            financiamientos.push({
+              id: finId,
+              contrato_id: contrato.id,
+              origen_fondo: origen,
+              horas: horas
+            });
+          }
         }
       }
     }
