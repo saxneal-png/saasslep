@@ -6,7 +6,7 @@ export interface Establecimiento {
   regimen: 'JEC' | 'No JEC';
 }
 
-export type CalidadJuridica = 'Titular' | 'A contrata' | 'Plazo fijo' | 'Indefinido' | 'Reemplazo' | 'Habilitación especial';
+export type CalidadJuridica = 'Titular' | 'A contrata' | 'Plazo fijo' | 'Indefinido' | 'Reemplazo' | 'Reemplazo SEP' | 'Reemplazo PIE' | 'Habilitación especial';
 export type EstadoContrato = 'Activo' | 'Licencia Médica' | 'Reemplazo' | 'Pendiente_Aprobacion';
 export type EstamentoType = 'Docente' | 'Asistente de la Educación';
 export type LegislacionLaboral = 'Estatuto docente' | 'Asistentes de la educación';
@@ -27,6 +27,9 @@ export interface Funcionario {
   grado_eus?: number;
   genero?: string;
   fecha_nacimiento?: string;
+  tramo?: 'Sin Tramo' | 'Acceso' | 'Inicial' | 'Temprano' | 'Avanzado' | 'Experto I' | 'Experto II';
+  fecha_ingreso_sistema?: string;
+  fecha_ingreso_establecimiento?: string;
 }
 
 export interface Contrato {

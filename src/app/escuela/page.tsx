@@ -121,6 +121,9 @@ export default function EscuelaDashboard() {
   const [editFuncCargo, setEditFuncCargo] = useState('');
   const [editFuncEmail, setEditFuncEmail] = useState('');
   const [editFuncTitulo, setEditFuncTitulo] = useState('');
+  const [editFuncTramo, setEditFuncTramo] = useState<string>('Sin Tramo');
+  const [editFuncFechaSistema, setEditFuncFechaSistema] = useState<string>('');
+  const [editFuncFechaEstablecimiento, setEditFuncFechaEstablecimiento] = useState<string>('');
   const [editContHoras, setEditContHoras] = useState(44);
   const [editContFins, setEditContFins] = useState<{ origen: OrigenFondo; calidad: CalidadJuridica; horas: number }[]>([]);
   const [editContHorasDirectivas, setEditContHorasDirectivas] = useState<number | undefined>(undefined);
@@ -677,6 +680,9 @@ export default function EscuelaDashboard() {
     setEditFuncCargo(f.cargo || '');
     setEditFuncEmail(f.email || '');
     setEditFuncTitulo(f.titulo || '');
+    setEditFuncTramo(f.tramo || 'Sin Tramo');
+    setEditFuncFechaSistema(f.fecha_ingreso_sistema || '');
+    setEditFuncFechaEstablecimiento(f.fecha_ingreso_establecimiento || '');
     
     const relatedCont = contratos.find(c => c.funcionario_run === f.run);
     if (relatedCont) {
@@ -702,13 +708,15 @@ export default function EscuelaDashboard() {
   const handleSaveFuncionario = async () => {
     if (!editingFuncionario) return;
     
-    // 1. Update funcionario info
     await api.upsertFuncionario({
       ...editingFuncionario,
       nombre: editFuncNombre,
       cargo: editFuncCargo,
       email: editFuncEmail,
-      titulo: editFuncTitulo
+      titulo: editFuncTitulo,
+      tramo: editFuncTramo as any,
+      fecha_ingreso_sistema: editFuncFechaSistema || undefined,
+      fecha_ingreso_establecimiento: editFuncFechaEstablecimiento || undefined
     });
  
     // 2. Update contract and finance sources in Supabase
@@ -3767,6 +3775,64 @@ export default function EscuelaDashboard() {
                     </div>
                   </div>
 
+                  {/* Docente Career and Dates (Tramo, Dates, Bienios) */}
+                  {editingFuncionario.estamento === 'Docente' && (
+                    <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 grid grid-cols-1 sm:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-slate-500 font-bold mb-1">Tramo de Desarrollo</label>
+                        <select 
+                          className="w-full p-2 border rounded bg-white font-semibold text-slate-800 focus:outline-slep-blue text-xs cursor-pointer"
+                          value={editFuncTramo}
+                          onChange={(e) => setEditFuncTramo(e.target.value)}
+                        >
+                          <option value="Sin Tramo">Sin Tramo</option>
+                          <option value="Acceso">Acceso</option>
+                          <option value="Inicial">Inicial</option>
+                          <option value="Temprano">Temprano</option>
+                          <option value="Avanzado">Avanzado</option>
+                          <option value="Experto I">Experto I</option>
+                          <option value="Experto II">Experto II</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 font-bold mb-1">Ingreso Sistema Escolar</label>
+                        <input 
+                          type="date" 
+                          className="w-full p-2 border rounded font-semibold text-slate-850 focus:outline-slep-blue text-xs cursor-text"
+                          value={editFuncFechaSistema}
+                          onChange={(e) => setEditFuncFechaSistema(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 font-bold mb-1">Ingreso Establecimiento</label>
+                        <input 
+                          type="date" 
+                          className="w-full p-2 border rounded font-semibold text-slate-850 focus:outline-slep-blue text-xs cursor-text"
+                          value={editFuncFechaEstablecimiento}
+                          onChange={(e) => setEditFuncFechaEstablecimiento(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-col justify-end pb-1 text-center">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Bienios Proyectados</span>
+                        {editFuncFechaSistema ? (
+                          <span className="bg-blue-50 text-slep-blue border border-blue-200 font-bold px-2 py-1.5 rounded-lg text-xs">
+                            {(() => {
+                              const entryDate = new Date(editFuncFechaSistema);
+                              const today = new Date();
+                              const diffTime = Math.max(0, today.getTime() - entryDate.getTime());
+                              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                              const yearsOfService = parseFloat((diffDays / 365.25).toFixed(1));
+                              const bienios = Math.floor(yearsOfService / 2);
+                              return `${bienios} Bienios (${yearsOfService} años)`;
+                            })()}
+                          </span>
+                        ) : (
+                          <span className="text-slate-450 italic text-[11px]">Ingrese fecha sistema</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Financing detail and edit sources */}
                   <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-3">
                     <div className="flex justify-between items-center border-b pb-2">
@@ -3810,6 +3876,8 @@ export default function EscuelaDashboard() {
                             <option value="Plazo fijo">Plazo fijo</option>
                             <option value="Indefinido">Indefinido</option>
                             <option value="Reemplazo">Reemplazo</option>
+                            <option value="Reemplazo SEP">Reemplazo SEP</option>
+                            <option value="Reemplazo PIE">Reemplazo PIE</option>
                             <option value="Habilitación especial">Habilitación especial</option>
                           </select>
 
@@ -3915,50 +3983,93 @@ export default function EscuelaDashboard() {
                   </div>
 
                   {/* Ley 20.903 indicators */}
-                  {editingFuncionario.estamento === 'Docente' && leyCalculo && (
-                    <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-slate-800">Proporcionalidad Horaria Aula / Ley 20.903</span>
-                        {leyCalculo.leyEspecialAplicada ? (
-                          <span className="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-[9px] uppercase tracking-wider border border-amber-200">
-                            Concentración {'>'} 80% (60/40 Ratio) 🌟
-                          </span>
-                        ) : (
-                          <span className="bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded text-[9px]">
-                            Estándar (65/35 Ratio)
-                          </span>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-3 gap-2.5 text-center">
-                        <div className="bg-slate-50 border p-2 rounded-lg">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">Lectivas Aula Max.</p>
-                          <p className="text-sm font-black text-slate-800 mt-0.5">{leyCalculo.horasLectivasMaximas} hrs</p>
+                  {editingFuncionario.estamento === 'Docente' && leyCalculo && (() => {
+                    const pedagogicas = leyCalculo.horasLectivasAsignadas;
+                    const dirHrs = editContHorasDirectivas || 0;
+                    const tecHrs = editContHorasTecPed || 0;
+                    const otrasFuncionesHrs = cargosPersonalizados
+                      .filter(cp => cp.funcionario_run === editingFuncionario.run)
+                      .reduce((sum, cp) => sum + cp.horas, 0);
+                    const otrasHrsAsignadas = dirHrs + tecHrs + otrasFuncionesHrs;
+                    const vacantesHrs = Math.max(0, editContHoras - pedagogicas - otrasHrsAsignadas);
+
+                    return (
+                      <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm space-y-4">
+                        <div className="flex justify-between items-center border-b pb-2 border-slate-100">
+                          <span className="font-bold text-slate-800">Proporcionalidad Horaria Aula / Ley 20.903</span>
+                          {leyCalculo.leyEspecialAplicada ? (
+                            <span className="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-[9px] uppercase tracking-wider border border-amber-200 animate-pulse">
+                              Excepción 60/40 Aplicada (Concentración {'>'} 80% en 1° a 4° Básico) 🌟
+                            </span>
+                          ) : (
+                            <span className="bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded text-[9px]">
+                              Estándar 65/35 (Proporción General)
+                            </span>
+                          )}
                         </div>
-                        <div className="bg-slate-50 border p-2 rounded-lg">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">No Lectivas Min.</p>
-                          <p className="text-sm font-black text-slate-800 mt-0.5">{leyCalculo.horasNoLectivasMinimas} hrs</p>
+
+                        {/* Breakdown grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                          <div className="bg-blue-50/40 border border-blue-100 p-2 rounded-lg">
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">Lectivas Aula Max.</p>
+                            <p className="text-base font-black text-slep-blue mt-0.5">{leyCalculo.horasLectivasMaximas} hrs</p>
+                            <p className="text-[8px] text-slate-400">Ratio {leyCalculo.proporcionLectiva}%</p>
+                          </div>
+                          <div className="bg-slate-50 border p-2 rounded-lg">
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">No Lectivas Min.</p>
+                            <p className="text-base font-black text-slate-800 mt-0.5">{leyCalculo.horasNoLectivasMinimas} hrs</p>
+                            <p className="text-[8px] text-slate-400">Ratio {leyCalculo.proporcionNoLectiva}%</p>
+                          </div>
+                          <div className="bg-indigo-50/40 border border-indigo-100 p-2 rounded-lg">
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">Aula Asignadas</p>
+                            <p className="text-base font-black text-indigo-700 mt-0.5">{pedagogicas} hrs</p>
+                            <p className="text-[8px] text-indigo-400">Asignadas a cursos</p>
+                          </div>
+                          <div className={`border p-2 rounded-lg ${vacantesHrs > 0.05 ? 'bg-amber-50 border-amber-200' : 'bg-slate-50'}`}>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">Horas Vacantes</p>
+                            <p className={`text-base font-black mt-0.5 ${vacantesHrs > 0.05 ? 'text-amber-800' : 'text-slate-500'}`}>
+                              {vacantesHrs.toFixed(1)} hrs
+                            </p>
+                            <p className="text-[8px] text-slate-400">Por destinar</p>
+                          </div>
                         </div>
-                        <div className="bg-slate-50 border p-2 rounded-lg">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">Lectivas Aula Asig.</p>
-                          <p className="text-sm font-black text-slate-800 mt-0.5">{leyCalculo.horasLectivasAsignadas} hrs</p>
+
+                        {/* Other hours distribution block */}
+                        <div className="bg-slate-50 border rounded-lg p-3 text-xs space-y-1">
+                          <p className="font-bold text-slate-700">⚙️ Distribución de Horas Directivas y de Administración</p>
+                          <div className="grid grid-cols-3 gap-2 text-[10px] text-slate-650 mt-1">
+                            <div>
+                              <span className="font-semibold block">Horas Directivas:</span>
+                              <strong className="text-slate-800">{dirHrs} hrs</strong>
+                            </div>
+                            <div>
+                              <span className="font-semibold block">Horas Técnicas UTP:</span>
+                              <strong className="text-slate-800">{tecHrs} hrs</strong>
+                            </div>
+                            <div>
+                              <span className="font-semibold block">Cargos Especiales:</span>
+                              <strong className="text-slate-800">{otrasFuncionesHrs} hrs</strong>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      <div className={`p-3 rounded-lg border text-[11px] font-semibold flex items-center justify-between ${
-                        leyCalculo.cumpleLey20903 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900'
-                      }`}>
-                        <span>
-                          {leyCalculo.cumpleLey20903 
-                            ? '✓ Cumple con la reglamentación legal de docencia de aula.' 
-                            : `⚠️ Exceso detectado: Se asignan ${leyCalculo.horasLectivasAsignadas} hrs de aula frente al máximo legal de ${leyCalculo.horasLectivasMaximas} hrs.`}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          leyCalculo.cumpleLey20903 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+
+                        <div className={`p-3 rounded-lg border text-[11px] font-semibold flex items-center justify-between ${
+                          leyCalculo.cumpleLey20903 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900'
                         }`}>
-                          {leyCalculo.cumpleLey20903 ? 'CUMPLE' : 'EXCEDIDO'}
-                        </span>
+                          <span>
+                            {leyCalculo.cumpleLey20903 
+                              ? '✓ Cumple con la reglamentación legal de docencia de aula.' 
+                              : `⚠️ Exceso detectado: Se asignan ${pedagogicas} hrs de aula frente al máximo legal de ${leyCalculo.horasLectivasMaximas} hrs.`}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            leyCalculo.cumpleLey20903 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {leyCalculo.cumpleLey20903 ? 'CUMPLE' : 'EXCEDIDO'}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                 </div>
 
