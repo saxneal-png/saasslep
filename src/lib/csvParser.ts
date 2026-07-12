@@ -480,24 +480,49 @@ export function parsearArchivoExcelOJson(
     const rawRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
     if (rawRows.length === 0) return;
 
-    // Fuerza este mapa de índices basado en la estructura real de tu archivo:
-    const idxRun = 0;
-    const idxPat = 1;
-    const idxMat = 2;
-    const idxNom = 3;
-    const idxSexo = 4;
-    const idxLeg = 5;
-    const idxActivo = -1; // No visible en la planilla reducida
-    const idxProg = 8;
-    const idxComuna = 9;
-    const idxCentroCosto = 10;
-    const idxRbd = 11;
-    const idxCargo = 12;
-    const idxTramo = 13;
-    const idxTipoContrato = 14;
-    const idxHoras = 15;
+    // Find the header row by searching for "run", "r.u.n.", "rut"
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(rawRows.length, 12); i++) {
+      const row = rawRows[i];
+      if (!row || !Array.isArray(row)) continue;
+      const hasRun = row.some(cell => {
+        const val = String(cell || '').trim().toLowerCase();
+        return val === 'run' || val === 'r.u.n.' || val === 'rut' || val === 'r.u.n';
+      });
+      if (hasRun) {
+        headerRowIdx = i;
+        break;
+      }
+    }
 
-    const startRow = 1;
+    const headers = rawRows[headerRowIdx].map(h => 
+      String(h || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    );
+
+    const getIndex = (kws: string[], fallback: number): number => {
+      let idx = headers.findIndex(h => kws.some(kw => h === kw));
+      if (idx !== -1) return idx;
+      idx = headers.findIndex(h => kws.some(kw => h.includes(kw)));
+      return idx !== -1 ? idx : fallback;
+    };
+
+    const idxRun = getIndex(['run', 'rut', 'r.u.n.'], 0);
+    const idxPat = getIndex(['apellido paterno', 'paterno'], 1);
+    const idxMat = getIndex(['apellido materno', 'materno'], 2);
+    const idxNom = getIndex(['nombres', 'nombre'], 3);
+    const idxSexo = getIndex(['sexo', 'genero', 'género'], 4);
+    const idxLeg = getIndex(['legislacion laboral', 'legislacion', 'ley', 'estamento'], 5);
+    const idxProg = getIndex(['programa', 'subvencion'], 8);
+    const idxComuna = getIndex(['comuna'], 9);
+    const idxCentroCosto = getIndex(['centro costo', 'centro_costo', 'establecimiento', 'colegio'], 10);
+    const idxRbd = getIndex(['rbd'], 11);
+    const idxCargo = getIndex(['cargo', 'funcion', 'función'], 12);
+    const idxTramo = getIndex(['tramo'], 13);
+    const idxTipoContrato = getIndex(['tipo contrato', 'tipo_contrato', 'calidad'], 14);
+    const idxHoras = getIndex(['horas contrato', 'horas_contrato', 'horas'], 15);
+    const idxActivo = getIndex(['principal activo', 'activo', 'estado'], -1);
+
+    const startRow = headerRowIdx + 1;
 
     for (let i = startRow; i < rawRows.length; i++) {
       const row = rawRows[i];
