@@ -665,12 +665,35 @@ export function parsearArchivoExcelOJson(
           sumaSubvenciones = horas_totales;
         }
 
-        const ccKey = headers.find(h => h.toLowerCase().includes('centro costo') || h.toLowerCase().includes('establecimiento') || h.toLowerCase() === 'rbd');
+        const rbdKey = headers.find(h => h.toLowerCase() === 'rbd' || h.toLowerCase().includes('rbd_establecimiento'));
+        const ccKey = headers.find(h => h.toLowerCase().includes('centro costo') || h.toLowerCase().includes('centro_costo') || h.toLowerCase().includes('establecimiento') || h.toLowerCase() === 'colegio');
+        const comunaKey = headers.find(h => h.toLowerCase() === 'comuna' || h.toLowerCase().includes('comuna_esta') || h.toLowerCase() === 'comuna');
+
         let rbd = rbdContext;
+        let schoolName = '';
+        let schoolComuna = 'Chillán Viejo';
+
+        if (rbdKey && row[rbdKey]) {
+          rbd = String(row[rbdKey]).trim();
+        }
         if (ccKey && row[ccKey]) {
-          const ccVal = String(row[ccKey]).trim();
-          if (/^\d+$/.test(ccVal)) {
-            rbd = ccVal;
+          schoolName = String(row[ccKey]).trim();
+        }
+        if (comunaKey && row[comunaKey]) {
+          schoolComuna = String(row[comunaKey]).trim();
+        }
+
+        const cleanComuna = schoolComuna.charAt(0).toUpperCase() + schoolComuna.slice(1).toLowerCase();
+
+        if (rbd && schoolName) {
+          if (!establecimientos.some(e => e.rbd === rbd)) {
+            establecimientos.push({
+              rbd,
+              nombre: schoolName,
+              ivm: 75.0,
+              comuna: cleanComuna,
+              regimen: 'JEC'
+            });
           }
         }
 
