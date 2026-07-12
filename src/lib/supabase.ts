@@ -385,20 +385,30 @@ const handleFallback = <T>(error: any, fallbackData: T, tableName: string): T =>
 
 export const api = {
   getEstablecimientos: async (): Promise<Establecimiento[]> => {
-    const { data, error } = await supabase.from('establecimientos').select('*');
-    if (error) return handleFallback(error, dbLocal.establecimientos, 'establecimientos');
-    return data || [];
+    try {
+      const { data, error } = await supabase.from('establecimientos').select('*');
+      if (error) return handleFallback(error, dbLocal.establecimientos, 'establecimientos');
+      return data || [];
+    } catch (err) {
+      return handleFallback(err, dbLocal.establecimientos, 'establecimientos');
+    }
   },
 
   getEstablecimientoByRbd: async (rbd: string): Promise<Establecimiento | undefined> => {
-    const { data, error } = await supabase.from('establecimientos').select('*').eq('rbd', rbd).maybeSingle();
-    if (error) return handleFallback(error, dbLocal.establecimientos.find(e => e.rbd === rbd), 'establecimientos');
-    return data || undefined;
+    try {
+      const { data, error } = await supabase.from('establecimientos').select('*').eq('rbd', rbd).maybeSingle();
+      if (error) return handleFallback(error, dbLocal.establecimientos.find(e => e.rbd === rbd), 'establecimientos');
+      return data || undefined;
+    } catch (err) {
+      return handleFallback(err, dbLocal.establecimientos.find(e => e.rbd === rbd), 'establecimientos');
+    }
   },
 
   upsertEstablecimiento: async (est: Establecimiento): Promise<void> => {
-    const { error } = await supabase.from('establecimientos').upsert(est);
-    if (error) {
+    try {
+      const { error } = await supabase.from('establecimientos').upsert(est);
+      if (error) throw error;
+    } catch (error) {
       console.warn("⚠️ Error en Supabase, guardando establecimiento en local:", error);
       const list = dbLocal.establecimientos;
       const idx = list.findIndex(e => e.rbd === est.rbd);
@@ -412,67 +422,83 @@ export const api = {
   },
 
   deleteEstablecimiento: async (rbd: string): Promise<void> => {
-    const { error } = await supabase.from('establecimientos').delete().eq('rbd', rbd);
-    if (error) {
+    try {
+      const { error } = await supabase.from('establecimientos').delete().eq('rbd', rbd);
+      if (error) throw error;
+    } catch (error) {
       console.warn("⚠️ Error en Supabase, borrando establecimiento en local:", error);
       dbLocal.establecimientos = dbLocal.establecimientos.filter(e => e.rbd !== rbd);
     }
   },
 
   getFuncionarios: async (): Promise<Funcionario[]> => {
-    const { data, error } = await supabase.from('funcionarios').select('*');
-    if (error) return handleFallback(error, dbLocal.funcionarios, 'funcionarios');
-    return data || [];
+    try {
+      const { data, error } = await supabase.from('funcionarios').select('*');
+      if (error) return handleFallback(error, dbLocal.funcionarios, 'funcionarios');
+      return data || [];
+    } catch (err) {
+      return handleFallback(err, dbLocal.funcionarios, 'funcionarios');
+    }
   },
 
   getContratos: async (rbd?: string): Promise<Contrato[]> => {
-    let query = supabase.from('contratos').select('*');
-    if (rbd) {
-      query = query.eq('rbd', rbd);
-    }
-    const { data, error } = await query;
-    if (error) {
+    try {
+      let query = supabase.from('contratos').select('*');
+      if (rbd) {
+        query = query.eq('rbd', rbd);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
       const fallback = rbd ? dbLocal.contratos.filter(c => c.rbd === rbd) : dbLocal.contratos;
       return handleFallback(error, fallback, 'contratos');
     }
-    return data || [];
   },
 
   getFinanciamientosPorContrato: async (contratoId: string): Promise<FinanciamientoContrato[]> => {
-    const { data, error } = await supabase.from('financiamientos').select('*').eq('contrato_id', contratoId);
-    if (error) return handleFallback(error, dbLocal.financiamientoContratos.filter(f => f.contrato_id === contratoId), 'financiamientos');
-    return data || [];
+    try {
+      const { data, error } = await supabase.from('financiamientos').select('*').eq('contrato_id', contratoId);
+      if (error) return handleFallback(error, dbLocal.financiamientoContratos.filter(f => f.contrato_id === contratoId), 'financiamientos');
+      return data || [];
+    } catch (err) {
+      return handleFallback(err, dbLocal.financiamientoContratos.filter(f => f.contrato_id === contratoId), 'financiamientos');
+    }
   },
 
   getAsignacionesPorEstablecimiento: async (rbd: string): Promise<AsignacionAula[]> => {
-    const { data: contratos, error: cErr } = await supabase.from('contratos').select('id').eq('rbd', rbd);
-    if (cErr || !contratos || contratos.length === 0) {
-      if (cErr) console.warn("⚠️ Error obteniendo contratos en Supabase para asignaciones:", cErr);
-      const localConts = dbLocal.contratos.filter(c => c.rbd === rbd);
-      const localIds = localConts.map(c => c.id);
-      return dbLocal.asignacionesAula.filter(a => localIds.includes(a.contrato_id));
-    }
-    const ids = contratos.map(c => c.id);
-    const { data, error } = await supabase.from('asignaciones_aula').select('*').in('contrato_id', ids);
-    if (error) {
+    try {
+      const { data: contratos, error: cErr } = await supabase.from('contratos').select('id').eq('rbd', rbd);
+      if (cErr || !contratos || contratos.length === 0) {
+        if (cErr) console.warn("⚠️ Error obteniendo contratos en Supabase para asignaciones:", cErr);
+        const localConts = dbLocal.contratos.filter(c => c.rbd === rbd);
+        const localIds = localConts.map(c => c.id);
+        return dbLocal.asignacionesAula.filter(a => localIds.includes(a.contrato_id));
+      }
+      const ids = contratos.map(c => c.id);
+      const { data, error } = await supabase.from('asignaciones_aula').select('*').in('contrato_id', ids);
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
       const localConts = dbLocal.contratos.filter(c => c.rbd === rbd);
       const localIds = localConts.map(c => c.id);
       return handleFallback(error, dbLocal.asignacionesAula.filter(a => localIds.includes(a.contrato_id)), 'asignaciones_aula');
     }
-    return data || [];
   },
 
   getAlertas: async (rbd?: string): Promise<AlertaConciliacion[]> => {
-    let query = supabase.from('alertas_conciliacion').select('*');
-    if (rbd) {
-      query = query.eq('rbd', rbd);
-    }
-    const { data, error } = await query;
-    if (error) {
+    try {
+      let query = supabase.from('alertas_conciliacion').select('*');
+      if (rbd) {
+        query = query.eq('rbd', rbd);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
       const fallback = rbd ? dbLocal.alertas.filter(a => a.rbd === rbd) : dbLocal.alertas;
       return handleFallback(error, fallback, 'alertas_conciliacion');
     }
-    return data || [];
   },
 
   upsertFuncionario: async (funcionario: Funcionario): Promise<void> => {
@@ -480,8 +506,10 @@ export const api = {
     if (dataObj.estamento === 'Docente' || dataObj.estamento === 'Asistente de la Educación') {
       dataObj.grupo_estamento = 'P02_Educacion';
     }
-    const { error } = await supabase.from('funcionarios').upsert(dataObj);
-    if (error) {
+    try {
+      const { error } = await supabase.from('funcionarios').upsert(dataObj);
+      if (error) throw error;
+    } catch (error) {
       console.warn("⚠️ Error en Supabase, guardando funcionario en local:", error);
       const funcionarios = dbLocal.funcionarios;
       const index = funcionarios.findIndex(f => f.run === dataObj.run);
