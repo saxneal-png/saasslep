@@ -480,332 +480,115 @@ export function parsearArchivoExcelOJson(
     const rawRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
     if (rawRows.length === 0) return;
 
-    // Force Row 1 (index 0) as the headerRowIdx
-    const headerRowIdx = 0;
-    const headers = rawRows[0] ? rawRows[0].map((cell: any) => String(cell || '').trim()) : [];
-
-    const rows: any[] = [];
-    for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
+    for (let i = 1; i < rawRows.length; i++) {
       const row = rawRows[i];
       if (!row || !Array.isArray(row)) continue;
-      const obj: any = {};
-      let hasData = false;
-      headers.forEach((header, colIdx) => {
-        if (!header) return;
-        const val = row[colIdx];
-        obj[header] = val !== undefined ? val : '';
-        if (val !== undefined && val !== null && String(val).trim() !== '') {
-          hasData = true;
-        }
-      });
-      if (hasData) {
-        rows.push(obj);
+
+      const runRaw = row[0];
+      if (runRaw === undefined || runRaw === null || runRaw === '' || String(runRaw).trim() === 'NaN') {
+        continue;
       }
-    }
 
-    const headersLower = headers.map(h => h.toLowerCase());
-    const hasRbd = headersLower.some(h => h === 'rbd');
-    const hasEstablecimientoName = headersLower.some(h => h.includes('establecimiento') || h.includes('colegio') || h.includes('nombre'));
-    const isEstablishmentSheet = hasRbd && hasEstablecimientoName && !headersLower.some(h => h.includes('run') || h.includes('r.u.n.') || h.includes('rut') || h.includes('contrato'));
+      const run = normalizarRun(runRaw);
+      if (!run) continue;
 
-    if (isEstablishmentSheet) {
-      rows.forEach(row => {
-        const rbdKey = headers.find(h => h.toLowerCase() === 'rbd');
-        const nameKey = headers.find(h => h.toLowerCase().includes('establecimiento') || h.toLowerCase().includes('colegio') || h.toLowerCase() === 'nombre');
-        const comunaKey = headers.find(h => h.toLowerCase().includes('comuna'));
-        
-        if (!rbdKey || !row[rbdKey]) return;
-        const rbd = String(row[rbdKey]).trim();
-        const nombre = nameKey ? String(row[nameKey] || '').trim() : 'Establecimiento ' + rbd;
-        
-        let comuna = 'Chillán Viejo';
-        if (comunaKey && row[comunaKey]) {
-          comuna = String(row[comunaKey]).trim();
-        } else {
-          const normSheet = sheetName.toLowerCase();
-          if (normSheet.includes('bulnes')) comuna = 'Bulnes';
-          else if (normSheet.includes('chillan viejo') || normSheet.includes('chillán viejo')) comuna = 'Chillán Viejo';
-          else if (normSheet.includes('el carmen')) comuna = 'El Carmen';
-          else if (normSheet.includes('pemuco')) comuna = 'Pemuco';
-          else if (normSheet.includes('san ignacio')) comuna = 'San Ignacio';
-          else if (normSheet.includes('yungay')) comuna = 'Yungay';
-          else if (normSheet.includes('quillon') || normSheet.includes('quillón')) comuna = 'Quillón';
-        }
+      const apePat = String(row[1] || '').trim();
+      const apeMat = String(row[2] || '').trim();
+      const nombres = String(row[3] || '').trim();
+      const nombreCompleto = `${nombres} ${apePat} ${apeMat}`.replace(/\s+/g, ' ').trim();
 
-        const cleanComuna = comuna.charAt(0).toUpperCase() + comuna.slice(1).toLowerCase();
-        
+      const legLab = String(row[5] || '').trim().toLowerCase();
+      let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
+      if (legLab.includes('docente')) {
+        estamento = 'Docente';
+      } else if (legLab.includes('asistente') || legLab.includes('auxiliar')) {
+        estamento = 'Asistente de la Educación';
+      } else if (forceEstamento) {
+        estamento = forceEstamento;
+      }
+
+      const horas = parseDecimalHours(row[16]);
+      const programa = String(row[9] || '').trim();
+      const comunaRaw = String(row[10] || '').trim();
+      const centroCosto = String(row[11] || '').trim();
+      const rbdVal = String(row[12] || '').trim();
+
+      const rbd = rbdVal || rbdContext;
+
+      let comuna = comunaRaw.charAt(0).toUpperCase() + comunaRaw.slice(1).toLowerCase().trim();
+      if (!comuna) comuna = 'Chillán Viejo';
+
+      if (rbd && centroCosto) {
         if (!establecimientos.some(e => e.rbd === rbd)) {
           establecimientos.push({
             rbd,
-            nombre,
+            nombre: centroCosto,
             ivm: 75.0,
-            comuna: cleanComuna,
+            comuna,
             regimen: 'JEC'
           });
         }
-      });
-      return;
-    }
+      }
 
-    const hasRun = headersLower.some(h => h.includes('run') || h.includes('r.u.n.') || h.includes('rut'));
-    if (hasRun) {
-      rows.forEach((row, idx) => {
-        const runKey = headers.find(h => h.toLowerCase().includes('run') || h.toLowerCase().includes('r.u.n.') || h.toLowerCase().includes('rut'));
-        if (!runKey || !row[runKey]) return;
-        const run = normalizarRun(row[runKey]);
-        if (!run) return;
-
-        let nombre = 'Funcionario Sin Nombre';
-        const nameKey = headers.find(h => h.toLowerCase() === 'nombre' || h.toLowerCase() === 'nombres' || h.toLowerCase() === 'nombres/apellidos');
-        const paternoKey = headers.find(h => h.toLowerCase().includes('paterno'));
-        const maternoKey = headers.find(h => h.toLowerCase().includes('materno'));
-        
-        if (paternoKey || maternoKey) {
-          const nom = nameKey ? String(row[nameKey] || '').trim() : '';
-          const pat = paternoKey ? String(row[paternoKey] || '').trim() : '';
-          const mat = maternoKey ? String(row[maternoKey] || '').trim() : '';
-          nombre = `${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim();
-        } else if (nameKey) {
-          nombre = String(row[nameKey]).trim();
-        }
-
-        const sexKey = headers.find(h => h.toLowerCase() === 'sexo' || h.toLowerCase() === 'genero' || h.toLowerCase() === 'género');
-        let genero = sexKey ? String(row[sexKey] || '').trim() : undefined;
-        if (genero) {
-          genero = genero.toUpperCase().startsWith('M') ? 'Masculino' : genero.toUpperCase().startsWith('F') ? 'Femenino' : genero;
-        }
-
-        const ingresoKey = headers.find(h => h.toLowerCase().includes('ingreso') || h.toLowerCase().includes('fecha de ingreso') || h.toLowerCase() === 'fecha_ingreso' || h.toLowerCase() === 'ingreso');
-        const fecha_ingreso = ingresoKey ? String(row[ingresoKey] || '').trim() : undefined;
-
-        const tramoKey = headers.find(h => h.toLowerCase().includes('tramo'));
-        let tramo: any = tramoKey ? String(row[tramoKey] || '').trim() : undefined;
-        if (tramo) {
-          const tr = tramo.toLowerCase();
-          if (tr.includes('inicial')) tramo = 'Inicial';
-          else if (tr.includes('temprano')) tramo = 'Temprano';
-          else if (tr.includes('avanzado')) tramo = 'Avanzado';
-          else if (tr.includes('experto i') || tr.includes('experto 1')) tramo = 'Experto I';
-          else if (tr.includes('experto ii') || tr.includes('experto 2')) tramo = 'Experto II';
-          else if (tr.includes('acceso')) tramo = 'Acceso';
-          else tramo = 'Sin Tramo';
-        }
-
-        const cargoKey = headers.find(h => h.toLowerCase() === 'cargo' || h.toLowerCase().includes('función') || h.toLowerCase().includes('funcion') || h.toLowerCase() === 'cargo/funcion');
-        const cargoRaw = cargoKey ? String(row[cargoKey] || '').trim() : 'Docente de Aula';
-        
-        // Estamento detection based on Legislación Laboral or Cargo
-        const legKey = headers.find(h => h.toLowerCase().includes('legislac') || h.toLowerCase().includes('laboral') || h.toLowerCase().includes('ley') || h.toLowerCase().includes('estatuto'));
-        const legVal = legKey && row[legKey] ? String(row[legKey]).trim().toLowerCase() : '';
-
-        let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
-        if (legVal.includes('docente') || legVal.includes('estatuto')) {
-          estamento = 'Docente';
-        } else if (legVal.includes('asistente') || legVal.includes('auxiliar')) {
-          estamento = 'Asistente de la Educación';
-        } else {
-          if (forceEstamento) {
-            estamento = forceEstamento;
-          } else {
-            const c = cargoRaw.toLowerCase();
-            if (c.includes('docente') || c.includes('profesor') || c.includes('director') || c.includes('utp') || c.includes('educadora')) {
-              estamento = 'Docente';
-            }
-          }
-        }
-
-        const cargo = estamento === 'Docente' ? normalizarCargoDocente(cargoRaw) : cargoRaw;
-
-        const contratoKey = headers.find(h => h.toLowerCase().includes('contrato') || h.toLowerCase().includes('calidad') || h.toLowerCase() === 'tipo contrato' || h.toLowerCase() === 'calidad juridica');
-        const rawContrato = contratoKey ? String(row[contratoKey] || '').trim().toLowerCase() : 'a contrata';
-        let calidad_juridica: CalidadJuridica = 'A contrata';
-        if (rawContrato.includes('titular')) calidad_juridica = 'Titular';
-        else if (rawContrato.includes('plazo fijo')) calidad_juridica = 'Plazo fijo';
-        else if (rawContrato.includes('indefinido')) calidad_juridica = 'Indefinido';
-        else if (rawContrato.includes('reemplazo pie')) calidad_juridica = 'Reemplazo PIE';
-        else if (rawContrato.includes('reemplazo sep')) calidad_juridica = 'Reemplazo SEP';
-        else if (rawContrato.includes('reemplazo')) calidad_juridica = 'Reemplazo';
-        else if (rawContrato.includes('habilitacion') || rawContrato.includes('habilitación')) calidad_juridica = 'Habilitación especial';
-
-        const parseFormulaHours = (val: any): number => {
-          if (val === undefined || val === null || val === '') return 0;
-          const str = String(val).trim();
-          if (str.includes('+')) {
-            return str.split('+').reduce((sum, part) => sum + parseDecimalHours(part), 0);
-          }
-          return parseDecimalHours(val);
+      // Add or update Funcionario
+      let func = funcionarios.find(f => f.run === run);
+      if (!func) {
+        func = {
+          run,
+          nombre: nombreCompleto || 'Funcionario Sin Nombre',
+          estamento,
+          cargo: estamento === 'Docente' ? 'Docente de Aula' : 'Asistente',
+          tramo: 'Sin Tramo'
         };
+        funcionarios.push(func);
+      }
 
-        const hoursKey = headers.find(h => h.toLowerCase().includes('horas contrato') || h.toLowerCase().includes('horas_contrato') || h.toLowerCase().includes('horas totales') || h.toLowerCase() === 'horas');
-        const horas_totales = hoursKey ? parseFormulaHours(row[hoursKey]) : 30;
-
-        const regularKey = headers.find(h => h.toLowerCase().includes('regular') || h.toLowerCase() === 'subvencion regular' || h.toLowerCase() === 'normal');
-        const sepKey = headers.find(h => h.toLowerCase() === 'sep' || h.toLowerCase().includes('sep') || h.toLowerCase() === 'subvencion sep');
-        const pieKey = headers.find(h => h.toLowerCase() === 'pie' || h.toLowerCase().includes('pie') || h.toLowerCase() === 'subvencion pie');
-        
-        let regular = regularKey ? parseFormulaHours(row[regularKey]) : 0;
-        let sep = sepKey ? parseFormulaHours(row[sepKey]) : 0;
-        let pie = pieKey ? parseFormulaHours(row[pieKey]) : 0;
-
-        const regularCols = headers.filter(h => h.toLowerCase().includes('regular') || h.toLowerCase().includes('normal'));
-        if (regularCols.length > 1) {
-          regular = regularCols.reduce((sum, col) => sum + parseFormulaHours(row[col]), 0);
-        }
-        const pieCols = headers.filter(h => h.toLowerCase().includes('pie') && h.toLowerCase() !== 'programa');
-        if (pieCols.length > 1) {
-          pie = pieCols.reduce((sum, col) => sum + parseFormulaHours(row[col]), 0);
-        }
-
-        // Program column logic
-        if (regular === 0 && sep === 0 && pie === 0 && horas_totales > 0) {
-          const programKey = headers.find(h => h.toLowerCase() === 'programa');
-          const programVal = programKey && row[programKey] ? String(row[programKey]).trim().toLowerCase() : '';
-          
-          if (programVal.includes('pie')) {
-            pie = horas_totales;
-          } else if (programVal.includes('sep')) {
-            sep = horas_totales;
-          } else {
-            regular = horas_totales;
-          }
-        }
-
-        const rbdKey = headers.find(h => h.toLowerCase() === 'rbd' || h.toLowerCase().includes('rbd_establecimiento'));
-        const ccKey = headers.find(h => h.toLowerCase().includes('centro costo') || h.toLowerCase().includes('centro_costo') || h.toLowerCase().includes('establecimiento') || h.toLowerCase() === 'colegio');
-        const comunaKey = headers.find(h => h.toLowerCase().includes('comuna'));
-
-        let rbd = rbdContext;
-        let schoolName = '';
-        let schoolComuna = 'Chillán Viejo';
-
-        if (ccKey && row[ccKey]) {
-          schoolName = String(row[ccKey]).trim();
-        }
-        if (comunaKey && row[comunaKey]) {
-          schoolComuna = String(row[comunaKey]).trim();
-        }
-
-        const cleanString = (str: string): string => {
-          return str
-            .toLowerCase()
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "") // Remove accents
-            .replace(/n[°ºo]\s*\d+/g, "") // Remove "N° XX" or "N°XX"
-            .replace(/[^a-z0-9]/g, " ") // Keep only alphanumeric
-            .replace(/\s+/g, " ") // Normalize spaces
-            .trim();
-        };
-
-        if (rbdKey && row[rbdKey]) {
-          rbd = String(row[rbdKey]).trim();
-        } else if (schoolName) {
-          const cleanNameKey = cleanString(schoolName);
-          let foundRbd = '';
-          for (const [dbName, dbRbd] of Object.entries(schoolNameToRbdMap)) {
-            const cleanDbName = cleanString(dbName);
-            if (cleanDbName === cleanNameKey || cleanDbName.includes(cleanNameKey) || cleanNameKey.includes(cleanDbName)) {
-              foundRbd = dbRbd;
-              break;
-            }
-          }
-          if (foundRbd) {
-            rbd = foundRbd;
-          } else {
-            let hash = 0;
-            for (let i = 0; i < schoolName.length; i++) {
-              hash = schoolName.charCodeAt(i) + ((hash << 5) - hash);
-            }
-            rbd = String(900000 + Math.abs(hash % 100000));
-          }
-        }
-
-        let cleanComuna = schoolComuna.charAt(0).toUpperCase() + schoolComuna.slice(1).toLowerCase().trim();
-        if (cleanComuna.toLowerCase().startsWith('chillan')) {
-          cleanComuna = 'Chillán';
-        } else if (cleanComuna.toLowerCase().startsWith('yungay')) {
-          cleanComuna = 'Yungay';
-        } else if (cleanComuna.toLowerCase().includes('carmen')) {
-          cleanComuna = 'El Carmen';
-        } else if (cleanComuna.toLowerCase().includes('coihueco')) {
-          cleanComuna = 'Coihueco';
-        } else if (cleanComuna.toLowerCase().includes('pemuco')) {
-          cleanComuna = 'Pemuco';
-        } else if (cleanComuna.toLowerCase().includes('pinto')) {
-          cleanComuna = 'Pinto';
-        } else if (cleanComuna.toLowerCase().includes('quillon') || cleanComuna.toLowerCase().includes('quillón')) {
-          cleanComuna = 'Quillón';
-        } else if (cleanComuna.toLowerCase().includes('san ignacio')) {
-          cleanComuna = 'San Ignacio';
-        }
-
-        if (rbd && schoolName) {
-          if (!establecimientos.some(e => e.rbd === rbd)) {
-            establecimientos.push({
-              rbd,
-              nombre: schoolName,
-              ivm: 75.0,
-              comuna: cleanComuna,
-              regimen: 'JEC'
-            });
-          }
-        }
-
-        if (!funcionarios.some(f => f.run === run)) {
-          funcionarios.push({
-            run,
-            nombre,
-            estamento,
-            cargo,
-            genero,
-            fecha_ingreso_sistema: fecha_ingreso,
-            fecha_ingreso_establecimiento: fecha_ingreso,
-            tramo: tramo || 'Sin Tramo'
-          });
-        }
-
-        const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}-${idx}`;
-        const legislacion_laboral = estamento === 'Docente' ? 'Estatuto docente' : 'Asistentes de la educación';
-        
-        const aulaKey = headers.find(h => h.toLowerCase().includes('horas aula') || h.toLowerCase().includes('horas_aula') || h.toLowerCase() === 'aula');
-        const horas_aula = aulaKey ? parseFormulaHours(row[aulaKey]) : undefined;
-
-        contratos.push({
+      // Add or update Contrato (Aggregation logic)
+      let contrato = contratos.find(c => c.funcionario_run === run && c.rbd === rbd);
+      
+      if (!contrato) {
+        const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
+        const nuevoContrato: Contrato = {
           id: contrato_id,
           funcionario_run: run,
           rbd,
-          calidad_juridica,
-          funcion_principal: cargo,
+          calidad_juridica: 'A contrata', 
+          funcion_principal: func.cargo || 'Funcionario',
           estado: 'Activo',
-          horas_totales,
-          legislacion_laboral,
-          horas_aula
-        });
+          horas_totales: 0,
+          legislacion_laboral: estamento === 'Docente' ? 'Estatuto docente' : 'Asistentes de la educación'
+        };
+        contratos.push(nuevoContrato);
+        contrato = nuevoContrato;
+      }
+      
+      // Aggregate hours
+      contrato.horas_totales += horas;
 
-        if (regular > 0) {
+      // Financiamiento aggregation logic
+      if (horas > 0) {
+        let progKey = programa.toLowerCase();
+        let origen: OrigenFondo = 'Subvención Regular';
+        
+        if (progKey.includes('sep')) origen = 'SEP';
+        else if (progKey.includes('pie')) origen = 'PIE';
+        else if (progKey.includes('reforzamiento')) origen = 'Reforzamiento';
+        else if (progKey.includes('retencion')) origen = 'Pro-retención';
+        else if (progKey) origen = 'Otro';
+
+        const finId = `f-${contrato.id}-${origen.replace(/\s+/g, '')}`;
+        let financiamiento = financiamientos.find(f => f.id === finId);
+        if (financiamiento) {
+          financiamiento.horas += horas;
+        } else {
           financiamientos.push({
-            id: `f-${contrato_id}-Regular`,
-            contrato_id,
-            origen_fondo: 'Subvención Regular',
-            horas: regular
+            id: finId,
+            contrato_id: contrato.id,
+            origen_fondo: origen,
+            horas: horas
           });
         }
-        if (sep > 0) {
-          financiamientos.push({
-            id: `f-${contrato_id}-SEP`,
-            contrato_id,
-            origen_fondo: 'SEP',
-            horas: sep
-          });
-        }
-        if (pie > 0) {
-          financiamientos.push({
-            id: `f-${contrato_id}-PIE`,
-            contrato_id,
-            origen_fondo: 'PIE',
-            horas: pie
-          });
-        }
-      });
+      }
     }
   });
 
