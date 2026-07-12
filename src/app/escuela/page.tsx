@@ -4034,6 +4034,40 @@ export default function EscuelaDashboard() {
                           </div>
                         </div>
 
+                        {/* Comparison of Proportions */}
+                        {(() => {
+                          const horasEfectivas = Math.max(0, editContHoras - dirHrs - tecHrs - otrasFuncionesHrs);
+                          const standardMaxLect = parseFloat((horasEfectivas * 0.65).toFixed(1));
+                          const standardMinNoLect = parseFloat((horasEfectivas * 0.35).toFixed(1));
+                          const especialMaxLect = parseFloat((horasEfectivas * 0.60).toFixed(1));
+                          const especialMinNoLect = parseFloat((horasEfectivas * 0.40).toFixed(1));
+
+                          return (
+                            <div className="bg-slate-50 border border-slate-200/60 rounded-lg p-3 text-xs space-y-2">
+                              <p className="font-bold text-slate-700">⚖️ Proyecciones de Proporcionalidad (Sobre {horasEfectivas} hrs de docencia efectiva)</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className={`p-2.5 rounded-lg border text-[11px] ${!leyCalculo.leyEspecialAplicada ? 'bg-blue-50 border-blue-200 font-medium' : 'bg-white border-slate-200'}`}>
+                                  <div className="flex justify-between items-center mb-1">
+                                    <span className="font-bold text-slate-800">Estándar 65 / 35 {!leyCalculo.leyEspecialAplicada && '⭐ (Activa)'}</span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-550">Lectivas Máx: <strong className="text-slate-700">{standardMaxLect} hrs</strong></p>
+                                  <p className="text-[10px] text-slate-550">No Lectivas Mín: <strong className="text-slate-700">{standardMinNoLect} hrs</strong></p>
+                                </div>
+                                <div className={`p-2.5 rounded-lg border text-[11px] ${leyCalculo.leyEspecialAplicada ? 'bg-amber-50 border-amber-300 font-medium animate-pulse' : 'bg-white border-slate-200'}`}>
+                                  <div className="flex justify-between items-center mb-1">
+                                    <span className="font-bold text-slate-800">Excepción 60 / 40 {leyCalculo.leyEspecialAplicada && '⭐ (Activa)'}</span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-550">Lectivas Máx: <strong className="text-slate-700">{especialMaxLect} hrs</strong></p>
+                                  <p className="text-[10px] text-slate-550">No Lectivas Mín: <strong className="text-slate-700">{especialMinNoLect} hrs</strong></p>
+                                </div>
+                              </div>
+                              <p className="text-[9px] text-slate-400 italic">
+                                * La proporción 60/40 aplica si el docente dicta clases en 1° a 4° Básico y la vulnerabilidad (IVM) del colegio es superior al 80%.
+                              </p>
+                            </div>
+                          );
+                        })()}
+
                         {/* Other hours distribution block */}
                         <div className="bg-slate-50 border rounded-lg p-3 text-xs space-y-1">
                           <p className="font-bold text-slate-700">⚙️ Distribución de Horas Directivas y de Administración</p>
