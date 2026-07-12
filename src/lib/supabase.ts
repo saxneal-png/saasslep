@@ -538,7 +538,17 @@ export const api = {
   },
 
   upsertFuncionario: async (funcionario: Funcionario): Promise<void> => {
-    const dataObj = { ...funcionario };
+    const dbColumns = [
+      'run', 'nombre', 'email', 'telefono', 'estamento', 'cargo', 'titulo',
+      'grupo_estamento', 'calidad_juridica_p01', 'escalafon_p01', 'grado_eus',
+      'genero', 'fecha_nacimiento'
+    ];
+    const dataObj: any = {};
+    for (const col of dbColumns) {
+      if ((funcionario as any)[col] !== undefined) {
+        dataObj[col] = (funcionario as any)[col];
+      }
+    }
     if (dataObj.estamento === 'Docente' || dataObj.estamento === 'Asistente de la Educación') {
       dataObj.grupo_estamento = 'P02_Educacion';
     }
@@ -559,8 +569,18 @@ export const api = {
   },
 
   upsertFuncionariosBulk: async (funcionarios: Funcionario[]): Promise<void> => {
+    const dbColumns = [
+      'run', 'nombre', 'email', 'telefono', 'estamento', 'cargo', 'titulo',
+      'grupo_estamento', 'calidad_juridica_p01', 'escalafon_p01', 'grado_eus',
+      'genero', 'fecha_nacimiento'
+    ];
     const list = funcionarios.map(f => {
-      const dataObj = { ...f };
+      const dataObj: any = {};
+      for (const col of dbColumns) {
+        if ((f as any)[col] !== undefined) {
+          dataObj[col] = (f as any)[col];
+        }
+      }
       if (dataObj.estamento === 'Docente' || dataObj.estamento === 'Asistente de la Educación') {
         dataObj.grupo_estamento = 'P02_Educacion';
       }
