@@ -502,12 +502,21 @@ export const api = {
       }
       return dataObj;
     });
+
+    const withTimeout = <T>(p: Promise<T>, ms = 6000): Promise<T> => {
+      return Promise.race([
+        p,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Timeout de base de datos")), ms))
+      ]);
+    };
     
     const batchSize = 100;
     for (let i = 0; i < list.length; i += batchSize) {
       const batch = list.slice(i, i + batchSize);
-      const { error } = await supabase.from('funcionarios').upsert(batch);
-      if (error) {
+      try {
+        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('funcionarios').upsert(batch)));
+        if (error) throw error;
+      } catch (error) {
         console.warn("⚠️ Error en Supabase bulk funcionarios, guardando en local:", error);
         const current = dbLocal.funcionarios;
         for (const item of batch) {
@@ -524,11 +533,20 @@ export const api = {
     contratos: Contrato[], 
     financiamientos: FinanciamientoContrato[]
   ): Promise<void> => {
+    const withTimeout = <T>(p: Promise<T>, ms = 6000): Promise<T> => {
+      return Promise.race([
+        p,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Timeout de base de datos")), ms))
+      ]);
+    };
+
     const batchSize = 100;
     for (let i = 0; i < contratos.length; i += batchSize) {
       const batch = contratos.slice(i, i + batchSize);
-      const { error } = await supabase.from('contratos').upsert(batch);
-      if (error) {
+      try {
+        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('contratos').upsert(batch)));
+        if (error) throw error;
+      } catch (error) {
         console.warn("⚠️ Error en Supabase bulk contratos:", error);
         const current = dbLocal.contratos;
         for (const item of batch) {
@@ -543,8 +561,10 @@ export const api = {
     const contratoIds = contratos.map(c => c.id);
     for (let i = 0; i < contratoIds.length; i += batchSize) {
       const batchIds = contratoIds.slice(i, i + batchSize);
-      const { error } = await supabase.from('financiamientos').delete().in('contrato_id', batchIds);
-      if (error) {
+      try {
+        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').delete().in('contrato_id', batchIds)));
+        if (error) throw error;
+      } catch (error) {
         console.warn("⚠️ Error in bulk delete financiamientos:", error);
       }
     }
@@ -552,8 +572,10 @@ export const api = {
     for (let i = 0; i < financiamientos.length; i += batchSize) {
       const batch = financiamientos.slice(i, i + batchSize);
       if (batch.length > 0) {
-        const { error } = await supabase.from('financiamientos').insert(batch);
-        if (error) {
+        try {
+          const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').insert(batch)));
+          if (error) throw error;
+        } catch (error) {
           console.warn("⚠️ Error in bulk insert financiamientos:", error);
           let localFins = dbLocal.financiamientoContratos.filter(f => !contratoIds.includes(f.contrato_id));
           localFins.push(...financiamientos);
