@@ -137,6 +137,21 @@ export default function SostenedorDashboard() {
   const [planImportLogs, setPlanImportLogs] = useState('');
   const planFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Confirmation state for Excel/CSV ingestion
+  const [pendingIngest, setPendingIngest] = useState<{
+    funcionarios: Funcionario[];
+    contratos: Contrato[];
+    financiamientos: FinanciamientoContrato[];
+    alertas: AlertaConciliacion[];
+    establecimientos: Establecimiento[];
+    schoolsList: string[];
+    selectedSchools: string[];
+    targetEstamento: string;
+    isAsistente: boolean;
+  } | null>(null);
+  const [ingestProgress, setIngestProgress] = useState<number | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
   // Search and filters
   const [searchEst, setSearchEst] = useState('');
   const [selectedComuna, setSelectedComuna] = useState('Todas');
@@ -472,28 +487,24 @@ export default function SostenedorDashboard() {
           targetEstamento
         );
 
-        if (newEsts && newEsts.length > 0) {
-          for (const est of newEsts) {
-            if (est.comuna) {
-              await api.addComuna(est.comuna);
-            }
-            await api.upsertEstablecimiento(est);
-          }
-        }
+        const fileSchools = Array.from(new Set([
+          ...newConts.map(c => c.rbd),
+          ...(newEsts || []).map(e => e.rbd)
+        ])).filter(Boolean);
 
-        for (const f of newFuncs) {
-          await api.upsertFuncionario(f);
-        }
-        for (const c of newConts) {
-          const cFins = newFins.filter(f => f.contrato_id === c.id);
-          await api.upsertContratoCompleto(c, cFins);
-        }
-        for (const a of newAlts) {
-          await api.crearAlerta(a);
-        }
-
-        await loadAllData();
-        setImportLogs(`✅ Éxito: Se procesaron ${newConts.length} registros (${targetEstamento})${newEsts?.length ? `, ${newEsts.length} establecimientos` : ''} y se generaron ${newAlts.length} alertas.`);
+        setPendingIngest({
+          funcionarios: newFuncs,
+          contratos: newConts,
+          financiamientos: newFins,
+          alertas: newAlts,
+          establecimientos: newEsts || [],
+          schoolsList: fileSchools,
+          selectedSchools: fileSchools,
+          targetEstamento,
+          isAsistente: false
+        });
+        setShowConfirmModal(true);
+        setImportLogs('');
       } catch (err: any) {
         setImportLogs(`❌ Error al procesar archivo: ${err.message}`);
       }
@@ -543,33 +554,99 @@ export default function SostenedorDashboard() {
           targetEstamento
         );
 
-        if (newEsts && newEsts.length > 0) {
-          for (const est of newEsts) {
-            if (est.comuna) {
-              await api.addComuna(est.comuna);
-            }
-            await api.upsertEstablecimiento(est);
-          }
-        }
+        const fileSchools = Array.from(new Set([
+          ...newConts.map(c => c.rbd),
+          ...(newEsts || []).map(e => e.rbd)
+        ])).filter(Boolean);
 
-        for (const f of newFuncs) {
-          await api.upsertFuncionario(f);
-        }
-        for (const c of newConts) {
-          const cFins = newFins.filter(f => f.contrato_id === c.id);
-          await api.upsertContratoCompleto(c, cFins);
-        }
-        for (const a of newAlts) {
-          await api.crearAlerta(a);
-        }
-
-        await loadAllData();
-        setImportLogsAsis(`✅ Éxito: Se procesaron ${newConts.length} registros (${targetEstamento})${newEsts?.length ? `, ${newEsts.length} establecimientos` : ''} y se generaron ${newAlts.length} alertas.`);
+        setPendingIngest({
+          funcionarios: newFuncs,
+          contratos: newConts,
+          financiamientos: newFins,
+          alertas: newAlts,
+          establecimientos: newEsts || [],
+          schoolsList: fileSchools,
+          selectedSchools: fileSchools,
+          targetEstamento,
+          isAsistente: true
+        });
+        setShowConfirmModal(true);
+        setImportLogsAsis('');
       } catch (err: any) {
         setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
       }
     };
     reader.readAsArrayBuffer(file);
+  };
+
+  const handleConfirmIngest = async () => {
+    if (!pendingIngest) return;
+    const { funcionarios, contratos, financiamientos, alertas, establecimientos, selectedSchools, targetEstamento, isAsistente } = pendingIngest;
+    
+    setIngestProgress(0);
+    try {
+      const filteredEsts = establecimientos.filter(e => selectedSchools.includes(e.rbd));
+      const filteredConts = contratos.filter(c => selectedSchools.includes(c.rbd));
+      const filteredFuncsRuns = Array.from(new Set(filteredConts.map(c => c.funcionario_run)));
+      const filteredFuncs = funcionarios.filter(f => filteredFuncsRuns.includes(f.run) || f.estamento === targetEstamento);
+      const filteredFins = financiamientos.filter(f => {
+        const parentCont = contratos.find(c => c.id === f.contrato_id);
+        return parentCont && selectedSchools.includes(parentCont.rbd);
+      });
+      const filteredAlts = alertas.filter(a => selectedSchools.includes(a.rbd));
+
+      const totalItems = filteredEsts.length + filteredFuncs.length + filteredConts.length + filteredAlts.length;
+      let processed = 0;
+
+      const updateProgress = () => {
+        processed++;
+        setIngestProgress(Math.round((processed / Math.max(totalItems, 1)) * 100));
+      };
+
+      for (const est of filteredEsts) {
+        if (est.comuna) {
+          await api.addComuna(est.comuna);
+        }
+        await api.upsertEstablecimiento(est);
+        updateProgress();
+      }
+
+      for (const f of filteredFuncs) {
+        await api.upsertFuncionario(f);
+        updateProgress();
+      }
+
+      for (const c of filteredConts) {
+        const cFins = filteredFins.filter(f => f.contrato_id === c.id);
+        await api.upsertContratoCompleto(c, cFins);
+        updateProgress();
+      }
+
+      for (const a of filteredAlts) {
+        await api.crearAlerta(a);
+        updateProgress();
+      }
+
+      await loadAllData();
+      
+      const successMsg = `✅ Éxito: Se procesaron y confirmaron ${filteredConts.length} contratos y ${filteredEsts.length} establecimientos.`;
+      if (isAsistente) {
+        setImportLogsAsis(successMsg);
+      } else {
+        setImportLogs(successMsg);
+      }
+    } catch (err: any) {
+      const errMsg = `❌ Error en confirmación de ingesta: ${err.message}`;
+      if (isAsistente) {
+        setImportLogsAsis(errMsg);
+      } else {
+        setImportLogs(errMsg);
+      }
+    } finally {
+      setIngestProgress(null);
+      setShowConfirmModal(false);
+      setPendingIngest(null);
+    }
   };
 
   // Drag-and-drop Plan Estudio JSON
@@ -2723,6 +2800,145 @@ export default function SostenedorDashboard() {
                   Confirmar Exportación
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ingestion Confirmation & Schools Selection Modal */}
+      {showConfirmModal && pendingIngest && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full max-h-[85vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+              <div>
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <span>⚖️</span> Confirmar Ingesta de Datos (Excel / CSV)
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">Valide la dotación detectada y seleccione los establecimientos a importar.</p>
+              </div>
+              <button 
+                onClick={() => {
+                  if (ingestProgress === null) {
+                    setShowConfirmModal(false);
+                    setPendingIngest(null);
+                  }
+                }}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+                disabled={ingestProgress !== null}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <span className="text-slate-500 font-semibold block">Funcionarios Detectados</span>
+                  <span className="text-base font-bold text-slate-800">{pendingIngest.funcionarios.length}</span>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <span className="text-slate-500 font-semibold block">Contratos Detectados</span>
+                  <span className="text-base font-bold text-slate-800">{pendingIngest.contratos.length}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700">Seleccionar Establecimientos a Importar</label>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setPendingIngest(prev => prev ? { ...prev, selectedSchools: prev.schoolsList } : null)}
+                      className="text-[10px] text-slep-blue font-bold hover:underline cursor-pointer"
+                      disabled={ingestProgress !== null}
+                    >
+                      Todos
+                    </button>
+                    <span className="text-slate-300 text-[10px]">|</span>
+                    <button 
+                      onClick={() => setPendingIngest(prev => prev ? { ...prev, selectedSchools: [] } : null)}
+                      className="text-[10px] text-rose-500 font-bold hover:underline cursor-pointer"
+                      disabled={ingestProgress !== null}
+                    >
+                      Ninguno
+                    </button>
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-100 p-2 bg-slate-50">
+                  {pendingIngest.schoolsList.map(rbd => {
+                    const estObj = establecimientos.find(e => e.rbd === rbd) || pendingIngest.establecimientos.find(e => e.rbd === rbd);
+                    const name = estObj ? estObj.nombre : `Colegio / RBD ${rbd}`;
+                    const isChecked = pendingIngest.selectedSchools.includes(rbd);
+                    
+                    return (
+                      <label 
+                        key={rbd} 
+                        className="flex items-start gap-3 p-2 hover:bg-slate-100/50 cursor-pointer text-xs transition-colors rounded"
+                      >
+                        <input 
+                          type="checkbox" 
+                          checked={isChecked}
+                          disabled={ingestProgress !== null}
+                          onChange={(e) => {
+                            const updated = e.target.checked 
+                              ? [...pendingIngest.selectedSchools, rbd]
+                              : pendingIngest.selectedSchools.filter(s => s !== rbd);
+                            setPendingIngest(prev => prev ? { ...prev, selectedSchools: updated } : null);
+                          }}
+                          className="mt-0.5 rounded text-slep-blue focus:ring-slep-blue"
+                        />
+                        <div>
+                          <span className="font-bold text-slate-800 block">{name}</span>
+                          <span className="text-[10px] text-slate-500 font-mono">RBD: {rbd}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                  {pendingIngest.schoolsList.length === 0 && (
+                    <div className="p-4 text-center text-slate-400 text-xs">
+                      No se detectaron establecimientos específicos o contratos en la hoja activa.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {ingestProgress !== null && (
+                <div className="bg-blue-50/50 border border-blue-200/50 p-4 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-600 font-bold">Procesando ingesta...</span>
+                    <span className="font-mono text-slep-blue font-black">{ingestProgress}%</span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-2">
+                    <div className="bg-slep-blue h-2 rounded-full transition-all duration-300" style={{ width: `${ingestProgress}%` }}></div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 text-center leading-none">Por favor, no cierre esta ventana hasta finalizar.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 rounded-b-2xl flex gap-3">
+              <button 
+                type="button"
+                disabled={ingestProgress !== null}
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  setPendingIngest(null);
+                }}
+                className="flex-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold py-2.5 rounded-lg text-xs cursor-pointer text-center"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button"
+                disabled={ingestProgress !== null || pendingIngest.selectedSchools.length === 0}
+                onClick={handleConfirmIngest}
+                className="flex-1 bg-slep-blue hover:bg-slep-blue-hover text-white font-bold py-2.5 rounded-lg text-xs cursor-pointer text-center disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+              >
+                Confirmar e Iniciar Ingesta
+              </button>
             </div>
           </div>
         </div>
