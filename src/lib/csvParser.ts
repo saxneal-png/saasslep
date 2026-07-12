@@ -487,14 +487,15 @@ export function parsearArchivoExcelOJson(
     const idxNom = 3;
     const idxSexo = 4;
     const idxLeg = 5;
-    const idxActivo = 8;
-    const idxProg = 9;
-    const idxComuna = 10;
-    const idxCentroCosto = 11;
-    const idxRbd = 12;
-    const idxCargo = 13;
-    const idxTipoContrato = 15;
-    const idxHoras = 16;
+    const idxActivo = -1; // No visible en la planilla reducida
+    const idxProg = 8;
+    const idxComuna = 9;
+    const idxCentroCosto = 10;
+    const idxRbd = 11;
+    const idxCargo = 12;
+    const idxTramo = 13;
+    const idxTipoContrato = 14;
+    const idxHoras = 15;
 
     const startRow = 1;
 
@@ -543,11 +544,23 @@ export function parsearArchivoExcelOJson(
         legislacion_laboral = 'Asistentes de la educación';
       }
 
-      const principalActivo = String(row[idxActivo] || '').trim().toUpperCase();
       let estado: EstadoContrato = 'Activo';
-      if (principalActivo === 'NO' || principalActivo === 'INACTIVO' || principalActivo === '0') {
-        estado = 'Pendiente_Aprobacion';
+      if (idxActivo !== -1) {
+        const principalActivo = String(row[idxActivo] || '').trim().toUpperCase();
+        if (principalActivo === 'NO' || principalActivo === 'INACTIVO' || principalActivo === '0') {
+          estado = 'Pendiente_Aprobacion';
+        }
       }
+
+      const tramoRaw = String(row[idxTramo] || '').trim();
+      let tramo: 'Sin Tramo' | 'Acceso' | 'Inicial' | 'Temprano' | 'Avanzado' | 'Experto I' | 'Experto II' = 'Sin Tramo';
+      const tramoClean = tramoRaw.toLowerCase();
+      if (tramoClean.includes('acceso')) tramo = 'Acceso';
+      else if (tramoClean.includes('inicial')) tramo = 'Inicial';
+      else if (tramoClean.includes('temprano')) tramo = 'Temprano';
+      else if (tramoClean.includes('avanzado')) tramo = 'Avanzado';
+      else if (tramoClean.includes('experto i') || tramoClean.includes('experto 1')) tramo = 'Experto I';
+      else if (tramoClean.includes('experto ii') || tramoClean.includes('experto 2')) tramo = 'Experto II';
 
       const programa = String(row[idxProg] || '').trim();
       const comunaRaw = String(row[idxComuna] || '').trim();
@@ -629,12 +642,13 @@ export function parsearArchivoExcelOJson(
           estamento,
           cargo: cargoRaw || (estamento === 'Docente' ? 'Docente de Aula' : 'Asistente'),
           genero,
-          tramo: 'Sin Tramo'
+          tramo: tramo
         };
         funcionarios.push(func);
       } else {
         if (!func.genero && genero) func.genero = genero;
         if (!func.cargo && cargoRaw) func.cargo = cargoRaw;
+        if ((!func.tramo || func.tramo === 'Sin Tramo') && tramo !== 'Sin Tramo') func.tramo = tramo;
       }
 
       // Quality mapping
