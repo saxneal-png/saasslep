@@ -180,7 +180,7 @@ export default function SostenedorDashboard() {
 
         const urlParams = new URLSearchParams(window.location.search);
         const tabParam = urlParams.get('tab');
-        if (tabParam === 'compendio' || tabParam === 'dashboard') {
+        if (tabParam === 'compendio' || tabParam === 'dashboard' || tabParam === 'resumenes' || tabParam === 'conciliacion') {
           setActiveTab(tabParam as any);
         }
 

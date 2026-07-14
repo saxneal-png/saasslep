@@ -591,11 +591,17 @@ export default function RRHHPage() {
   };
 
   // Filter staff
+  const [filterRbd, setFilterRbd] = useState<string>('all');
+
   const filteredFuncionarios = funcionarios.filter(f => {
     const matchesSearch = f.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || f.run.includes(searchTerm);
     const esP02 = f.grupo_estamento === 'P02_Educacion' || f.estamento === 'Docente' || f.estamento === 'Asistente de la Educación';
     const esP01 = f.grupo_estamento === 'P01_Administrativo';
 
+    // Filter by school/RBD: only show funcionarios with at least one contract in the selected school
+    const matchesRbd = filterRbd === 'all' || contratos.some(c => c.funcionario_run === f.run && c.rbd === filterRbd);
+
+    if (!matchesRbd) return false;
     if (filterEstamento === 'P01') return matchesSearch && esP01;
     if (filterEstamento === 'P02') return matchesSearch && esP02;
     return matchesSearch;
@@ -633,6 +639,18 @@ export default function RRHHPage() {
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-300 hover:bg-white/5 block font-bold"
               >
                 📊 Compendio Territorial
+              </Link>
+              <Link
+                href="/sostenedor?tab=resumenes"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-300 hover:bg-white/5 block font-bold"
+              >
+                📈 Resúmenes Consolidados
+              </Link>
+              <Link
+                href="/sostenedor?tab=conciliacion"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-300 hover:bg-white/5 block font-bold"
+              >
+                ⚖️ Conciliación de Horas
               </Link>
             </nav>
           </div>
@@ -1016,6 +1034,16 @@ export default function RRHHPage() {
                       <option value="P01">Solo P01 (Administrativo)</option>
                       <option value="P02">Solo P02 (Educación)</option>
                     </select>
+                    <select
+                      className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 font-bold"
+                      value={filterRbd}
+                      onChange={(e) => setFilterRbd(e.target.value)}
+                    >
+                      <option value="all">🏫 Todos los Establecimientos</option>
+                      {escuelas.map(e => (
+                        <option key={e.rbd} value={e.rbd}>{e.nombre || `RBD ${e.rbd}`} (RBD {e.rbd})</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -1119,7 +1147,7 @@ export default function RRHHPage() {
                               ) : (
                                 <div className="text-[10px] text-slate-600">
                                   <p>Título: <span className="font-semibold text-slate-800">{f.titulo || 'No registrado'}</span></p>
-                                  <p>Cargo: <span className="font-semibold">{f.cargo || 'Docente'}</span></p>
+                                  <p>Cargo: <span className="font-semibold">{f.cargo || cont?.funcion_principal || f.estamento || 'Funcionario'}</span></p>
                                 </div>
                               )}
                             </td>
