@@ -487,7 +487,7 @@ export function parsearArchivoExcelOJson(
       if (!row || !Array.isArray(row)) continue;
       const hasRun = row.some(cell => {
         const val = String(cell || '').trim().toLowerCase();
-        return val === 'run' || val === 'r.u.n.' || val === 'rut' || val === 'r.u.n';
+        return val === 'run' || val === 'r.u.n.' || val === 'rut' || val === 'r.u.n' || val.includes('run') || val.includes('rut');
       });
       if (hasRun) {
         headerRowIdx = i;
@@ -539,20 +539,52 @@ export function parsearArchivoExcelOJson(
 
       let runRaw = idxRun !== -1 ? row[idxRun] : undefined;
       let run = '';
-      if (runRaw !== undefined && runRaw !== null && String(runRaw).trim() !== '' && String(runRaw).trim() !== 'NaN') {
-        run = normalizarRun(runRaw);
-      } else if (idxRunLimpio !== -1 && row[idxRunLimpio] !== undefined && row[idxRunLimpio] !== null && String(row[idxRunLimpio]).trim() !== '' && String(row[idxRunLimpio]).trim() !== 'NaN') {
-        const body = String(row[idxRunLimpio]).replace(/[^0-9]/g, '').trim();
-        if (body.length >= 6) {
-          // Calculate DV using Chilean RUT Module 11
+      
+      const processRawRun = (raw: any): string => {
+        if (raw === undefined || raw === null) return '';
+        const str = String(raw).trim();
+        if (!str || str === 'NaN') return '';
+        
+        // Clean dots and spaces
+        const clean = str.replace(/[\.\s]/g, '');
+        
+        // If it has a hyphen, it has a DV
+        if (clean.includes('-')) {
+          return normalizarRun(clean);
+        }
+        
+        // If it has no hyphen, let's look at the length and contents
+        const digitsOnly = clean.replace(/[^0-9]/g, '');
+        const hasK = clean.toUpperCase().includes('K');
+        
+        // If it has a K, it has a DV
+        if (hasK) {
+          return normalizarRun(clean);
+        }
+        
+        // If it is numeric only:
+        // Chilean RUT bodies are between 5,000,000 and 28,000,000 (length 7 or 8).
+        // If the length of digits is 7 or 8, it is likely just the body (missing the DV).
+        // If length is 9, the last digit is the DV.
+        if (digitsOnly.length === 7 || digitsOnly.length === 8) {
+          // It's a body-only RUT! We calculate the DV.
           let m = 0, s = 1;
-          let t = parseInt(body, 10);
+          let t = parseInt(digitsOnly, 10);
           for (; t; t = Math.floor(t / 10)) {
             s = (s + t % 10 * (9 - m++ % 6)) % 11;
           }
           const dv = s ? String(s - 1) : 'K';
-          run = normalizarRun(`${body}-${dv}`);
+          return normalizarRun(`${digitsOnly}-${dv}`);
         }
+        
+        // Otherwise, use standard normalization
+        return normalizarRun(clean);
+      };
+
+      if (runRaw !== undefined && runRaw !== null && String(runRaw).trim() !== '' && String(runRaw).trim() !== 'NaN') {
+        run = processRawRun(runRaw);
+      } else if (idxRunLimpio !== -1 && row[idxRunLimpio] !== undefined && row[idxRunLimpio] !== null && String(row[idxRunLimpio]).trim() !== '' && String(row[idxRunLimpio]).trim() !== 'NaN') {
+        run = processRawRun(row[idxRunLimpio]);
       }
 
       if (!run) continue;
