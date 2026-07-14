@@ -515,7 +515,7 @@ export function parsearArchivoExcelOJson(
     const idxLeg = getIndex(['legislacion laboral', 'legislación laboral', 'legislacion', 'ley', 'estamento'], -1);
     const idxProg = getIndex(['programa', 'subvencion'], -1);
     const idxComuna = getIndex(['comuna'], -1);
-    const idxCentroCosto = getIndex(['centro costo', 'centro_costo', 'establecimiento', 'colegio'], -1);
+    const idxCentroCosto = getIndex(['centro de costo', 'centro_de_costo', 'centro costo', 'centro_costo', 'establecimiento', 'colegio'], -1);
     const idxRbd = getIndex(['rbd_maestro_contrato', 'rbd_maestro', 'rbd maestro', 'rbd_clean', 'rbd clean', 'rbd'], -1);
     const idxCargo = getIndex(['cargo', 'funcion', 'función'], -1);
     const idxTramo = getIndex(['tramo'], -1);
