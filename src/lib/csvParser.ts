@@ -500,7 +500,9 @@ export function parsearArchivoExcelOJson(
     }
 
     const headers = rawRows[headerRowIdx].map(h => 
-      String(h || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      String(h || '').trim().toLowerCase().normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[\.\-\s_]/g, "")
     );
 
     const getIndex = (kws: string[], fallback: number): number => {
@@ -510,30 +512,30 @@ export function parsearArchivoExcelOJson(
       return idx !== -1 ? idx : fallback;
     };
 
-    const idxRun = getIndex(['run', 'rut', 'r.u.n.'], -1);
-    const idxRunLimpio = getIndex(['run_limpio', 'run limpio', 'run_clean', 'run clean'], -1);
-    const idxPat = getIndex(['apellido paterno', 'paterno'], -1);
-    const idxMat = getIndex(['apellido materno', 'materno'], -1);
-    const idxNom = getIndex(['nombres', 'nombre', 'nombre/cargo'], -1);
-    const idxSexo = getIndex(['sexo', 'genero', 'género'], -1);
-    const idxLeg = getIndex(['legislacion laboral', 'legislación laboral', 'legislacion', 'ley', 'estamento'], -1);
+    const idxRun = getIndex(['run', 'rut'], -1);
+    const idxRunLimpio = getIndex(['runlimpio', 'runclean'], -1);
+    const idxPat = getIndex(['apellidopaterno', 'paterno'], -1);
+    const idxMat = getIndex(['apellidomaterno', 'materno'], -1);
+    const idxNom = getIndex(['nombres', 'nombre', 'nombredocente', 'nombrecargo'], -1);
+    const idxSexo = getIndex(['sexo', 'genero'], -1);
+    const idxLeg = getIndex(['legislacionlaboral', 'legislacion', 'ley', 'estamento'], -1);
     const idxProg = getIndex(['programa', 'subvencion'], -1);
     const idxComuna = getIndex(['comuna'], -1);
-    const idxCentroCosto = getIndex(['centro de costo', 'centro_de_costo', 'centro costo', 'centro_costo', 'establecimiento', 'colegio'], -1);
-    const idxRbd = getIndex(['rbd_maestro_contrato', 'rbd_maestro', 'rbd maestro', 'rbd_clean', 'rbd clean', 'rbd'], -1);
-    const idxCargo = getIndex(['cargo', 'funcion', 'función', 'cargo/funcion', 'cargo/función', 'funcion principal', 'funcion_principal'], -1);
+    const idxCentroCosto = getIndex(['centrodecosto', 'establecimiento', 'colegio'], -1);
+    const idxRbd = getIndex(['rbdmaestrocontrato', 'rbdmaestro', 'rbdclean', 'rbd'], -1);
+    const idxCargo = getIndex(['cargo', 'funcion', 'cargofuncion', 'funcionprincipal'], -1);
     const idxTramo = getIndex(['tramo'], -1);
-    const idxTipoContrato = getIndex(['tipo contrato', 'tipo_contrato', 'calidad'], -1);
-    const idxHoras = getIndex(['horas contrato', 'horas_contrato', 'horas'], -1);
-    const idxActivo = getIndex(['principal activo', 'activo', 'estado'], -1);
-    const idxTotalHaberes = getIndex(['total haberes', 'total_haberes', 'sueldo liquido', 'sueldo_liquido', 'sueldo', 'haberes'], -1);
-    const idxIngreso = getIndex(['ingreso', 'fecha_ingreso', 'fecha ingreso'], -1);
+    const idxTipoContrato = getIndex(['tipocontrato', 'calidad'], -1);
+    const idxHoras = getIndex(['horascontrato', 'horas'], -1);
+    const idxActivo = getIndex(['principalactivo', 'activo', 'estado'], -1);
+    const idxTotalHaberes = getIndex(['totalhaberes', 'sueldoliquido', 'sueldo', 'haberes'], -1);
+    const idxIngreso = getIndex(['ingreso', 'fechaingreso'], -1);
 
     // Multi-column hours / dotaciones
-    const idxHorasMaestro = getIndex(['horas_contrato_maestro', 'horas contrato maestro'], -1);
-    const idxRegular = getIndex(['horas_dotacion_regular', 'horas dotacion regular', 'horas dotación regular', 'regular', 'horas corriente', 'horas_corriente', 'corriente'], -1);
-    const idxPIE = getIndex(['horas_dotacion_pie', 'horas dotacion pie', 'horas dotación pie', 'pie', 'horas pie', 'horas_pie'], -1);
-    const idxSEP = getIndex(['horas_dotacion_sep', 'horas dotacion sep', 'horas dotación sep', 'sep', 'horas sep', 'horas_sep'], -1);
+    const idxHorasMaestro = getIndex(['horascontratomaestro'], -1);
+    const idxRegular = getIndex(['horasdotacionregular', 'regular', 'horascorriente', 'corriente'], -1);
+    const idxPIE = getIndex(['horasdotacionpie', 'pie', 'horaspie'], -1);
+    const idxSEP = getIndex(['horasdotacionsep', 'sep', 'horassep'], -1);
 
     const startRow = headerRowIdx + 1;
 
@@ -603,6 +605,8 @@ export function parsearArchivoExcelOJson(
       const nombres = idxNom !== -1 ? String(row[idxNom] || '').trim() : '';
       const nombreCompleto = `${nombres} ${apePat} ${apeMat}`.replace(/\s+/g, ' ').trim();
 
+      const cargoRaw = idxCargo !== -1 ? String(row[idxCargo] || '').trim() : '';
+
       const sexVal = idxSexo !== -1 ? String(row[idxSexo] || '').trim().toUpperCase() : '';
       let genero = sexVal;
       if (sexVal === 'M' || sexVal.startsWith('MASC')) genero = 'Masculino';
@@ -610,10 +614,25 @@ export function parsearArchivoExcelOJson(
 
       const legLab = idxLeg !== -1 ? String(row[idxLeg] || '').trim() : '';
       let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
-      if (legLab.toLowerCase().includes('docente')) {
-        estamento = 'Docente';
-      } else if (legLab.toLowerCase().includes('asistente') || legLab.toLowerCase().includes('auxiliar')) {
-        estamento = 'Asistente de la Educación';
+      const cargoLower = cargoRaw.toLowerCase();
+
+      if (legLab) {
+        if (legLab.toLowerCase().includes('docente')) {
+          estamento = 'Docente';
+        } else if (legLab.toLowerCase().includes('asistente') || legLab.toLowerCase().includes('auxiliar')) {
+          estamento = 'Asistente de la Educación';
+        } else if (forceEstamento) {
+          estamento = forceEstamento;
+        }
+      } else if (cargoRaw) {
+        // Fallback to cargo analysis if no legLab column is found
+        if (cargoLower.includes('docente') || cargoLower.includes('profesor') || cargoLower.includes('educador') || cargoLower.includes('director') || cargoLower.includes('tecnico pedagogico') || cargoLower.includes('psicopedagog') || cargoLower.includes('pie') || cargoLower.includes('orientador')) {
+          estamento = 'Docente';
+        } else if (cargoLower.includes('asistente') || cargoLower.includes('auxiliar') || cargoLower.includes('inspector') || cargoLower.includes('paradocente') || cargoLower.includes('administrativo') || cargoLower.includes('secretaria')) {
+          estamento = 'Asistente de la Educación';
+        } else if (forceEstamento) {
+          estamento = forceEstamento;
+        }
       } else if (forceEstamento) {
         estamento = forceEstamento;
       }
@@ -648,7 +667,6 @@ export function parsearArchivoExcelOJson(
       const comunaRaw = idxComuna !== -1 ? String(row[idxComuna] || '').trim() : '';
       const centroCosto = idxCentroCosto !== -1 ? String(row[idxCentroCosto] || '').trim() : '';
       const rbdVal = idxRbd !== -1 ? String(row[idxRbd] || '').trim() : '';
-      const cargoRaw = idxCargo !== -1 ? String(row[idxCargo] || '').trim() : '';
       const tipoContrato = idxTipoContrato !== -1 ? String(row[idxTipoContrato] || '').trim() : '';
 
       let rbd = rbdVal || '';
