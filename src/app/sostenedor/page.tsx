@@ -2933,7 +2933,7 @@ export default function SostenedorDashboard() {
                 <div className="border border-slate-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-100 p-2 bg-slate-50">
                   {pendingIngest.schoolsList.map(rbd => {
                     const estObj = establecimientos.find(e => e.rbd === rbd) || pendingIngest.establecimientos.find(e => e.rbd === rbd);
-                    const name = estObj ? estObj.nombre : `Colegio / RBD ${rbd}`;
+                    const name = (estObj && estObj.nombre) ? estObj.nombre : `Colegio / RBD ${rbd}`;
                     const isChecked = pendingIngest.selectedSchools.includes(rbd);
                     
                     const schoolFuncs = pendingIngest.funcionarios.filter(f => 

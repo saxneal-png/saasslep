@@ -506,21 +506,21 @@ export function parsearArchivoExcelOJson(
       return idx !== -1 ? idx : fallback;
     };
 
-    const idxRun = getIndex(['run', 'rut', 'r.u.n.'], 0);
+    const idxRun = getIndex(['run', 'rut', 'r.u.n.'], -1);
     const idxRunLimpio = getIndex(['run_limpio', 'run limpio', 'run_clean', 'run clean'], -1);
     const idxPat = getIndex(['apellido paterno', 'paterno'], -1);
     const idxMat = getIndex(['apellido materno', 'materno'], -1);
-    const idxNom = getIndex(['nombres', 'nombre', 'nombre/cargo'], 3);
-    const idxSexo = getIndex(['sexo', 'genero', 'género'], 4);
-    const idxLeg = getIndex(['legislacion laboral', 'legislación laboral', 'legislacion', 'ley', 'estamento'], 5);
-    const idxProg = getIndex(['programa', 'subvencion'], 8);
-    const idxComuna = getIndex(['comuna'], 9);
-    const idxCentroCosto = getIndex(['centro costo', 'centro_costo', 'establecimiento', 'colegio'], 10);
-    const idxRbd = getIndex(['rbd_maestro_contrato', 'rbd_maestro', 'rbd maestro', 'rbd_clean', 'rbd clean', 'rbd'], 11);
-    const idxCargo = getIndex(['cargo', 'funcion', 'función'], 12);
-    const idxTramo = getIndex(['tramo'], 13);
-    const idxTipoContrato = getIndex(['tipo contrato', 'tipo_contrato', 'calidad'], 14);
-    const idxHoras = getIndex(['horas contrato', 'horas_contrato', 'horas'], 15);
+    const idxNom = getIndex(['nombres', 'nombre', 'nombre/cargo'], -1);
+    const idxSexo = getIndex(['sexo', 'genero', 'género'], -1);
+    const idxLeg = getIndex(['legislacion laboral', 'legislación laboral', 'legislacion', 'ley', 'estamento'], -1);
+    const idxProg = getIndex(['programa', 'subvencion'], -1);
+    const idxComuna = getIndex(['comuna'], -1);
+    const idxCentroCosto = getIndex(['centro costo', 'centro_costo', 'establecimiento', 'colegio'], -1);
+    const idxRbd = getIndex(['rbd_maestro_contrato', 'rbd_maestro', 'rbd maestro', 'rbd_clean', 'rbd clean', 'rbd'], -1);
+    const idxCargo = getIndex(['cargo', 'funcion', 'función'], -1);
+    const idxTramo = getIndex(['tramo'], -1);
+    const idxTipoContrato = getIndex(['tipo contrato', 'tipo_contrato', 'calidad'], -1);
+    const idxHoras = getIndex(['horas contrato', 'horas_contrato', 'horas'], -1);
     const idxActivo = getIndex(['principal activo', 'activo', 'estado'], -1);
     const idxTotalHaberes = getIndex(['total haberes', 'total_haberes', 'sueldo liquido', 'sueldo_liquido', 'sueldo', 'haberes'], -1);
     const idxIngreso = getIndex(['ingreso', 'fecha_ingreso', 'fecha ingreso'], -1);
@@ -537,7 +537,7 @@ export function parsearArchivoExcelOJson(
       const row = rawRows[i];
       if (!row || !Array.isArray(row)) continue;
 
-      let runRaw = row[idxRun];
+      let runRaw = idxRun !== -1 ? row[idxRun] : undefined;
       let run = '';
       if (runRaw !== undefined && runRaw !== null && String(runRaw).trim() !== '' && String(runRaw).trim() !== 'NaN') {
         run = normalizarRun(runRaw);
@@ -564,15 +564,15 @@ export function parsearArchivoExcelOJson(
 
       const apePat = idxPat !== -1 ? String(row[idxPat] || '').trim() : '';
       const apeMat = idxMat !== -1 ? String(row[idxMat] || '').trim() : '';
-      const nombres = String(row[idxNom] || '').trim();
+      const nombres = idxNom !== -1 ? String(row[idxNom] || '').trim() : '';
       const nombreCompleto = `${nombres} ${apePat} ${apeMat}`.replace(/\s+/g, ' ').trim();
 
-      const sexVal = String(row[idxSexo] || '').trim().toUpperCase();
+      const sexVal = idxSexo !== -1 ? String(row[idxSexo] || '').trim().toUpperCase() : '';
       let genero = sexVal;
       if (sexVal === 'M' || sexVal.startsWith('MASC')) genero = 'Masculino';
       else if (sexVal === 'F' || sexVal.startsWith('FEM')) genero = 'Femenino';
 
-      const legLab = String(row[idxLeg] || '').trim();
+      const legLab = idxLeg !== -1 ? String(row[idxLeg] || '').trim() : '';
       let estamento: 'Docente' | 'Asistente de la Educación' = 'Asistente de la Educación';
       if (legLab.toLowerCase().includes('docente')) {
         estamento = 'Docente';
@@ -598,7 +598,7 @@ export function parsearArchivoExcelOJson(
         }
       }
 
-      const tramoRaw = String(row[idxTramo] || '').trim();
+      const tramoRaw = idxTramo !== -1 ? String(row[idxTramo] || '').trim() : '';
       let tramo: 'Sin Tramo' | 'Acceso' | 'Inicial' | 'Temprano' | 'Avanzado' | 'Experto I' | 'Experto II' = 'Sin Tramo';
       const tramoClean = tramoRaw.toLowerCase();
       if (tramoClean.includes('acceso')) tramo = 'Acceso';
@@ -608,12 +608,12 @@ export function parsearArchivoExcelOJson(
       else if (tramoClean.includes('experto i') || tramoClean.includes('experto 1')) tramo = 'Experto I';
       else if (tramoClean.includes('experto ii') || tramoClean.includes('experto 2')) tramo = 'Experto II';
 
-      const programa = String(row[idxProg] || '').trim();
-      const comunaRaw = String(row[idxComuna] || '').trim();
-      const centroCosto = String(row[idxCentroCosto] || '').trim();
-      const rbdVal = String(row[idxRbd] || '').trim();
-      const cargoRaw = String(row[idxCargo] || '').trim();
-      const tipoContrato = String(row[idxTipoContrato] || '').trim();
+      const programa = idxProg !== -1 ? String(row[idxProg] || '').trim() : '';
+      const comunaRaw = idxComuna !== -1 ? String(row[idxComuna] || '').trim() : '';
+      const centroCosto = idxCentroCosto !== -1 ? String(row[idxCentroCosto] || '').trim() : '';
+      const rbdVal = idxRbd !== -1 ? String(row[idxRbd] || '').trim() : '';
+      const cargoRaw = idxCargo !== -1 ? String(row[idxCargo] || '').trim() : '';
+      const tipoContrato = idxTipoContrato !== -1 ? String(row[idxTipoContrato] || '').trim() : '';
 
       let rbd = rbdVal || '';
       if (!rbd && centroCosto) {
