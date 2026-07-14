@@ -463,7 +463,19 @@ export const api = {
       if (error) throw error;
     } catch (error) {
       console.warn("⚠️ Error en Supabase, borrando establecimiento en local:", error);
+    } finally {
+      // Always update dbLocal to prevent ghost contracts/hours
       dbLocal.establecimientos = dbLocal.establecimientos.filter(e => e.rbd !== rbd);
+      const deletedContractIds = dbLocal.contratos
+        .filter(c => c.rbd === rbd)
+        .map(c => c.id);
+      dbLocal.contratos = dbLocal.contratos.filter(c => c.rbd !== rbd);
+      dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(
+        f => !deletedContractIds.includes(f.contrato_id)
+      );
+      if ((dbLocal as any).alertas) {
+        (dbLocal as any).alertas = (dbLocal as any).alertas.filter((a: any) => a.rbd !== rbd);
+      }
     }
   },
 
