@@ -689,6 +689,47 @@ export const api = {
     }
   },
 
+  deleteFuncionariosBulk: async (runs: string[]): Promise<void> => {
+    if (runs.length === 0) return;
+    let contratoIds: string[] = [];
+    try {
+      const { data } = await supabase.from('contratos').select('id').in('funcionario_run', runs);
+      if (data) {
+        contratoIds = data.map(c => c.id);
+      }
+    } catch (e) {
+      console.warn("⚠️ Error getting contract IDs in bulk delete:", e);
+    }
+
+    if (contratoIds.length === 0) {
+      contratoIds = dbLocal.contratos
+        .filter(c => runs.includes(c.funcionario_run))
+        .map(c => c.id);
+    }
+
+    try {
+      if (contratoIds.length > 0) {
+        await supabase.from('asignaciones_aula').delete().in('contrato_id', contratoIds);
+        await supabase.from('financiamientos').delete().in('contrato_id', contratoIds);
+        await supabase.from('contratos').delete().in('id', contratoIds);
+      }
+      await supabase.from('funcionarios').delete().in('run', runs);
+    } catch (error) {
+      console.warn("⚠️ Error en Supabase bulk delete funcionarios:", error);
+    } finally {
+      dbLocal.funcionarios = dbLocal.funcionarios.filter(f => !runs.includes(f.run));
+      dbLocal.contratos = dbLocal.contratos.filter(c => !runs.includes(c.funcionario_run));
+      if (contratoIds.length > 0) {
+        dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(
+          f => !contratoIds.includes(f.contrato_id)
+        );
+        dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(
+          a => !contratoIds.includes(a.contrato_id)
+        );
+      }
+    }
+  },
+
   upsertContratoCompleto: async (
     contrato: Contrato, 
     financiamientos: FinanciamientoContrato[]

@@ -583,15 +583,7 @@ export default function RRHHPage() {
   const handleMassDelete = async () => {
     if (selectedFuncs.length === 0) return;
     if (confirm(`¿Está seguro de que desea eliminar masivamente a los ${selectedFuncs.length} funcionarios seleccionados y sus contratos correspondientes?`)) {
-      for (const run of selectedFuncs) {
-        const { data: employeeConts } = await supabase.from('contratos').select('id').eq('funcionario_run', run);
-        if (employeeConts && employeeConts.length > 0) {
-          for (const c of employeeConts) {
-            await api.deleteContrato(c.id);
-          }
-        }
-        await api.deleteFuncionario(run);
-      }
+      await (api as any).deleteFuncionariosBulk(selectedFuncs);
       setSelectedFuncs([]);
       await loadData();
       alert('✅ Funcionarios y sus contratos eliminados exitosamente.');
