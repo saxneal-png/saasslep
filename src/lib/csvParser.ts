@@ -507,21 +507,29 @@ export function parsearArchivoExcelOJson(
     };
 
     const idxRun = getIndex(['run', 'rut', 'r.u.n.'], 0);
-    const idxPat = getIndex(['apellido paterno', 'paterno'], 1);
-    const idxMat = getIndex(['apellido materno', 'materno'], 2);
-    const idxNom = getIndex(['nombres', 'nombre'], 3);
+    const idxRunLimpio = getIndex(['run_limpio', 'run limpio', 'run_clean', 'run clean'], -1);
+    const idxPat = getIndex(['apellido paterno', 'paterno'], -1);
+    const idxMat = getIndex(['apellido materno', 'materno'], -1);
+    const idxNom = getIndex(['nombres', 'nombre', 'nombre/cargo'], 3);
     const idxSexo = getIndex(['sexo', 'genero', 'género'], 4);
-    const idxLeg = getIndex(['legislacion laboral', 'legislacion', 'ley', 'estamento'], 5);
+    const idxLeg = getIndex(['legislacion laboral', 'legislación laboral', 'legislacion', 'ley', 'estamento'], 5);
     const idxProg = getIndex(['programa', 'subvencion'], 8);
     const idxComuna = getIndex(['comuna'], 9);
     const idxCentroCosto = getIndex(['centro costo', 'centro_costo', 'establecimiento', 'colegio'], 10);
-    const idxRbd = getIndex(['rbd'], 11);
+    const idxRbd = getIndex(['rbd_maestro_contrato', 'rbd_maestro', 'rbd maestro', 'rbd_clean', 'rbd clean', 'rbd'], 11);
     const idxCargo = getIndex(['cargo', 'funcion', 'función'], 12);
     const idxTramo = getIndex(['tramo'], 13);
     const idxTipoContrato = getIndex(['tipo contrato', 'tipo_contrato', 'calidad'], 14);
     const idxHoras = getIndex(['horas contrato', 'horas_contrato', 'horas'], 15);
     const idxActivo = getIndex(['principal activo', 'activo', 'estado'], -1);
     const idxTotalHaberes = getIndex(['total haberes', 'total_haberes', 'sueldo liquido', 'sueldo_liquido', 'sueldo', 'haberes'], -1);
+    const idxIngreso = getIndex(['ingreso', 'fecha_ingreso', 'fecha ingreso'], -1);
+
+    // Multi-column hours / dotaciones
+    const idxHorasMaestro = getIndex(['horas_contrato_maestro', 'horas contrato maestro'], -1);
+    const idxRegular = getIndex(['horas_dotacion_regular', 'horas dotacion regular', 'horas dotación regular', 'regular', 'horas corriente', 'horas_corriente', 'corriente'], -1);
+    const idxPIE = getIndex(['horas_dotacion_pie', 'horas dotacion pie', 'horas dotación pie', 'pie', 'horas pie', 'horas_pie'], -1);
+    const idxSEP = getIndex(['horas_dotacion_sep', 'horas dotacion sep', 'horas dotación sep', 'sep', 'horas sep', 'horas_sep'], -1);
 
     const startRow = headerRowIdx + 1;
 
@@ -529,21 +537,33 @@ export function parsearArchivoExcelOJson(
       const row = rawRows[i];
       if (!row || !Array.isArray(row)) continue;
 
-      const runRaw = row[idxRun];
-      if (runRaw === undefined || runRaw === null || runRaw === '' || String(runRaw).trim() === 'NaN') {
-        continue;
+      let runRaw = row[idxRun];
+      let run = '';
+      if (runRaw !== undefined && runRaw !== null && String(runRaw).trim() !== '' && String(runRaw).trim() !== 'NaN') {
+        run = normalizarRun(runRaw);
+      } else if (idxRunLimpio !== -1 && row[idxRunLimpio] !== undefined && row[idxRunLimpio] !== null && String(row[idxRunLimpio]).trim() !== '' && String(row[idxRunLimpio]).trim() !== 'NaN') {
+        const body = String(row[idxRunLimpio]).replace(/[^0-9]/g, '').trim();
+        if (body.length >= 6) {
+          // Calculate DV using Chilean RUT Module 11
+          let m = 0, s = 1;
+          let t = parseInt(body, 10);
+          for (; t; t = Math.floor(t / 10)) {
+            s = (s + t % 10 * (9 - m++ % 6)) % 11;
+          }
+          const dv = s ? String(s - 1) : 'K';
+          run = normalizarRun(`${body}-${dv}`);
+        }
       }
 
-      // If the row contains header names, skip it
-      if (String(runRaw).toLowerCase().includes('run') || String(runRaw).toLowerCase().includes('r.u.n')) {
-        continue;
-      }
-
-      const run = normalizarRun(runRaw);
       if (!run) continue;
 
-      const apePat = String(row[idxPat] || '').trim();
-      const apeMat = String(row[idxMat] || '').trim();
+      // If the row contains header names, skip it
+      if (run.toLowerCase().includes('run') || run.toLowerCase().includes('r.u.n')) {
+        continue;
+      }
+
+      const apePat = idxPat !== -1 ? String(row[idxPat] || '').trim() : '';
+      const apeMat = idxMat !== -1 ? String(row[idxMat] || '').trim() : '';
       const nombres = String(row[idxNom] || '').trim();
       const nombreCompleto = `${nombres} ${apePat} ${apeMat}`.replace(/\s+/g, ' ').trim();
 
@@ -594,7 +614,6 @@ export function parsearArchivoExcelOJson(
       const rbdVal = String(row[idxRbd] || '').trim();
       const cargoRaw = String(row[idxCargo] || '').trim();
       const tipoContrato = String(row[idxTipoContrato] || '').trim();
-      const horasRaw = row[idxHoras];
 
       let rbd = rbdVal || '';
       if (!rbd && centroCosto) {
@@ -670,6 +689,8 @@ export function parsearArchivoExcelOJson(
         return score;
       };
 
+      const fechaIngreso = idxIngreso !== -1 ? String(row[idxIngreso] || '').trim() : undefined;
+
       if (!func) {
         func = {
           run,
@@ -677,7 +698,8 @@ export function parsearArchivoExcelOJson(
           estamento,
           cargo: cargoRaw || (estamento === 'Docente' ? 'Docente de Aula' : 'Asistente'),
           genero,
-          tramo: tramo
+          tramo: tramo,
+          fecha_ingreso_establecimiento: fechaIngreso
         };
         funcionarios.push(func);
       } else {
@@ -690,10 +712,12 @@ export function parsearArchivoExcelOJson(
           if (genero) func.genero = genero;
           if (tramo && tramo !== 'Sin Tramo') func.tramo = tramo;
           if (nombreCompleto && nombreCompleto !== 'Funcionario Sin Nombre') func.nombre = nombreCompleto;
+          if (fechaIngreso) func.fecha_ingreso_establecimiento = fechaIngreso;
         } else {
           if (!func.genero && genero) func.genero = genero;
           if (!func.cargo && cargoRaw) func.cargo = cargoRaw;
           if ((!func.tramo || func.tramo === 'Sin Tramo') && tramo !== 'Sin Tramo') func.tramo = tramo;
+          if (!func.fecha_ingreso_establecimiento && fechaIngreso) func.fecha_ingreso_establecimiento = fechaIngreso;
         }
       }
 
@@ -715,7 +739,21 @@ export function parsearArchivoExcelOJson(
 
         // Add or update Contrato (Consolidación)
         let contrato = contratos.find(c => c.funcionario_run === run && c.rbd === rbd);
-        const horas = parseDecimalHours(horasRaw);
+        
+        // Multi-column hours parsing
+        const horasRegular = idxRegular !== -1 ? parseDecimalHours(row[idxRegular]) : 0;
+        const horasPIE = idxPIE !== -1 ? parseDecimalHours(row[idxPIE]) : 0;
+        const horasSEP = idxSEP !== -1 ? parseDecimalHours(row[idxSEP]) : 0;
+        
+        const hasDirectDotaciones = idxRegular !== -1 || idxPIE !== -1 || idxSEP !== -1;
+        
+        let totalRowHoras = 0;
+        if (hasDirectDotaciones) {
+          totalRowHoras = horasRegular + horasPIE + horasSEP;
+        } else {
+          const fallbackHorasRaw = idxHorasMaestro !== -1 ? row[idxHorasMaestro] : (idxHoras !== -1 ? row[idxHoras] : 0);
+          totalRowHoras = parseDecimalHours(fallbackHorasRaw);
+        }
         
         if (!contrato) {
           const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -734,10 +772,30 @@ export function parsearArchivoExcelOJson(
         }
         
         // Aggregate hours
-        contrato.horas_totales += horas;
+        contrato.horas_totales += totalRowHoras;
 
         // Financiamiento aggregation logic
-        if (horas > 0) {
+        const upsertFinanciamiento = (origen: OrigenFondo, hrs: number) => {
+          if (hrs <= 0) return;
+          const finId = `f-${contrato.id}-${origen.replace(/\s+/g, '')}`;
+          let financiamiento = financiamientos.find(f => f.id === finId);
+          if (financiamiento) {
+            financiamiento.horas += hrs;
+          } else {
+            financiamientos.push({
+              id: finId,
+              contrato_id: contrato.id,
+              origen_fondo: origen,
+              horas: hrs
+            });
+          }
+        };
+
+        if (hasDirectDotaciones) {
+          upsertFinanciamiento('Subvención Regular', horasRegular);
+          upsertFinanciamiento('PIE', horasPIE);
+          upsertFinanciamiento('SEP', horasSEP);
+        } else if (totalRowHoras > 0) {
           let progKey = programa.toLowerCase();
           let origen: OrigenFondo = 'Subvención Regular';
           
@@ -748,18 +806,7 @@ export function parsearArchivoExcelOJson(
           else if (progKey.includes('bicentenario')) origen = 'Liceos Bicentenarios';
           else if (progKey) origen = 'Otro';
 
-          const finId = `f-${contrato.id}-${origen.replace(/\s+/g, '')}`;
-          let financiamiento = financiamientos.find(f => f.id === finId);
-          if (financiamiento) {
-            financiamiento.horas += horas;
-          } else {
-            financiamientos.push({
-              id: finId,
-              contrato_id: contrato.id,
-              origen_fondo: origen,
-              horas: horas
-            });
-          }
+          upsertFinanciamiento(origen, totalRowHoras);
         }
       }
     }
