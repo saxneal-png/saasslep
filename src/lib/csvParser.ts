@@ -738,7 +738,14 @@ export function parsearArchivoExcelOJson(
       const getCompletenessScore = (est: string, cargo: string, tr: string) => {
         let score = 0;
         if (est && est.trim() !== '') score++;
-        if (cargo && cargo.trim() !== '' && cargo !== 'Docente de Aula' && cargo !== 'Asistente') score++;
+        
+        const cClean = (cargo || '').trim().toLowerCase();
+        if (cClean !== '' && cClean !== 'docente de aula' && cClean !== 'docente' && cClean !== 'asistente' && cClean !== 'funcionario') {
+          score += 2; // Specific cargos get higher score
+        } else if (cClean !== '') {
+          score += 1; // Generic cargos get lower score
+        }
+        
         if (tr && tr.trim() !== '' && tr !== 'Sin Tramo') score++;
         return score;
       };
@@ -769,7 +776,15 @@ export function parsearArchivoExcelOJson(
           if (fechaIngreso) func.fecha_ingreso_establecimiento = fechaIngreso;
         } else {
           if (!func.genero && genero) func.genero = genero;
-          if (!func.cargo && cargoRaw) func.cargo = cargoRaw;
+          
+          const existingCargoClean = (func.cargo || '').trim().toLowerCase();
+          const isExistingGeneric = existingCargoClean === '' || existingCargoClean === 'docente de aula' || existingCargoClean === 'docente' || existingCargoClean === 'asistente' || existingCargoClean === 'funcionario';
+          const newCargoClean = (cargoRaw || '').trim().toLowerCase();
+          const isNewSpecific = newCargoClean !== '' && newCargoClean !== 'docente de aula' && newCargoClean !== 'docente' && newCargoClean !== 'asistente' && newCargoClean !== 'funcionario';
+          if ((isExistingGeneric && isNewSpecific) || (!func.cargo && cargoRaw)) {
+            func.cargo = cargoRaw;
+          }
+          
           if ((!func.tramo || func.tramo === 'Sin Tramo') && tramo !== 'Sin Tramo') func.tramo = tramo;
           if (!func.fecha_ingreso_establecimiento && fechaIngreso) func.fecha_ingreso_establecimiento = fechaIngreso;
         }
@@ -804,6 +819,9 @@ export function parsearArchivoExcelOJson(
         let totalRowHoras = 0;
         if (hasDirectDotaciones) {
           totalRowHoras = horasRegular + horasPIE + horasSEP;
+          if (totalRowHoras === 0 && idxHorasMaestro !== -1) {
+            totalRowHoras = parseDecimalHours(row[idxHorasMaestro]);
+          }
         } else {
           const fallbackHorasRaw = idxHorasMaestro !== -1 ? row[idxHorasMaestro] : (idxHoras !== -1 ? row[idxHoras] : 0);
           totalRowHoras = parseDecimalHours(fallbackHorasRaw);
@@ -816,13 +834,23 @@ export function parsearArchivoExcelOJson(
             funcionario_run: run,
             rbd,
             calidad_juridica, 
-            funcion_principal: func.cargo || 'Funcionario',
+            funcion_principal: cargoRaw || func.cargo || (estamento === 'Docente' ? 'Docente de Aula' : 'Asistente'),
             estado,
             horas_totales: 0,
             legislacion_laboral
           };
           contratos.push(nuevoContrato);
           contrato = nuevoContrato;
+        } else {
+          // Consolidate funcion_principal: update if current is generic and new is specific
+          const currentFunc = (contrato.funcion_principal || '').trim().toLowerCase();
+          const isCurrentGeneric = currentFunc === '' || currentFunc === 'docente de aula' || currentFunc === 'docente' || currentFunc === 'asistente' || currentFunc === 'funcionario';
+          const newFunc = (cargoRaw || '').trim().toLowerCase();
+          const isNewSpecific = newFunc !== '' && newFunc !== 'docente de aula' && newFunc !== 'docente' && newFunc !== 'asistente' && newFunc !== 'funcionario';
+          
+          if (isCurrentGeneric && isNewSpecific) {
+            contrato.funcion_principal = cargoRaw;
+          }
         }
         
         // Aggregate hours
