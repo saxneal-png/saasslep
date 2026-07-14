@@ -800,7 +800,7 @@ export function parsearArchivoExcelOJson(
       // Relevance filter check on Total Haberes / Sueldo Líquido
       const totalHaberesRaw = idxTotalHaberes !== -1 ? row[idxTotalHaberes] : undefined;
       const totalHaberes = parseDecimalHours(totalHaberesRaw);
-      const isRelevanceZero = idxTotalHaberes !== -1 && (totalHaberes === 0 || totalHaberesRaw === null || totalHaberesRaw === '');
+      const isRelevanceZero = idxTotalHaberes !== -1 && totalHaberesRaw !== null && totalHaberesRaw !== undefined && String(totalHaberesRaw).trim() !== '' && totalHaberes === 0;
 
       // Create/update Contratos & Financiamientos ONLY if not relevance zero
       if (!isRelevanceZero) {
