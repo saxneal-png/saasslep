@@ -480,11 +480,15 @@ export function parsearArchivoExcelOJson(
     const rawRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
     if (rawRows.length === 0) return;
 
-    // Find the header row by searching for "run", "r.u.n.", "rut"
+    // Find the header row by searching for "run", "r.u.n.", "rut" and ensuring the row has multiple columns populated
     let headerRowIdx = 0;
     for (let i = 0; i < Math.min(rawRows.length, 12); i++) {
       const row = rawRows[i];
       if (!row || !Array.isArray(row)) continue;
+      
+      const nonCount = row.filter(cell => String(cell || '').trim() !== '').length;
+      if (nonCount < 4) continue; // Skip title rows with very few columns populated
+      
       const hasRun = row.some(cell => {
         const val = String(cell || '').trim().toLowerCase();
         return val === 'run' || val === 'r.u.n.' || val === 'rut' || val === 'r.u.n' || val.includes('run') || val.includes('rut');
@@ -517,7 +521,7 @@ export function parsearArchivoExcelOJson(
     const idxComuna = getIndex(['comuna'], -1);
     const idxCentroCosto = getIndex(['centro de costo', 'centro_de_costo', 'centro costo', 'centro_costo', 'establecimiento', 'colegio'], -1);
     const idxRbd = getIndex(['rbd_maestro_contrato', 'rbd_maestro', 'rbd maestro', 'rbd_clean', 'rbd clean', 'rbd'], -1);
-    const idxCargo = getIndex(['cargo', 'funcion', 'función'], -1);
+    const idxCargo = getIndex(['cargo', 'funcion', 'función', 'cargo/funcion', 'cargo/función', 'funcion principal', 'funcion_principal'], -1);
     const idxTramo = getIndex(['tramo'], -1);
     const idxTipoContrato = getIndex(['tipo contrato', 'tipo_contrato', 'calidad'], -1);
     const idxHoras = getIndex(['horas contrato', 'horas_contrato', 'horas'], -1);
