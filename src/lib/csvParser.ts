@@ -506,10 +506,17 @@ export function parsearArchivoExcelOJson(
     );
 
     const getIndex = (kws: string[], fallback: number): number => {
-      let idx = headers.findIndex(h => kws.some(kw => h === kw));
-      if (idx !== -1) return idx;
-      idx = headers.findIndex(h => kws.some(kw => h.includes(kw)));
-      return idx !== -1 ? idx : fallback;
+      // 1. Exact matches in order of keyword preference
+      for (const kw of kws) {
+        const idx = headers.findIndex(h => h === kw);
+        if (idx !== -1) return idx;
+      }
+      // 2. Substring matches in order of keyword preference
+      for (const kw of kws) {
+        const idx = headers.findIndex(h => h.includes(kw));
+        if (idx !== -1) return idx;
+      }
+      return fallback;
     };
 
     const idxRun = getIndex(['run', 'rut'], -1);
@@ -522,7 +529,7 @@ export function parsearArchivoExcelOJson(
     const idxProg = getIndex(['programa', 'subvencion'], -1);
     const idxComuna = getIndex(['comuna'], -1);
     const idxCentroCosto = getIndex(['centrodecosto', 'establecimiento', 'colegio'], -1);
-    const idxRbd = getIndex(['rbdmaestrocontrato', 'rbdmaestro', 'rbdclean', 'rbd'], -1);
+    const idxRbd = getIndex(['rbd', 'rbdclean', 'rbdmaestro', 'rbdmaestrocontrato'], -1);
     const idxCargo = getIndex(['cargo', 'funcion', 'cargofuncion', 'funcionprincipal'], -1);
     const idxTramo = getIndex(['tramo'], -1);
     const idxTipoContrato = getIndex(['tipocontrato', 'calidad'], -1);
