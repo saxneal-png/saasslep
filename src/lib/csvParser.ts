@@ -264,7 +264,21 @@ export function parsearNominaCsv(
       nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim()) || 'SIN NOMBRE REGISTRADO';
     }
 
-    const rbd = normalizarRbd(row.rbd || rbdContext);
+    const rbd = normalizarRbd(row.rbd);
+    if (!rbd) {
+      alertas.push({
+        id: generarUuidDeterminista(`alerta-missing-rbd-${run}-${index}`),
+        run,
+        nombre_funcionario: nombre,
+        rbd: '99999',
+        tipo: 'rbd_vacio',
+        nivel_alerta: 'critica',
+        mensaje: `Fila ${index + 1}: RBD no especificado o vacío`,
+        detalle: `La fila no contiene un RBD válido y no será procesada.`,
+        resuelta: false
+      });
+      return;
+    }
     
     // Quality mapping logic: map to expanded CalidadJuridica
     const rawCal = String(row.calidadjuridica || 'A contrata').trim();
@@ -1218,7 +1232,20 @@ export function parsearArchivoExcelOJson(
           rbd = String(900000 + Math.abs(hash % 100000));
         }
       }
-      if (!rbd) rbd = rbdContext;
+      if (!rbd) {
+        alertasFallback.push({
+          id: generarUuidDeterminista(`alerta-missing-rbd-fallback-${run}-${i}`),
+          run,
+          nombre_funcionario: nombreCompleto,
+          rbd: '99999',
+          tipo: 'rbd_vacio',
+          nivel_alerta: 'critica',
+          mensaje: `Fila ${i + 1}: RBD no especificado o vacío`,
+          detalle: `La fila no contiene un RBD válido y no será procesada.`,
+          resuelta: false
+        });
+        continue;
+      }
 
       let comuna = comunaRaw ? normalizarComuna(comunaRaw) : '';
       if (!comuna && centroCosto) {

@@ -76,7 +76,7 @@ export interface AlertaConciliacion {
   run: string;
   nombre_funcionario: string;
   rbd: string;
-  tipo: 'descalce_horas' | 'discrepancia_funcion' | 'infraccion_ley_20903' | 'sobrecarga_horas' | 'descalce_pie';
+  tipo: 'descalce_horas' | 'discrepancia_funcion' | 'infraccion_ley_20903' | 'sobrecarga_horas' | 'descalce_pie' | 'rbd_vacio';
   nivel_alerta: 'critica' | 'advertencia';
   mensaje: string;
   detalle: string;

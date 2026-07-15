@@ -3160,6 +3160,23 @@ export default function SostenedorDashboard() {
                 );
               })()}
 
+              {(() => {
+                const contratosEnAdmin = pendingIngest.contratos.filter(c => {
+                  const r = normalizarRbd(String(c.rbd));
+                  return r === '10201' || r === '99999';
+                });
+                if (contratosEnAdmin.length === 0) return null;
+                return (
+                  <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-lg text-[11px] font-medium flex flex-col gap-1 leading-normal">
+                    <span className="font-bold text-xs flex items-center gap-1">⚠️ Alerta de Dotación Central</span>
+                    <p>
+                      Se han detectado <strong>{contratosEnAdmin.length}</strong> contratos que se asociarán a la 
+                      <strong> Administración Central (RBD 10201/99999)</strong>. Asegúrate de que esta asignación sea la correcta en tu planilla original.
+                    </p>
+                  </div>
+                );
+              })()}
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-slate-700">Seleccionar Establecimientos a Importar</label>
