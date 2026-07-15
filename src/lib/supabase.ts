@@ -634,29 +634,18 @@ export const api = {
     const batchSize = 100;
     for (let i = 0; i < contratos.length; i += batchSize) {
       const batch = contratos.slice(i, i + batchSize);
-      try {
-        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('contratos').upsert(batch, { onConflict: 'id' })));
-        if (error) throw error;
-      } catch (error: any) {
-        console.error("❌ ERROR PROFUNDO EN SUPABASE BULK CONTRATOS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
-        console.warn("⚠️ Guardando contratos en local como fallback...");
-        const current = dbLocal.contratos;
-        for (const item of batch) {
-          const idx = current.findIndex(c => c.id === item.id);
-          if (idx >= 0) current[idx] = item;
-          else current.push(item);
-        }
-        dbLocal.contratos = current;
+      const { error } = await withTimeout<any>(Promise.resolve(supabase.from('contratos').upsert(batch)));
+      if (error) {
+        console.error("❌ ERROR PROFUNDO EN SUPABASE BULK CONTRATOS:", error.message, JSON.stringify(error));
+        throw new Error(`Error al guardar contratos: ${error.message}`);
       }
     }
 
     const contratoIds = contratos.map(c => c.id);
     for (let i = 0; i < contratoIds.length; i += batchSize) {
       const batchIds = contratoIds.slice(i, i + batchSize);
-      try {
-        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').delete().in('contrato_id', batchIds)));
-        if (error) throw error;
-      } catch (error) {
+      const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').delete().in('contrato_id', batchIds)));
+      if (error) {
         console.warn("⚠️ Error in bulk delete financiamientos:", error);
       }
     }
@@ -664,14 +653,10 @@ export const api = {
     for (let i = 0; i < financiamientos.length; i += batchSize) {
       const batch = financiamientos.slice(i, i + batchSize);
       if (batch.length > 0) {
-        try {
-          const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').insert(batch)));
-          if (error) throw error;
-        } catch (error: any) {
-          console.error("❌ ERROR PROFUNDO EN SUPABASE INSERT FINANCIAMIENTOS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
-          let localFins = dbLocal.financiamientoContratos.filter(f => !contratoIds.includes(f.contrato_id));
-          localFins.push(...financiamientos);
-          dbLocal.financiamientoContratos = localFins;
+        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').insert(batch)));
+        if (error) {
+          console.error("❌ ERROR PROFUNDO EN SUPABASE INSERT FINANCIAMIENTOS:", error.message, JSON.stringify(error));
+          throw new Error(`Error al guardar financiamientos: ${error.message}`);
         }
       }
     }
@@ -843,21 +828,10 @@ export const api = {
   },
 
   crearAlertasBulk: async (alertas: AlertaConciliacion[]): Promise<void> => {
-    try {
-      const { error } = await supabase.from('alertas_conciliacion').upsert(alertas);
-      if (error) throw error;
-    } catch (error: any) {
-      console.error("❌ ERROR PROFUNDO EN SUPABASE BULK ALERTAS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
-      const list = dbLocal.alertas;
-      for (const a of alertas) {
-        const idx = list.findIndex(al => al.id === a.id);
-        if (idx >= 0) {
-          list[idx] = a;
-        } else {
-          list.push(a);
-        }
-      }
-      dbLocal.alertas = list;
+    const { error } = await supabase.from('alertas_conciliacion').upsert(alertas);
+    if (error) {
+      console.error("❌ ERROR PROFUNDO EN SUPABASE BULK ALERTAS:", error.message, JSON.stringify(error));
+      throw new Error(`Error al guardar alertas: ${error.message}`);
     }
   },
 

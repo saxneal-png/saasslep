@@ -86,6 +86,24 @@ export function normalizarComuna(comunaRaw: any): string {
   return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
 
+export function generarUuidDeterminista(str: string): string {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57, h3 = 0xfae12f34, h4 = 0x12345678;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+    h3 = Math.imul(h3 ^ ch, 3241249767);
+    h4 = Math.imul(h4 ^ ch, 2468101213);
+  }
+  const hex = (
+    (h1 >>> 0).toString(16).padStart(8, '0') +
+    (h2 >>> 0).toString(16).padStart(8, '0') +
+    (h3 >>> 0).toString(16).padStart(8, '0') +
+    (h4 >>> 0).toString(16).padStart(8, '0')
+  ).toLowerCase();
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
 export function parseDecimalHours(value: string | number | undefined | null): number {
   if (value === undefined || value === null) return 0;
   if (typeof value === 'number') return isNaN(value) ? 0 : value;
@@ -330,7 +348,7 @@ export function parsearNominaCsv(
     }
 
     // Create unique ID for contract
-    const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
+    const contrato_id = generarUuidDeterminista(`contrato-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`);
 
     // Discard values map to null logic
     const cleanDiscardValue = (val: any): string | undefined => {
@@ -392,7 +410,7 @@ export function parsearNominaCsv(
     const agregarFondo = (origen: OrigenFondo, hrs: number) => {
       if (hrs > 0) {
         financiamientos.push({
-          id: `f-${contrato_id}-${origen.replace(/\s+/g, '')}`,
+          id: generarUuidDeterminista(`financiamiento-${contrato_id}-${origen.replace(/\s+/g, '')}`),
           contrato_id,
           origen_fondo: origen,
           horas: hrs
@@ -430,7 +448,7 @@ export function parsearNominaCsv(
     // 1. Alerta de Descalce Horario (Suma de subvenciones no coincide con horas del contrato)
     if (Math.abs(sumaSubvenciones - horas_totales) > 0.01) {
       alertas.push({
-        id: `al-descalce-${contrato_id}`,
+        id: generarUuidDeterminista(`alerta-descalce-${contrato_id}`),
         run,
         nombre_funcionario: nombre,
         rbd,
@@ -451,7 +469,7 @@ export function parsearNominaCsv(
       // We can warn if it exceeds 65.01%. If it exceeds 65% it is an alert.
       if (pctLectivo > maxStandardPct + 0.01) {
         alertas.push({
-          id: `al-ley20903-${contrato_id}`,
+          id: generarUuidDeterminista(`alerta-ley20903-${contrato_id}`),
           run,
           nombre_funcionario: nombre,
           rbd,
@@ -463,7 +481,7 @@ export function parsearNominaCsv(
         });
       } else if (pctLectivo > maxSpecialPct + 0.01) {
         alertas.push({
-          id: `al-ley20903-warn-${contrato_id}`,
+          id: generarUuidDeterminista(`alerta-ley20903-warn-${contrato_id}`),
           run,
           nombre_funcionario: nombre,
           rbd,
@@ -482,7 +500,7 @@ export function parsearNominaCsv(
       if (match) {
         if (match.funcion && match.funcion.toLowerCase() !== funcion_principal.toLowerCase()) {
           alertas.push({
-            id: `al-funcion-${contrato_id}`,
+            id: generarUuidDeterminista(`alerta-funcion-${contrato_id}`),
             run,
             nombre_funcionario: nombre,
             rbd,
@@ -495,7 +513,7 @@ export function parsearNominaCsv(
         }
         if (match.horas !== undefined && Math.abs(match.horas - horas_totales) > 0.01) {
           alertas.push({
-            id: `al-horasprevias-${contrato_id}`,
+            id: generarUuidDeterminista(`alerta-horasprevias-${contrato_id}`),
             run,
             nombre_funcionario: nombre,
             rbd,
@@ -888,7 +906,7 @@ export function parsearArchivoExcelOJson(
             });
           }
 
-          const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
+          const contrato_id = generarUuidDeterminista(`contrato-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`);
           contratos.push({
             id: contrato_id,
             funcionario_run: run,
@@ -902,7 +920,7 @@ export function parsearArchivoExcelOJson(
 
           if (regular > 0) {
             financiamientos.push({
-              id: `f-${contrato_id}-Regular`,
+              id: generarUuidDeterminista(`financiamiento-${contrato_id}-Regular`),
               contrato_id,
               origen_fondo: 'Subvención Regular',
               horas: regular
@@ -910,7 +928,7 @@ export function parsearArchivoExcelOJson(
           }
           if (sep > 0) {
             financiamientos.push({
-              id: `f-${contrato_id}-SEP`,
+              id: generarUuidDeterminista(`financiamiento-${contrato_id}-SEP`),
               contrato_id,
               origen_fondo: 'SEP',
               horas: sep
@@ -918,7 +936,7 @@ export function parsearArchivoExcelOJson(
           }
           if (pie > 0) {
             financiamientos.push({
-              id: `f-${contrato_id}-PIE`,
+              id: generarUuidDeterminista(`financiamiento-${contrato_id}-PIE`),
               contrato_id,
               origen_fondo: 'PIE',
               horas: pie
@@ -1234,7 +1252,7 @@ export function parsearArchivoExcelOJson(
         let totalRowHoras = hasDirectDotaciones ? (horasRegular + horasPIE + horasSEP) : parseDecimalHours(row[idxHoras]);
 
         if (!contrato) {
-          const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
+          const contrato_id = generarUuidDeterminista(`contrato-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`);
           contrato = {
             id: contrato_id,
             funcionario_run: run,
@@ -1251,7 +1269,7 @@ export function parsearArchivoExcelOJson(
 
         const upsertFinanciamiento = (origen: OrigenFondo, hrs: number) => {
           if (hrs <= 0) return;
-          const finId = `f-${contrato.id}-${origen.replace(/\s+/g, '')}`;
+          const finId = generarUuidDeterminista(`financiamiento-${contrato.id}-${origen.replace(/\s+/g, '')}`);
           let financiamiento = financiamientosFallback.find(f => f.id === finId);
           if (financiamiento) financiamiento.horas += hrs;
           else financiamientosFallback.push({ id: finId, contrato_id: contrato.id, origen_fondo: origen, horas: hrs });
