@@ -667,31 +667,26 @@ export default function SostenedorDashboard() {
 
   const handleConfirmIngest = async () => {
     if (!pendingIngest) return;
-    const { funcionarios, contratos, financiamientos, alertas, establecimientos, selectedSchools, targetEstamento, isAsistente } = pendingIngest;
+    const { funcionarios, contratos, financiamientos, alertas, selectedSchools, targetEstamento, isAsistente } = pendingIngest;
     
     setIngestProgress(5);
     try {
-      const filteredEsts = establecimientos.filter(e => selectedSchools.includes(e.rbd));
-      const filteredConts = contratos.filter(c => selectedSchools.includes(c.rbd));
+      // 1. Fetch pre-existing schools to validate foreign key constraints
+      const existingEsts = await api.getEstablecimientos();
+      const existingRbds = new Set(existingEsts.map(e => e.rbd));
+
+      const filteredConts = contratos.filter(c => selectedSchools.includes(c.rbd) && existingRbds.has(c.rbd));
+      const discardedContsCount = contratos.filter(c => selectedSchools.includes(c.rbd)).length - filteredConts.length;
+
       const filteredFuncsRuns = Array.from(new Set(filteredConts.map(c => c.funcionario_run)));
       const filteredFuncs = funcionarios.filter(f => filteredFuncsRuns.includes(f.run) || f.estamento === targetEstamento);
       const filteredFins = financiamientos.filter(f => {
         const parentCont = contratos.find(c => c.id === f.contrato_id);
-        return parentCont && selectedSchools.includes(parentCont.rbd);
+        return parentCont && selectedSchools.includes(parentCont.rbd) && existingRbds.has(parentCont.rbd);
       });
-      const filteredAlts = alertas.filter(a => selectedSchools.includes(a.rbd));
+      const filteredAlts = alertas.filter(a => selectedSchools.includes(a.rbd) && existingRbds.has(a.rbd));
 
-      // 1. Create Comunas & Establishments
-      setIngestProgress(15);
-      const uniqueComunas = Array.from(new Set(filteredEsts.map(e => e.comuna).filter(Boolean)));
-      if (uniqueComunas.length > 0) {
-        await (api as any).upsertComunasBulk(uniqueComunas);
-      }
-      if (filteredEsts.length > 0) {
-        await (api as any).upsertEstablecimientosBulk(filteredEsts);
-      }
-
-      // 2. Create Funcionarios in Bulk
+      // 2. Create Funcionarios in Bulk (UPSERT ON CONFLICT target run)
       setIngestProgress(40);
       if (filteredFuncs.length > 0) {
         await (api as any).upsertFuncionariosBulk(filteredFuncs);
@@ -712,7 +707,11 @@ export default function SostenedorDashboard() {
       setIngestProgress(100);
       await loadAllData();
       
-      const successMsg = `✅ Éxito: Se procesaron y confirmaron ${filteredConts.length} contratos y ${filteredEsts.length} establecimientos.`;
+      let successMsg = `✅ Éxito: Se procesaron y confirmaron ${filteredConts.length} contratos de dotación.`;
+      if (discardedContsCount > 0) {
+        successMsg += ` (⚠️ Se omitieron ${discardedContsCount} filas porque sus RBD no existen en el catálogo de colegios).`;
+      }
+
       if (isAsistente) {
         setImportLogsAsis(successMsg);
       } else {

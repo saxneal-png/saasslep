@@ -565,7 +565,7 @@ export const api = {
       dataObj.grupo_estamento = 'P02_Educacion';
     }
     try {
-      const { error } = await supabase.from('funcionarios').upsert(dataObj);
+      const { error } = await supabase.from('funcionarios').upsert(dataObj, { onConflict: 'run' });
       if (error) throw error;
     } catch (error) {
       console.warn("⚠️ Error en Supabase, guardando funcionario en local:", error);
@@ -610,7 +610,7 @@ export const api = {
     for (let i = 0; i < list.length; i += batchSize) {
       const batch = list.slice(i, i + batchSize);
       try {
-        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('funcionarios').upsert(batch)));
+        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('funcionarios').upsert(batch, { onConflict: 'run' })));
         if (error) throw error;
       } catch (error) {
         console.warn("⚠️ Error en Supabase bulk funcionarios, guardando en local:", error);
@@ -640,7 +640,7 @@ export const api = {
     for (let i = 0; i < contratos.length; i += batchSize) {
       const batch = contratos.slice(i, i + batchSize);
       try {
-        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('contratos').upsert(batch)));
+        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('contratos').upsert(batch, { onConflict: 'id' })));
         if (error) throw error;
       } catch (error) {
         console.warn("⚠️ Error en Supabase bulk contratos:", error);
@@ -734,7 +734,7 @@ export const api = {
     contrato: Contrato, 
     financiamientos: FinanciamientoContrato[]
   ): Promise<void> => {
-    const { error: cErr } = await supabase.from('contratos').upsert(contrato);
+    const { error: cErr } = await supabase.from('contratos').upsert(contrato, { onConflict: 'id' });
     const { error: delErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contrato.id);
     let insErr = null;
     if (financiamientos.length > 0) {
