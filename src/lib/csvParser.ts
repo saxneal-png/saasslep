@@ -398,19 +398,19 @@ export function parsearNominaCsv(
       });
     }
 
-    // Add Contrato with merge logic
+    // Add Contrato with merge logic (using Math.max for repeating contract-level hours)
     const existingContratoIdx = contratos.findIndex(c => c.id === contrato_id);
     if (existingContratoIdx >= 0) {
       const existing = contratos[existingContratoIdx];
-      existing.horas_totales = (existing.horas_totales || 0) + (horas_totales || 0);
+      existing.horas_totales = Math.max(existing.horas_totales || 0, horas_totales || 0);
       if (horas_directivas !== undefined) {
-        existing.horas_directivas = (existing.horas_directivas || 0) + horas_directivas;
+        existing.horas_directivas = Math.max(existing.horas_directivas || 0, horas_directivas);
       }
       if (horas_aula !== undefined) {
-        existing.horas_aula = (existing.horas_aula || 0) + horas_aula;
+        existing.horas_aula = Math.max(existing.horas_aula || 0, horas_aula);
       }
       if (horas_tecnico_pedagogicas !== undefined) {
-        existing.horas_tecnico_pedagogicas = (existing.horas_tecnico_pedagogicas || 0) + horas_tecnico_pedagogicas;
+        existing.horas_tecnico_pedagogicas = Math.max(existing.horas_tecnico_pedagogicas || 0, horas_tecnico_pedagogicas);
       }
     } else {
       const nuevoContrato: Contrato = {
