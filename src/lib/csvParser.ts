@@ -211,19 +211,19 @@ export function parsearNominaCsv(
       return clean;
     };
 
-    let nombre = 'Funcionario Sin Nombre';
+    let nombre = 'SIN NOMBRE REGISTRADO';
     if (row.Nombre || row.nombre) {
-      nombre = limpiarCaracteresCorruptos((row.Nombre || row.nombre).trim());
+      nombre = limpiarCaracteresCorruptos((row.Nombre || row.nombre).trim()) || 'SIN NOMBRE REGISTRADO';
     } else if (row.DOC_NOMBRE || row.doc_nombre) {
       const nom = (row.DOC_NOMBRE || row.doc_nombre || '').trim();
       const pat = (row.DOC_PATERNO || row.doc_paterno || '').trim();
       const mat = (row.DOC_MATERNO || row.doc_materno || '').trim();
-      nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim());
+      nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim()) || 'SIN NOMBRE REGISTRADO';
     } else if (row.ASISTENTE_NOMBRE || row.asistente_nombre) {
       const nom = (row.ASISTENTE_NOMBRE || row.asistente_nombre || '').trim();
       const pat = (row.ASISTENTE_PATERNO || row.asistente_paterno || '').trim();
       const mat = (row.ASISTENTE_MATERNO || row.asistente_materno || '').trim();
-      nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim());
+      nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim()) || 'SIN NOMBRE REGISTRADO';
     }
 
     const rbd = String(row.RBD || row.rbd || rbdContext).trim();
@@ -785,18 +785,20 @@ export function parsearArchivoExcelOJson(
             nombreCompleto = `${nombre} ${apePat} ${apeMat}`.replace(/\s+/g, ' ').trim();
           }
           if (!nombreCompleto) {
-            nombreCompleto = 'Funcionario Sin Nombre';
+            nombreCompleto = 'SIN NOMBRE REGISTRADO';
           }
 
           const rbd = idxRbd !== -1 ? String(row[idxRbd]).trim() : rbdContext;
           const estNombre = idxEstablecimiento !== -1 ? String(row[idxEstablecimiento]).trim() : '';
-          const cargo = idxFuncion !== -1 ? String(row[idxFuncion]).trim() : 'Docente de Aula';
           
+          const cargoRaw = idxFuncion !== -1 ? String(row[idxFuncion]).trim() : '';
           const estRaw = idxEstamento !== -1 ? String(row[idxEstamento] || '').toLowerCase() : '';
-          const estamento = (estRaw.includes('docente') || cargo.toLowerCase().includes('docente') || cargo.toLowerCase().includes('profesor') || cargo.toLowerCase().includes('director') || cargo.toLowerCase().includes('pie')) 
+          const estamento = (estRaw.includes('docente') || cargoRaw.toLowerCase().includes('docente') || cargoRaw.toLowerCase().includes('profesor') || cargoRaw.toLowerCase().includes('director') || cargoRaw.toLowerCase().includes('pie')) 
             ? 'Docente' 
             : 'Asistente de la Educación';
 
+          const cargo = cargoRaw || (estamento === 'Docente' ? 'Docente de Aula' : 'Asistente de la Educación');
+          
           const calClean = idxCalidad !== -1 ? String(row[idxCalidad] || '').toLowerCase() : '';
           let calidad_juridica: CalidadJuridica = 'A contrata';
           if (calClean.includes('titular')) calidad_juridica = 'Titular';
@@ -838,7 +840,7 @@ export function parsearArchivoExcelOJson(
             };
             funcionarios.push(existingFunc);
           } else {
-            if (nombreCompleto !== 'Funcionario Sin Nombre') existingFunc.nombre = nombreCompleto;
+            if (nombreCompleto !== 'SIN NOMBRE REGISTRADO') existingFunc.nombre = nombreCompleto;
             if (idxEmail !== -1 && row[idxEmail]) existingFunc.email = String(row[idxEmail]).trim();
             if (idxTel !== -1 && row[idxTel]) existingFunc.telefono = String(row[idxTel]).trim();
             if (idxGen !== -1 && row[idxGen]) existingFunc.genero = String(row[idxGen]).trim();
@@ -1079,7 +1081,10 @@ export function parsearArchivoExcelOJson(
       const apePat = idxPat !== -1 ? String(row[idxPat] || '').trim() : '';
       const apeMat = idxMat !== -1 ? String(row[idxMat] || '').trim() : '';
       const nombres = idxNom !== -1 ? String(row[idxNom] || '').trim() : '';
-      const nombreCompleto = `${nombres} ${apePat} ${apeMat}`.replace(/\s+/g, ' ').trim();
+      let nombreCompleto = `${nombres} ${apePat} ${apeMat}`.replace(/\s+/g, ' ').trim();
+      if (!nombreCompleto) {
+        nombreCompleto = 'SIN NOMBRE REGISTRADO';
+      }
       const cargoRaw = idxCargo !== -1 ? String(row[idxCargo] || '').trim() : '';
 
       const sexVal = idxSexo !== -1 ? String(row[idxSexo] || '').trim().toUpperCase() : '';
@@ -1171,9 +1176,9 @@ export function parsearArchivoExcelOJson(
       if (!func) {
         func = {
           run,
-          nombre: nombreCompleto || 'Funcionario Sin Nombre',
+          nombre: nombreCompleto,
           estamento,
-          cargo: cargoRaw || (estamento === 'Docente' ? 'Docente de Aula' : 'Asistente'),
+          cargo: cargoRaw || (estamento === 'Docente' ? 'Docente de Aula' : 'Asistente de la Educación'),
           genero,
           tramo,
           fecha_ingreso_establecimiento: fechaIngreso

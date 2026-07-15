@@ -686,18 +686,28 @@ export default function SostenedorDashboard() {
     try {
       // 1. Fetch pre-existing schools to validate foreign key constraints
       const existingEsts = await api.getEstablecimientos();
-      const existingRbds = new Set(existingEsts.map(e => e.rbd));
+      const existingRbds = new Set(existingEsts.map(e => String(e.rbd).trim()));
+      const cleanSelectedSchools = selectedSchools.map(s => String(s).trim());
 
-      const filteredConts = contratos.filter(c => selectedSchools.includes(c.rbd) && existingRbds.has(c.rbd));
-      const discardedContsCount = contratos.filter(c => selectedSchools.includes(c.rbd)).length - filteredConts.length;
+      const filteredConts = contratos.filter(c => {
+        const cRbd = String(c.rbd).trim();
+        return cleanSelectedSchools.includes(cRbd) && existingRbds.has(cRbd);
+      });
+      const totalContsForSelected = contratos.filter(c => cleanSelectedSchools.includes(String(c.rbd).trim())).length;
+      const discardedContsCount = totalContsForSelected - filteredConts.length;
 
       const filteredFuncsRuns = Array.from(new Set(filteredConts.map(c => c.funcionario_run)));
       const filteredFuncs = funcionarios.filter(f => filteredFuncsRuns.includes(f.run) || f.estamento === targetEstamento);
       const filteredFins = financiamientos.filter(f => {
         const parentCont = contratos.find(c => c.id === f.contrato_id);
-        return parentCont && selectedSchools.includes(parentCont.rbd) && existingRbds.has(parentCont.rbd);
+        if (!parentCont) return false;
+        const pRbd = String(parentCont.rbd).trim();
+        return cleanSelectedSchools.includes(pRbd) && existingRbds.has(pRbd);
       });
-      const filteredAlts = alertas.filter(a => selectedSchools.includes(a.rbd) && existingRbds.has(a.rbd));
+      const filteredAlts = alertas.filter(a => {
+        const aRbd = String(a.rbd).trim();
+        return cleanSelectedSchools.includes(aRbd) && existingRbds.has(aRbd);
+      });
 
       // 2. Create Funcionarios in Bulk (UPSERT ON CONFLICT target run)
       setIngestProgress(40);

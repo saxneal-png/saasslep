@@ -612,8 +612,9 @@ export const api = {
       try {
         const { error } = await withTimeout<any>(Promise.resolve(supabase.from('funcionarios').upsert(batch, { onConflict: 'run' })));
         if (error) throw error;
-      } catch (error) {
-        console.warn("⚠️ Error en Supabase bulk funcionarios, guardando en local:", error);
+      } catch (error: any) {
+        console.error("❌ ERROR PROFUNDO EN SUPABASE BULK FUNCIONARIOS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
+        console.warn("⚠️ Guardando funcionarios en local como fallback...");
         const current = dbLocal.funcionarios;
         for (const item of batch) {
           const idx = current.findIndex(f => f.run === item.run);
@@ -642,8 +643,9 @@ export const api = {
       try {
         const { error } = await withTimeout<any>(Promise.resolve(supabase.from('contratos').upsert(batch, { onConflict: 'id' })));
         if (error) throw error;
-      } catch (error) {
-        console.warn("⚠️ Error en Supabase bulk contratos:", error);
+      } catch (error: any) {
+        console.error("❌ ERROR PROFUNDO EN SUPABASE BULK CONTRATOS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
+        console.warn("⚠️ Guardando contratos en local como fallback...");
         const current = dbLocal.contratos;
         for (const item of batch) {
           const idx = current.findIndex(c => c.id === item.id);
@@ -671,8 +673,8 @@ export const api = {
         try {
           const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').insert(batch)));
           if (error) throw error;
-        } catch (error) {
-          console.warn("⚠️ Error in bulk insert financiamientos:", error);
+        } catch (error: any) {
+          console.error("❌ ERROR PROFUNDO EN SUPABASE INSERT FINANCIAMIENTOS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
           let localFins = dbLocal.financiamientoContratos.filter(f => !contratoIds.includes(f.contrato_id));
           localFins.push(...financiamientos);
           dbLocal.financiamientoContratos = localFins;
@@ -850,8 +852,8 @@ export const api = {
     try {
       const { error } = await supabase.from('alertas_conciliacion').upsert(alertas);
       if (error) throw error;
-    } catch (error) {
-      console.warn("⚠️ Error en Supabase bulk alertas, guardando en local:", error);
+    } catch (error: any) {
+      console.error("❌ ERROR PROFUNDO EN SUPABASE BULK ALERTAS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
       const list = dbLocal.alertas;
       for (const a of alertas) {
         const idx = list.findIndex(al => al.id === a.id);
