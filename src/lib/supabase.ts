@@ -756,9 +756,9 @@ export const api = {
     for (let i = 0; i < financiamientos.length; i += batchSize) {
       const batch = financiamientos.slice(i, i + batchSize);
       if (batch.length > 0) {
-        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').insert(batch)));
+        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').upsert(batch, { onConflict: 'id' })));
         if (error) {
-          console.error("❌ ERROR PROFUNDO EN SUPABASE INSERT FINANCIAMIENTOS:", error.message, JSON.stringify(error));
+          console.error("❌ ERROR PROFUNDO EN SUPABASE UPSERT FINANCIAMIENTOS:", error.message, JSON.stringify(error));
           throw new Error(`Error al guardar financiamientos: ${error.message}`);
         }
       }
@@ -776,31 +776,45 @@ export const api = {
   deleteFuncionariosBulk: async (runs: string[]): Promise<void> => {
     if (runs.length === 0) return;
     let contratoIds: string[] = [];
+    
     try {
+      // 1. Obtener los IDs de los contratos vinculados a estos RUNs
       const { data } = await supabase.from('contratos').select('id').in('funcionario_run', runs);
-      if (data) {
-        contratoIds = data.map(c => c.id);
-      }
-    } catch (e) {
-      console.warn("⚠️ Error getting contract IDs in bulk delete:", e);
-    }
+      if (data) contratoIds = data.map(c => c.id);
 
-    if (contratoIds.length === 0) {
-      contratoIds = dbLocal.contratos
-        .filter(c => runs.includes(c.funcionario_run))
-        .map(c => c.id);
-    }
+      // 2. LIMPIEZA EN CASCADA COMPLETA (Para evitar Foreign Key Violations)
+      // Borrar alertas de conciliación ligadas al RUN
+      await supabase.from('alertas_conciliacion').delete().in('run', runs);
+      // Borrar cargos personalizados del RUN
+      await supabase.from('cargos_personalizados').delete().in('funcionario_run', runs);
+      // Borrar libros de remuneraciones del RUN
+      await supabase.from('libro_remuneraciones').delete().in('funcionario_run', runs);
+      // Borrar tareas de reemplazo del RUN (tanto si es titular como reemplazo)
+      await supabase.from('tareas_reemplazo').delete().in('funcionario_titular_run', runs);
+      await supabase.from('tareas_reemplazo').delete().in('reemplazo_run', runs);
+      // Borrar reemplazos de licencias donde el funcionario es el reemplazo
+      await supabase.from('reemplazos_licencias').delete().in('reemplazo_run', runs);
 
-    try {
       if (contratoIds.length > 0) {
+        // Borrar asignaciones de aula vinculadas a los contratos
         await supabase.from('asignaciones_aula').delete().in('contrato_id', contratoIds);
+        // Borrar financiamientos/subvenciones de los contratos
         await supabase.from('financiamientos').delete().in('contrato_id', contratoIds);
+        // Borrar reemplazos de licencias vinculados al contrato titular
+        await supabase.from('reemplazos_licencias').delete().in('contrato_titular_id', contratoIds);
+        // Borrar los contratos físicos
         await supabase.from('contratos').delete().in('id', contratoIds);
       }
-      await supabase.from('funcionarios').delete().in('run', runs);
-    } catch (error) {
-      console.warn("⚠️ Error en Supabase bulk delete funcionarios:", error);
+
+      // 3. Finalmente, borrar los funcionarios
+      const { error } = await supabase.from('funcionarios').delete().in('run', runs);
+      if (error) throw error;
+
+    } catch (error: any) {
+      console.error("❌ Error crítico en borrado masivo:", error.message);
+      throw error;
     } finally {
+      // Sincronización del estado local de respaldo
       dbLocal.funcionarios = dbLocal.funcionarios.filter(f => !runs.includes(f.run));
       dbLocal.contratos = dbLocal.contratos.filter(c => !runs.includes(c.funcionario_run));
       if (contratoIds.length > 0) {

@@ -1116,7 +1116,7 @@ export function parsearArchivoExcelOJson(
     const idxRbd = getIndex(['rbd', 'rbdclean', 'rbdmaestro', 'rbdmaestrocontrato'], -1);
     const idxCargo = getIndex(['cargo', 'funcion', 'cargofuncion', 'funcionprincipal'], -1);
     const idxTramo = getIndex(['tramo'], -1);
-    const idxTipoContrato = getIndex(['tipocontrato', 'calidad'], -1);
+    const idxTipoContrato = getIndex(['tipocontrato', 'calidad', 'calidadjuridica', 'calidadjuridicap02', 'tipo'], -1);
     const idxHoras = getIndex(['horascontrato', 'horas'], -1);
     const idxActivo = getIndex(['principalactivo', 'activo', 'estado'], -1);
     const idxTotalHaberes = getIndex(['totalhaberes', 'sueldoliquido', 'sueldo', 'haberes'], -1);

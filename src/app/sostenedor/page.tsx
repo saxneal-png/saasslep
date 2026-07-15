@@ -251,7 +251,8 @@ export default function SostenedorDashboard() {
       tuts,
       sups,
       plans,
-      coms
+      coms,
+      fins
     ] = await Promise.all([
       api.getEstablecimientos(),
       api.getContratos(),
@@ -260,17 +261,13 @@ export default function SostenedorDashboard() {
       api.getTodasLasTutelas(),
       api.getSupervisores(),
       api.getPlanesEstudio(),
-      api.getComunas()
+      api.getComunas(),
+      api.getFinanciamientos()
     ]);
 
     // Fetch dyn elements
     const asigs = dbLocal.asignacionesAula;
     const cargs = dbLocal.cargosPersonalizados;
-
-    const finsArrays = await Promise.all(
-      conts.map(c => api.getFinanciamientosPorContrato(c.id))
-    );
-    const fins = finsArrays.flat();
 
     setEstablecimientos(ests);
     setContratos(conts);
