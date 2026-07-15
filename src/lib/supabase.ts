@@ -17,6 +17,7 @@ import {
   TareaReemplazo,
   ReemplazoDetalle
 } from './types';
+import { normalizarRbd } from './csvParser';
 
 // Comunas in Diguillín/Valle Diguillín area
 const COMUNAS = ['Bulnes', 'Chillán Viejo', 'El Carmen', 'Pemuco', 'San Ignacio', 'Yungay', 'Quillón'];
@@ -487,7 +488,13 @@ export const api = {
     try {
       let query = supabase.from('contratos').select('*');
       if (rbd) {
-        query = query.eq('rbd', rbd);
+        const cleanRbd = rbd.trim();
+        const normRbd = normalizarRbd(cleanRbd);
+        const zeroPadded = cleanRbd.padStart(5, '0');
+        
+        // Build query using OR to cover any DB format discrepancies (leading zero or not)
+        const matches = Array.from(new Set([cleanRbd, normRbd, zeroPadded])).filter(Boolean);
+        query = query.or(matches.map(m => `rbd.eq.${m}`).join(','));
       }
       const { data, error } = await query;
       if (error) throw error;
