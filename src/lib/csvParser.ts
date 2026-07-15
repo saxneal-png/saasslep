@@ -500,7 +500,8 @@ export function parsearArchivoExcelOJson(
   rbdContext: string,
   controlPrevioJson?: Array<{ run: string; funcion?: string; horas?: number }>,
   forceEstamento?: 'Docente' | 'Asistente de la Educación',
-  schoolNameToRbdMap: Record<string, string> = {}
+  schoolNameToRbdMap: Record<string, string> = {},
+  forceEstablecimientos?: boolean
 ): ParseResult {
   const funcionarios: Funcionario[] = [];
   const contratos: Contrato[] = [];
@@ -530,6 +531,56 @@ export function parsearArchivoExcelOJson(
 
   // Parse using SheetJS (XLSX/XLS or CSV)
   const workbook = XLSX.read(fileBuffer, { type: 'array' });
+
+  // --- Forced establishments mode: parse first sheet directly regardless of name ---
+  if (forceEstablecimientos) {
+    const getIndex = (hdrs: string[], kws: string[]): number => {
+      for (const kw of kws) {
+        const idx = hdrs.findIndex(h => h === kw);
+        if (idx !== -1) return idx;
+      }
+      for (const kw of kws) {
+        const idx = hdrs.findIndex(h => h.includes(kw));
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json<any[]>(firstSheet, { header: 1, defval: '' });
+    // Find header row (first row with >1 non-empty cells)
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(rawRows.length, 8); i++) {
+      if (rawRows[i] && rawRows[i].filter((c: any) => String(c || '').trim() !== '').length > 1) {
+        headerRowIdx = i;
+        break;
+      }
+    }
+    const headers = rawRows[headerRowIdx].map((h: any) =>
+      String(h || '').trim().toLowerCase().normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[\.\-\s_]/g, '')
+    );
+    const idxRbd    = getIndex(headers, ['rbd']);
+    const idxNombre = getIndex(headers, ['nombre', 'establecimiento', 'establecimientos', 'escuela']);
+    const idxComuna = getIndex(headers, ['comuna']);
+    const idxIvm    = getIndex(headers, ['indicevulnerabilidad', 'ivm', 'vulnerabilidad']);
+    const idxRegimen = getIndex(headers, ['regimen', 'tipo']);
+    for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
+      const row = rawRows[i];
+      if (!row) continue;
+      const rbd = String(row[idxRbd] ?? '').trim();
+      if (!rbd) continue;
+      const establecimientos_arr = establecimientos as Establecimiento[];
+      establecimientos_arr.push({
+        rbd,
+        nombre: idxNombre !== -1 && row[idxNombre] ? String(row[idxNombre]).trim() : `Establecimiento RBD ${rbd}`,
+        ivm: idxIvm !== -1 && row[idxIvm] ? parseFloat(String(row[idxIvm]).replace(',', '.')) || 70 : 70,
+        comuna: idxComuna !== -1 && row[idxComuna] ? String(row[idxComuna]).trim() : 'Chillán',
+        regimen: idxRegimen !== -1 && row[idxRegimen] ? (String(row[idxRegimen]).toUpperCase().includes('NO') ? 'No JEC' : 'JEC') : 'JEC'
+      });
+    }
+    return { funcionarios, contratos, financiamientos, alertas, establecimientos, planesEstudio, cursosDinamicos, asignaturasDinamicas, remuneraciones, reemplazosLicencias };
+  }
   
   // Detect if the workbook contains sheet names corresponding to the 3 planillas
   let hasRecognizedSheets = false;

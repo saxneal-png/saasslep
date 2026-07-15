@@ -630,7 +630,11 @@ export default function SostenedorDashboard() {
         const { establecimientos: newEsts } = parsearArchivoExcelOJson(
           buffer,
           file.name,
-          '10201'
+          '10201',
+          undefined,
+          undefined,
+          {},
+          true  // forceEstablecimientos: parse first sheet directly regardless of tab name
         );
 
         if (!newEsts || newEsts.length === 0) {
