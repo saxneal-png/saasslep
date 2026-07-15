@@ -1273,12 +1273,16 @@ export function parsearArchivoExcelOJson(
       let func = funcionariosFallback.find(f => f.run === run);
       const fechaIngreso = idxIngreso !== -1 ? normalizarFecha(row[idxIngreso]) : undefined;
 
+      const funcion_principal = estamento === 'Docente' 
+        ? normalizarCargoDocente(cargoRaw) 
+        : cargoRaw || 'Asistente de la Educación';
+
       if (!func) {
         func = {
           run,
           nombre: nombreCompleto,
           estamento,
-          cargo: cargoRaw || (estamento === 'Docente' ? 'Docente de Aula' : 'Asistente de la Educación'),
+          cargo: funcion_principal,
           genero,
           tramo,
           fecha_ingreso_establecimiento: fechaIngreso
@@ -1311,14 +1315,14 @@ export function parsearArchivoExcelOJson(
             funcionario_run: run,
             rbd,
             calidad_juridica,
-            funcion_principal: cargoRaw || func.cargo || 'Docente de Aula',
+            funcion_principal: funcion_principal,
             estado,
             horas_totales: 0,
             legislacion_laboral
           };
           contratosFallback.push(contrato);
         }
-        contrato.horas_totales += totalRowHoras;
+        contrato.horas_totales = Math.max(contrato.horas_totales || 0, totalRowHoras || 0);
 
         const upsertFinanciamiento = (origen: OrigenFondo, hrs: number) => {
           if (hrs <= 0) return;

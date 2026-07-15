@@ -563,6 +563,39 @@ export const api = {
     }
   },
 
+  getFinanciamientos: async (): Promise<FinanciamientoContrato[]> => {
+    try {
+      // 1. Get exact total count first
+      const { count, error: countErr } = await supabase
+        .from('financiamientos')
+        .select('*', { count: 'exact', head: true });
+
+      if (countErr) return handleFallback(countErr, dbLocal.financiamientoContratos, 'financiamientos');
+      const total = count || 0;
+      if (total === 0) return [];
+
+      // 2. Fetch all ranges concurrently
+      const promises = [];
+      const CHUNK_SIZE = 1000;
+      for (let from = 0; from < total; from += CHUNK_SIZE) {
+        const to = from + CHUNK_SIZE - 1;
+        promises.push(
+          supabase.from('financiamientos').select('*').range(from, to)
+        );
+      }
+
+      const results = await Promise.all(promises);
+      const allData: FinanciamientoContrato[] = [];
+      for (const res of results) {
+        if (res.error) return handleFallback(res.error, dbLocal.financiamientoContratos, 'financiamientos');
+        if (res.data) allData.push(...res.data);
+      }
+      return allData;
+    } catch (err) {
+      return handleFallback(err, dbLocal.financiamientoContratos, 'financiamientos');
+    }
+  },
+
   getAsignacionesPorEstablecimiento: async (rbd: string): Promise<AsignacionAula[]> => {
     try {
       const { data: contratos, error: cErr } = await supabase.from('contratos').select('id').eq('rbd', rbd);

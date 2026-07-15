@@ -14,7 +14,8 @@ import {
   CalidadJuridica,
   CARGOS_DOCENTES_LIST,
   ReemplazoDetalle,
-  Establecimiento
+  Establecimiento,
+  FinanciamientoContrato
 } from '@/lib/types';
 import { normalizarRun, normalizarRbd } from '@/lib/csvParser';
 import { calcularHaberBaseEUS, validarCargaDocente } from '@/lib/rulesEngine';
@@ -28,6 +29,7 @@ export default function RRHHPage() {
   const [tareas, setTareas] = useState<TareaReemplazo[]>([]);
   const [comunas, setComunas] = useState<string[]>([]);
   const [escuelas, setEscuelas] = useState<Establecimiento[]>([]);
+  const [financiamientos, setFinanciamientos] = useState<FinanciamientoContrato[]>([]);
 
   // Search/Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -181,13 +183,14 @@ export default function RRHHPage() {
 
   async function loadData() {
     await api.pullCloudSync();
-    const [funcs, conts, tasks, coms, ests, reemps] = await Promise.all([
+    const [funcs, conts, tasks, coms, ests, reemps, fins] = await Promise.all([
       api.getFuncionarios(),
       api.getContratos(),
       api.getTareasReemplazo(),
       api.getComunas(),
       api.getEstablecimientos(),
-      api.getReemplazosLicencias()
+      api.getReemplazosLicencias(),
+      api.getFinanciamientos()
     ]);
     setFuncionarios(funcs);
     setContratos(conts);
@@ -195,6 +198,7 @@ export default function RRHHPage() {
     setComunas(coms);
     setEscuelas(ests);
     setReemplazosList(reemps);
+    setFinanciamientos(fins);
     if (ests.length > 0) {
       setRbd(ests[0].rbd);
     }
@@ -2063,7 +2067,7 @@ export default function RRHHPage() {
                     <div className="space-y-4">
                       {relatedConts.map(c => {
                         const asigs = dbLocal.asignacionesAula.filter(a => a.contrato_id === c.id);
-                        const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+                        const fins = financiamientos.filter(f => f.contrato_id === c.id);
                         const esc = escuelas.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(c.rbd)));
                         return (
                           <div key={c.id} className="border border-slate-200 rounded-xl p-4 space-y-3 bg-white hover:shadow-sm transition-shadow">
