@@ -188,15 +188,24 @@ export function parsearNominaCsv(
   const financiamientos: FinanciamientoContrato[] = [];
   const alertas: AlertaConciliacion[] = [];
 
-  rows.forEach((row: any, index: number) => {
-    let runRaw = row.RUN || row.run || '';
-    if (!runRaw && (row.DOC_RUN || row.doc_run)) {
-      const docRun = row.DOC_RUN || row.doc_run;
-      const docDv = row.DOC_DV || row.doc_dv || '';
+  rows.forEach((rawRow: any, index: number) => {
+    // Normalize keys to lowercase, trimmed, without accents or special chars
+    const row: any = {};
+    Object.keys(rawRow).forEach(k => {
+      const cleanKey = String(k || '').trim().toLowerCase().normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[\.\-\s_]/g, "");
+      row[cleanKey] = rawRow[k];
+    });
+
+    let runRaw = row.run || '';
+    if (!runRaw && row.docrun) {
+      const docRun = row.docrun;
+      const docDv = row.docdv || '';
       runRaw = `${docRun}-${docDv}`;
-    } else if (!runRaw && (row.ASISTENTE_RUN || row.asistente_run)) {
-      const asisRun = row.ASISTENTE_RUN || row.asistente_run;
-      const asisDv = row.ASISTENTE_DV || row.asistente_dv || '';
+    } else if (!runRaw && row.asistenterun) {
+      const asisRun = row.asistenterun;
+      const asisDv = row.asistentedv || '';
       runRaw = `${asisRun}-${asisDv}`;
     }
 
@@ -241,24 +250,24 @@ export function parsearNominaCsv(
     };
 
     let nombre = 'SIN NOMBRE REGISTRADO';
-    if (row.Nombre || row.nombre) {
-      nombre = limpiarCaracteresCorruptos((row.Nombre || row.nombre).trim()) || 'SIN NOMBRE REGISTRADO';
-    } else if (row.DOC_NOMBRE || row.doc_nombre) {
-      const nom = (row.DOC_NOMBRE || row.doc_nombre || '').trim();
-      const pat = (row.DOC_PATERNO || row.doc_paterno || '').trim();
-      const mat = (row.DOC_MATERNO || row.doc_materno || '').trim();
+    if (row.nombre) {
+      nombre = limpiarCaracteresCorruptos(row.nombre.trim()) || 'SIN NOMBRE REGISTRADO';
+    } else if (row.docnombre) {
+      const nom = (row.docnombre || '').trim();
+      const pat = (row.docpaterno || '').trim();
+      const mat = (row.docmaterno || '').trim();
       nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim()) || 'SIN NOMBRE REGISTRADO';
-    } else if (row.ASISTENTE_NOMBRE || row.asistente_nombre) {
-      const nom = (row.ASISTENTE_NOMBRE || row.asistente_nombre || '').trim();
-      const pat = (row.ASISTENTE_PATERNO || row.asistente_paterno || '').trim();
-      const mat = (row.ASISTENTE_MATERNO || row.asistente_materno || '').trim();
+    } else if (row.asistentenombre) {
+      const nom = (row.asistentenombre || '').trim();
+      const pat = (row.asistentepaterno || '').trim();
+      const mat = (row.asistentematerno || '').trim();
       nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim()) || 'SIN NOMBRE REGISTRADO';
     }
 
-    const rbd = normalizarRbd(row.RBD || row.rbd || rbdContext);
+    const rbd = normalizarRbd(row.rbd || rbdContext);
     
     // Quality mapping logic: map to expanded CalidadJuridica
-    const rawCal = String(row.CalidadJuridica || row.calidad_juridica || row.CALIDAD_JURIDICA || 'A contrata').trim();
+    const rawCal = String(row.calidadjuridica || 'A contrata').trim();
     let calidad_juridica: CalidadJuridica = 'A contrata';
     if (rawCal.toLowerCase().includes('titular')) {
       calidad_juridica = 'Titular';
@@ -275,12 +284,9 @@ export function parsearNominaCsv(
     }
 
     const raw_funcion_principal = limpiarCaracteresCorruptos((
-      row.Funcion || 
       row.funcion || 
-      row.FUNCION_PRINCIPAL || 
-      row.funcion_principal || 
-      row.FUNCION_UNO || 
-      row.funcion_uno || 
+      row.funcionprincipal || 
+      row.funcionuno || 
       'Auxiliar de Servicios'
     ).trim());
 
@@ -288,8 +294,8 @@ export function parsearNominaCsv(
     if (forceEstamento) {
       estamento = forceEstamento === 'Docente' ? 'Docente' : 'Asistente de la Educación';
     } else {
-      const isAsisHeader = row.ASISTENTE_RUN !== undefined || row.asistente_run !== undefined;
-      const rawEst = String(row.Estamento || row.estamento || '').trim().toLowerCase();
+      const isAsisHeader = row.asistenterun !== undefined;
+      const rawEst = String(row.estamento || '').trim().toLowerCase();
       if (!isAsisHeader && (rawEst.includes('docente') || rawEst.includes('profesor') || raw_funcion_principal.toLowerCase().includes('docente') || raw_funcion_principal.toLowerCase().includes('profesor'))) {
         estamento = 'Docente';
       }
@@ -299,43 +305,29 @@ export function parsearNominaCsv(
       ? normalizarCargoDocente(raw_funcion_principal) 
       : raw_funcion_principal;
     
-    const horas_totales = parseDecimalHours(row.HorasTotales || row.horas_totales || row.HORAS_CONTRATO || row.horas_contrato);
+    const horas_totales = parseDecimalHours(row.horastotales || row.horascontrato || row.horas_totales_sige || row.horas_totales_remun);
 
     const checkHasValue = (val: any) => val !== undefined && val !== null && val !== '';
-    const horas_directivas = checkHasValue(row.horas_directivas) ? parseDecimalHours(row.horas_directivas)
-      : checkHasValue(row.HorasDirectivas) ? parseDecimalHours(row.HorasDirectivas)
-      : checkHasValue(row.HORAS_DIRECTIVAS) ? parseDecimalHours(row.HORAS_DIRECTIVAS)
-      : checkHasValue(row.horas_directiva) ? parseDecimalHours(row.horas_directiva)
-      : checkHasValue(row.HorasDirectiva) ? parseDecimalHours(row.HorasDirectiva)
-      : checkHasValue(row.HORAS_DIRECTIVA) ? parseDecimalHours(row.HORAS_DIRECTIVA)
+    const horas_directivas = checkHasValue(row.horasdirectivas) ? parseDecimalHours(row.horasdirectivas)
+      : checkHasValue(row.horasdirectiva) ? parseDecimalHours(row.horasdirectiva)
       : undefined;
 
-    const horas_aula = checkHasValue(row.horas_aula) ? parseDecimalHours(row.horas_aula)
-      : checkHasValue(row.HorasAula) ? parseDecimalHours(row.HorasAula)
-      : checkHasValue(row.HORAS_AULA) ? parseDecimalHours(row.HORAS_AULA)
-      : checkHasValue(row.horas_cronologicas) ? parseDecimalHours(row.horas_cronologicas)
-      : checkHasValue(row.HorasCronologicas) ? parseDecimalHours(row.HorasCronologicas)
-      : checkHasValue(row.HORAS_CRONOLOGICAS) ? parseDecimalHours(row.HORAS_CRONOLOGICAS)
+    const horas_aula = checkHasValue(row.horasaula) ? parseDecimalHours(row.horasaula)
+      : checkHasValue(row.horascronologicas) ? parseDecimalHours(row.horascronologicas)
       : undefined;
 
-    const horas_tecnico_pedagogicas = checkHasValue(row.horas_tecnico_pedagogicas) ? parseDecimalHours(row.horas_tecnico_pedagogicas)
-      : checkHasValue(row.HorasTecnicoPedagogicas) ? parseDecimalHours(row.HorasTecnicoPedagogicas)
-      : checkHasValue(row.HORAS_TECNICO_PEDAGOGICAS) ? parseDecimalHours(row.HORAS_TECNICO_PEDAGOGICAS)
-      : checkHasValue(row.horas_tecnico_pedagogica) ? parseDecimalHours(row.horas_tecnico_pedagogica)
-      : checkHasValue(row.HorasTecnicoPedagogica) ? parseDecimalHours(row.HorasTecnicoPedagogica)
-      : checkHasValue(row.HORAS_TECNICO_PEDAGOGICA) ? parseDecimalHours(row.HORAS_TECNICO_PEDAGOGICA)
-      : checkHasValue(row.horas_tecnica) ? parseDecimalHours(row.horas_tecnica)
-      : checkHasValue(row.horas_tecnico) ? parseDecimalHours(row.horas_tecnico)
-      : checkHasValue(row.HorasTecnica) ? parseDecimalHours(row.HorasTecnica)
-      : checkHasValue(row.HorasTecnico) ? parseDecimalHours(row.HorasTecnico)
+    const horas_tecnico_pedagogicas = checkHasValue(row.horastecnicopedagogicas) ? parseDecimalHours(row.horastecnicopedagogicas)
+      : checkHasValue(row.horastecnicopedagogica) ? parseDecimalHours(row.horastecnicopedagogica)
+      : checkHasValue(row.horastecnica) ? parseDecimalHours(row.horastecnica)
+      : checkHasValue(row.horastecnico) ? parseDecimalHours(row.horastecnico)
       : undefined;
 
-    const dias_trabajados = row.dias_trabajados || row.DiasTrabajados || row.DIAS_TRABAJADOS ? parseInt(row.dias_trabajados || row.DiasTrabajados || row.DIAS_TRABAJADOS, 10) : undefined;
-    const dias_licencia_medica = row.dias_licencia_medica || row.DiasLicenciaMedica || row.DIAS_LICENCIA_MEDICA ? parseInt(row.dias_licencia_medica || row.DiasLicenciaMedica || row.DIAS_LICENCIA_MEDICA, 10) : undefined;
-    const inasistencias = row.inasistencias || row.Inasistencias || row.INASISTENCIAS ? parseInt(row.inasistencias || row.Inasistencias || row.INASISTENCIAS, 10) : undefined;
+    const dias_trabajados = checkHasValue(row.diastrabajados) ? parseInt(row.diastrabajados, 10) : undefined;
+    const dias_licencia_medica = checkHasValue(row.diaslicenciamedica) ? parseInt(row.diaslicenciamedica, 10) : undefined;
+    const inasistencias = checkHasValue(row.inasistencias) ? parseInt(row.inasistencias, 10) : undefined;
     
     let legislacion_laboral: any = estamento === 'Docente' ? 'Estatuto docente' : 'Asistentes de la educación';
-    const legRaw = String(row.legislacion_laboral || row.LegislacionLaboral || row.LEGISLACION_LABORAL || '').trim().toLowerCase();
+    const legRaw = String(row.legislacionlaboral || '').trim().toLowerCase();
     if (legRaw) {
       if (legRaw.includes('docente')) {
         legislacion_laboral = 'Estatuto docente';
@@ -345,12 +337,12 @@ export function parsearNominaCsv(
     }
 
     // Sum subvenciones using float (parseFloat representation)
-    let regular = parseDecimalHours(row.SubvencionRegular || row.subvencion_regular || row.Regular || row.regular);
-    const sep = parseDecimalHours(row.SEP || row.sep);
-    const pie = parseDecimalHours(row.PIE || row.pie);
-    const reforzamiento = parseDecimalHours(row.Reforzamiento || row.reforzamiento);
-    const proRetencion = parseDecimalHours(row.ProRetencion || row.pro_retencion || row.ProRetencion || row.pro_retencion);
-    const otro = parseDecimalHours(row.Otro || row.otro);
+    let regular = parseDecimalHours(row.subvencionregular || row.regular);
+    const sep = parseDecimalHours(row.sep);
+    const pie = parseDecimalHours(row.pie);
+    const reforzamiento = parseDecimalHours(row.reforzamiento);
+    const proRetencion = parseDecimalHours(row.proretencion);
+    const otro = parseDecimalHours(row.otro);
 
     let sumaSubvenciones = regular + sep + pie + reforzamiento + proRetencion + otro;
     if (sumaSubvenciones === 0 && horas_totales > 0) {
@@ -372,19 +364,14 @@ export function parsearNominaCsv(
 
     // Add unique Funcionario with estamento
     const titulo = cleanDiscardValue(
-      row.Titulo || 
       row.titulo || 
-      row.TITULO || 
-      row.DOC_TITULO || 
-      row.doc_titulo || 
-      row.ASISTENTE_TITULO || 
-      row.asistente_titulo || 
-      row.TituloProfesional || 
-      row.titulo_profesional
+      row.doctitulo || 
+      row.asistentetitulo || 
+      row.tituloprofesional
     );
 
-    const genero = cleanDiscardValue(row.ASISTENTE_GENERO || row.asistente_genero || row.Genero || row.genero);
-    const fecha_nacimiento = cleanDiscardValue(row.FECHA_NACIMIENTO || row.fecha_nacimiento || row.FechaNacimiento || row.fecha_nac);
+    const genero = cleanDiscardValue(row.asistentegenero || row.genero);
+    const fecha_nacimiento = cleanDiscardValue(row.fechanacimiento || row.fechanac);
 
     if (!funcionarios.some(f => f.run === run)) {
       funcionarios.push({ 
