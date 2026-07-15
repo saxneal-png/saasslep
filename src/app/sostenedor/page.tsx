@@ -707,7 +707,7 @@ export default function SostenedorDashboard() {
       const discardedContsCount = totalContsForSelected - filteredConts.length;
 
       const filteredFuncsRuns = Array.from(new Set(filteredConts.map(c => c.funcionario_run)));
-      const filteredFuncs = funcionarios.filter(f => filteredFuncsRuns.includes(f.run) || f.estamento === targetEstamento);
+      const filteredFuncs = funcionarios.filter(f => filteredFuncsRuns.includes(f.run));
       const filteredFins = financiamientos.filter(f => {
         const parentCont = contratos.find(c => c.id === f.contrato_id);
         if (!parentCont) return false;
