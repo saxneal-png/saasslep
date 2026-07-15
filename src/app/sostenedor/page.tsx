@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { api, dbLocal, supabase } from '@/lib/supabase';
-import { parsearNominaCsv, normalizarRun, parsearRemuneracionesCsv, parsearArchivoExcelOJson, descargarPlantillaExcel } from '@/lib/csvParser';
+import { parsearNominaCsv, normalizarRun, normalizarRbd, parsearRemuneracionesCsv, parsearArchivoExcelOJson, descargarPlantillaExcel } from '@/lib/csvParser';
 import { 
   Establecimiento, 
   Funcionario, 
@@ -497,10 +497,13 @@ export default function SostenedorDashboard() {
           { run: '15432987-K', funcion: 'Director de Escuela', horas: 38 }
         ];
 
+        // Load fresh school catalog from DB (not stale React state)
+        const dbEsts = await api.getEstablecimientos();
         const schoolMap: Record<string, string> = {};
-        establecimientos.forEach(e => {
-          schoolMap[e.nombre.toLowerCase().trim()] = e.rbd;
+        dbEsts.forEach(e => {
+          schoolMap[e.nombre.toLowerCase().trim()] = normalizarRbd(String(e.rbd));
         });
+        const dbRbdSet = new Set(dbEsts.map(e => normalizarRbd(String(e.rbd))));
 
         const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts, establecimientos: newEsts } = parsearArchivoExcelOJson(
           buffer,
@@ -512,9 +515,12 @@ export default function SostenedorDashboard() {
         );
 
         const fileSchools = Array.from(new Set([
-          ...newConts.map(c => c.rbd),
-          ...(newEsts || []).map(e => e.rbd)
+          ...newConts.map(c => normalizarRbd(String(c.rbd))),
+          ...(newEsts || []).map(e => normalizarRbd(String(e.rbd)))
         ])).filter(Boolean);
+
+        // Pre-select only schools that are already in the DB catalog
+        const selectedSchools = fileSchools.filter(rbd => dbRbdSet.has(rbd));
 
         setPendingIngest({
           funcionarios: newFuncs,
@@ -523,7 +529,7 @@ export default function SostenedorDashboard() {
           alertas: newAlts,
           establecimientos: newEsts || [],
           schoolsList: fileSchools,
-          selectedSchools: fileSchools,
+          selectedSchools,
           targetEstamento,
           isAsistente: false
         });
@@ -570,10 +576,14 @@ export default function SostenedorDashboard() {
       const buffer = event.target?.result as ArrayBuffer;
       try {
         const controlPrevioMock: any[] = [];
+
+        // Load fresh school catalog from DB (not stale React state)
+        const dbEsts = await api.getEstablecimientos();
         const schoolMap: Record<string, string> = {};
-        establecimientos.forEach(e => {
-          schoolMap[e.nombre.toLowerCase().trim()] = e.rbd;
+        dbEsts.forEach(e => {
+          schoolMap[e.nombre.toLowerCase().trim()] = normalizarRbd(String(e.rbd));
         });
+        const dbRbdSet = new Set(dbEsts.map(e => normalizarRbd(String(e.rbd))));
 
         const { funcionarios: newFuncs, contratos: newConts, financiamientos: newFins, alertas: newAlts, establecimientos: newEsts } = parsearArchivoExcelOJson(
           buffer,
@@ -585,9 +595,12 @@ export default function SostenedorDashboard() {
         );
 
         const fileSchools = Array.from(new Set([
-          ...newConts.map(c => c.rbd),
-          ...(newEsts || []).map(e => e.rbd)
+          ...newConts.map(c => normalizarRbd(String(c.rbd))),
+          ...(newEsts || []).map(e => normalizarRbd(String(e.rbd)))
         ])).filter(Boolean);
+
+        // Pre-select only schools that are already in the DB catalog
+        const selectedSchools = fileSchools.filter(rbd => dbRbdSet.has(rbd));
 
         setPendingIngest({
           funcionarios: newFuncs,
@@ -596,7 +609,7 @@ export default function SostenedorDashboard() {
           alertas: newAlts,
           establecimientos: newEsts || [],
           schoolsList: fileSchools,
-          selectedSchools: fileSchools,
+          selectedSchools,
           targetEstamento,
           isAsistente: true
         });
@@ -696,11 +709,11 @@ export default function SostenedorDashboard() {
     try {
       // 1. Fetch pre-existing schools to validate foreign key constraints
       const existingEsts = await api.getEstablecimientos();
-      const existingRbds = new Set(existingEsts.map(e => String(e.rbd).trim()));
-      const cleanSelectedSchools = selectedSchools.map(s => String(s).trim());
+      const existingRbds = new Set(existingEsts.map(e => normalizarRbd(String(e.rbd))));
+      const cleanSelectedSchools = selectedSchools.map(s => normalizarRbd(String(s)));
 
       const filteredConts = contratos.filter(c => {
-        const cRbd = String(c.rbd).trim();
+        const cRbd = normalizarRbd(String(c.rbd));
         return cleanSelectedSchools.includes(cRbd) && existingRbds.has(cRbd);
       });
       const totalContsForSelected = contratos.filter(c => cleanSelectedSchools.includes(String(c.rbd).trim())).length;
@@ -711,11 +724,11 @@ export default function SostenedorDashboard() {
       const filteredFins = financiamientos.filter(f => {
         const parentCont = contratos.find(c => c.id === f.contrato_id);
         if (!parentCont) return false;
-        const pRbd = String(parentCont.rbd).trim();
+        const pRbd = normalizarRbd(String(parentCont.rbd));
         return cleanSelectedSchools.includes(pRbd) && existingRbds.has(pRbd);
       });
       const filteredAlts = alertas.filter(a => {
-        const aRbd = String(a.rbd).trim();
+        const aRbd = normalizarRbd(String(a.rbd));
         return cleanSelectedSchools.includes(aRbd) && existingRbds.has(aRbd);
       });
 
@@ -3080,7 +3093,8 @@ export default function SostenedorDashboard() {
               {(() => {
                 const uniqueComunas = Array.from(new Set(
                   pendingIngest.schoolsList.map(rbd => {
-                    const est = establecimientos.find(e => e.rbd === rbd) || pendingIngest.establecimientos.find(e => e.rbd === rbd);
+                    const normRbd = normalizarRbd(rbd);
+                    const est = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normRbd) || pendingIngest.establecimientos.find(e => normalizarRbd(String(e.rbd)) === normRbd);
                     return est?.comuna;
                   }).filter(Boolean)
                 ));
@@ -3093,7 +3107,8 @@ export default function SostenedorDashboard() {
                     <div className="flex flex-wrap gap-1.5">
                       {uniqueComunas.map(comuna => {
                         const rbdListForComuna = pendingIngest.schoolsList.filter(rbd => {
-                          const est = establecimientos.find(e => e.rbd === rbd) || pendingIngest.establecimientos.find(e => e.rbd === rbd);
+                          const normRbd = normalizarRbd(rbd);
+                          const est = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normRbd) || pendingIngest.establecimientos.find(e => normalizarRbd(String(e.rbd)) === normRbd);
                           return est?.comuna === comuna;
                         });
 
@@ -3155,7 +3170,9 @@ export default function SostenedorDashboard() {
 
                 <div className="border border-slate-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-100 p-2 bg-slate-50">
                   {pendingIngest.schoolsList.map(rbd => {
-                    const estObj = establecimientos.find(e => e.rbd === rbd) || pendingIngest.establecimientos.find(e => e.rbd === rbd);
+                    const normRbd = normalizarRbd(rbd);
+                    const estObj = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normRbd) || pendingIngest.establecimientos.find(e => normalizarRbd(String(e.rbd)) === normRbd);
+                    const inCatalog = !!establecimientos.find(e => normalizarRbd(String(e.rbd)) === normRbd);
                     const name = (estObj && estObj.nombre) ? estObj.nombre : `Colegio / RBD ${rbd}`;
                     const isChecked = pendingIngest.selectedSchools.includes(rbd);
                     
@@ -3182,13 +3199,14 @@ export default function SostenedorDashboard() {
                           className="mt-0.5 rounded text-slep-blue focus:ring-slep-blue"
                         />
                         <div>
-                          <span className="font-bold text-slate-800 block">{name}</span>
+                          <span className="font-bold text-slate-800 block">{name} {!inCatalog && <span className="text-amber-600 text-[9px] font-bold ml-1 bg-amber-50 border border-amber-200 px-1 rounded">⚠️ NO EN CATÁLOGO BD</span>}</span>
                           <div className="flex gap-2 text-[10px] text-slate-500 mt-0.5">
                             <span>RBD: <span className="font-mono">{rbd}</span></span>
                             <span>•</span>
                             <span>{schoolFuncs} {schoolFuncs === 1 ? 'Funcionario' : 'Funcionarios'}</span>
                             <span>•</span>
                             <span>{schoolConts} {schoolConts === 1 ? 'Contrato' : 'Contratos'}</span>
+                            {!inCatalog && <span className="text-amber-600 font-semibold">• Será omitido</span>}
                           </div>
                         </div>
                       </label>
