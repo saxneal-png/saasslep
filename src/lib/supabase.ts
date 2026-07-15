@@ -406,7 +406,7 @@ export const api = {
 
   upsertEstablecimiento: async (est: Establecimiento): Promise<void> => {
     try {
-      const { error } = await supabase.from('establecimientos').upsert(est);
+      const { error } = await supabase.from('establecimientos').upsert(est, { onConflict: 'rbd' });
       if (error) throw error;
     } catch (error) {
       console.warn("⚠️ Error en Supabase, guardando establecimiento en local:", error);
@@ -423,10 +423,10 @@ export const api = {
 
   upsertEstablecimientosBulk: async (establecimientos: Establecimiento[]): Promise<void> => {
     try {
-      const { error } = await supabase.from('establecimientos').upsert(establecimientos);
+      const { error } = await supabase.from('establecimientos').upsert(establecimientos, { onConflict: 'rbd' });
       if (error) throw error;
-    } catch (error) {
-      console.warn("⚠️ Error en Supabase bulk establecimientos, guardando en local:", error);
+    } catch (error: any) {
+      console.error("❌ ERROR PROFUNDO EN SUPABASE BULK ESTABLECIMIENTOS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
       const list = dbLocal.establecimientos;
       for (const est of establecimientos) {
         const idx = list.findIndex(e => e.rbd === est.rbd);
@@ -443,10 +443,10 @@ export const api = {
   upsertComunasBulk: async (comunas: string[]): Promise<void> => {
     const payload = comunas.map(c => ({ nombre: c }));
     try {
-      const { error } = await supabase.from('comunas').upsert(payload);
+      const { error } = await supabase.from('comunas').upsert(payload, { onConflict: 'nombre' });
       if (error) throw error;
-    } catch (error) {
-      console.warn("⚠️ Error en Supabase bulk comunas, guardando en local:", error);
+    } catch (error: any) {
+      console.error("❌ ERROR PROFUNDO EN SUPABASE BULK COMUNAS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
       const list = [...dbLocal.comunas];
       for (const c of comunas) {
         if (!list.includes(c)) {

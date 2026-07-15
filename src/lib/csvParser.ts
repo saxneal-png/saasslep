@@ -566,12 +566,19 @@ export function parsearArchivoExcelOJson(
     };
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawRows = XLSX.utils.sheet_to_json<any[]>(firstSheet, { header: 1, defval: '' });
-    // Find header row (first row with >1 non-empty cells)
+    // Find header row (first row with a column containing 'rbd')
     let headerRowIdx = 0;
-    for (let i = 0; i < Math.min(rawRows.length, 8); i++) {
-      if (rawRows[i] && rawRows[i].filter((c: any) => String(c || '').trim() !== '').length > 1) {
-        headerRowIdx = i;
-        break;
+    for (let i = 0; i < Math.min(rawRows.length, 12); i++) {
+      const row = rawRows[i];
+      if (row && Array.isArray(row)) {
+        const hasRbd = row.some(cell => {
+          const val = String(cell || '').trim().toLowerCase();
+          return val === 'rbd' || val.includes('rbd');
+        });
+        if (hasRbd) {
+          headerRowIdx = i;
+          break;
+        }
       }
     }
     const headers = rawRows[headerRowIdx].map((h: any) =>
@@ -639,11 +646,24 @@ export function parsearArchivoExcelOJson(
 
       // Find header row
       let headerRowIdx = 0;
-      for (let i = 0; i < Math.min(rawRows.length, 8); i++) {
-        const row = rawRows[i];
-        if (row && row.filter(c => String(c || '').trim() !== '').length > 2) {
-          headerRowIdx = i;
-          break;
+      let foundHeader = false;
+      if (normName === 'establecimientos') {
+        for (let i = 0; i < Math.min(rawRows.length, 12); i++) {
+          const row = rawRows[i];
+          if (row && Array.isArray(row) && row.some(cell => String(cell || '').trim().toLowerCase().includes('rbd'))) {
+            headerRowIdx = i;
+            foundHeader = true;
+            break;
+          }
+        }
+      }
+      if (!foundHeader) {
+        for (let i = 0; i < Math.min(rawRows.length, 8); i++) {
+          const row = rawRows[i];
+          if (row && row.filter(c => String(c || '').trim() !== '').length > 2) {
+            headerRowIdx = i;
+            break;
+          }
         }
       }
 
