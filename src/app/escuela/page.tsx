@@ -25,7 +25,7 @@ import {
   CalidadJuridica
 } from '@/lib/types';
 
-import { normalizarRun } from '@/lib/csvParser';
+import { normalizarRun, normalizarRbd } from '@/lib/csvParser';
 import { calcularCargaDocente } from '@/lib/rulesEngine';
 
 export default function EscuelaDashboard() {
@@ -328,7 +328,7 @@ export default function EscuelaDashboard() {
     // Find the replacement's active or pending contract for this RBD
     const allConts = await api.getContratos(selectedRbd);
     const cleanRun = match.reemplazo_run;
-    const target = allConts.find(c => c.funcionario_run === cleanRun && String(c.rbd) === String(selectedRbd) && (c.estado === 'Reemplazo' || c.estado === 'Pendiente_Aprobacion'));
+    const target = allConts.find(c => c.funcionario_run === cleanRun && normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)) && (c.estado === 'Reemplazo' || c.estado === 'Pendiente_Aprobacion'));
     if (target) {
       target.estado = 'Reemplazo';
       target.fecha_inicio_licencia = fechaIngresoReal; // Record the day they started working
@@ -352,7 +352,7 @@ export default function EscuelaDashboard() {
     // Mark matching pending tasks as resolved in database
     const allTasks = await api.getTareasReemplazo();
     const matchingTask = allTasks.find(t => 
-      String(t.rbd) === String(selectedRbd) && 
+      normalizarRbd(String(t.rbd)) === normalizarRbd(String(selectedRbd)) && 
       t.estado === 'Pendiente' && 
       (match.contrato_titular_id.includes(t.funcionario_titular_run) || t.funcionario_titular_run === match.contrato_titular_id || 
        allConts.find(c => c.id === match.contrato_titular_id)?.funcionario_run === t.funcionario_titular_run)
@@ -380,7 +380,7 @@ export default function EscuelaDashboard() {
       const allConts = await api.getContratos();
       const otherConts = allConts.filter(c => 
         c.funcionario_run === selectedDocenteRun && 
-        String(c.rbd) !== String(selectedRbd)
+        normalizarRbd(String(c.rbd)) !== normalizarRbd(String(selectedRbd))
       );
 
       if (otherConts.length > 0) {
@@ -445,7 +445,7 @@ export default function EscuelaDashboard() {
 
   const handleDeleteFuncionario = async (run: string) => {
     if (confirm('¿Desea desvincular a este funcionario de este establecimiento?')) {
-      const schoolConts = contratos.filter(c => c.funcionario_run === run && String(c.rbd) === String(selectedRbd));
+      const schoolConts = contratos.filter(c => c.funcionario_run === run && normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)));
       for (const cont of schoolConts) {
         await api.deleteContrato(cont.id);
       }
@@ -458,7 +458,7 @@ export default function EscuelaDashboard() {
     if (selectedDocentes.length === 0) return;
     if (confirm(`¿Desea desvincular a los ${selectedDocentes.length} docentes seleccionados?`)) {
       for (const run of selectedDocentes) {
-        const schoolConts = contratos.filter(c => c.funcionario_run === run && String(c.rbd) === String(selectedRbd));
+        const schoolConts = contratos.filter(c => c.funcionario_run === run && normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)));
         for (const cont of schoolConts) {
           await api.deleteContrato(cont.id);
         }
@@ -473,7 +473,7 @@ export default function EscuelaDashboard() {
     if (selectedAsistentes.length === 0) return;
     if (confirm(`¿Desea desvincular a los ${selectedAsistentes.length} asistentes seleccionados?`)) {
       for (const run of selectedAsistentes) {
-        const schoolConts = contratos.filter(c => c.funcionario_run === run && String(c.rbd) === String(selectedRbd));
+        const schoolConts = contratos.filter(c => c.funcionario_run === run && normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)));
         for (const cont of schoolConts) {
           await api.deleteContrato(cont.id);
         }
@@ -723,7 +723,7 @@ export default function EscuelaDashboard() {
  
     // 2. Update contract and finance sources in Supabase
     const cleanRun = editingFuncionario.run;
-    const relatedConts = contratos.filter(c => c.funcionario_run === cleanRun && String(c.rbd) === String(selectedRbd));
+    const relatedConts = contratos.filter(c => c.funcionario_run === cleanRun && normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)));
     
     if (editContFins.length > 0) {
       // Delete old contracts and financiamientos for this teacher in Supabase
@@ -1453,7 +1453,7 @@ export default function EscuelaDashboard() {
                     if (t.rbd !== selectedRbd || t.estado !== 'Pendiente') return false;
                     // Check if there is already a validated replacement for this license
                     const hasValidatedReemp = reemplazosList.some(r => 
-                      String(r.rbd) === String(selectedRbd) && 
+                      normalizarRbd(String(r.rbd)) === normalizarRbd(String(selectedRbd)) && 
                       r.validado_por_director && 
                       (r.contrato_titular_id.includes(t.funcionario_titular_run) || 
                        r.contrato_titular_id === t.id ||
@@ -1492,7 +1492,7 @@ export default function EscuelaDashboard() {
                             {(() => {
                               // Check if there is a validated replacement already accepted for this license
                               const reempMatch = reemplazosList.find(r => 
-                                String(r.rbd) === String(selectedRbd) && 
+                                normalizarRbd(String(r.rbd)) === normalizarRbd(String(selectedRbd)) && 
                                 r.validado_por_director && 
                                 (r.contrato_titular_id.includes(t.funcionario_titular_run) || 
                                  r.contrato_titular_id === t.id ||
@@ -1564,7 +1564,7 @@ export default function EscuelaDashboard() {
 
                 {/* Confirmación de Ingreso de Reemplazos Asignados */}
                 {(() => {
-                  const unvalidatedReemps = reemplazosList.filter(r => String(r.rbd) === String(selectedRbd) && !r.validado_por_director);
+                  const unvalidatedReemps = reemplazosList.filter(r => normalizarRbd(String(r.rbd)) === normalizarRbd(String(selectedRbd)) && !r.validado_por_director);
                   if (unvalidatedReemps.length === 0) return null;
                   return (
                     <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-5 animate-fadeIn">
@@ -1782,7 +1782,7 @@ export default function EscuelaDashboard() {
                                     )}
                                     {hasCont.estado === 'Licencia Médica' && (() => {
                                       const isCoveredAndValidated = reemplazosList.some(r => 
-                                        String(r.rbd) === String(selectedRbd) && 
+                                        normalizarRbd(String(r.rbd)) === normalizarRbd(String(selectedRbd)) && 
                                         r.validado_por_director && 
                                         (r.contrato_titular_id.includes(f.run) || 
                                          r.contrato_titular_id === hasCont.id)
@@ -1840,7 +1840,7 @@ export default function EscuelaDashboard() {
                                   <div className="mt-2 bg-slate-50 p-2 rounded border border-slate-200 inline-block text-left w-full max-w-xs">
                                     {(() => {
                                       const matchedReemp = reemplazosList.find(r => 
-                                        String(r.rbd) === String(selectedRbd) && 
+                                        normalizarRbd(String(r.rbd)) === normalizarRbd(String(selectedRbd)) && 
                                         r.validado_por_director && 
                                         (r.contrato_titular_id.includes(f.run) || r.contrato_titular_id === hasCont.id)
                                       );
@@ -1899,7 +1899,7 @@ export default function EscuelaDashboard() {
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                   {(() => {
                     const docentesAlertados = contratos
-                      .filter(c => String(c.rbd) === String(selectedRbd) && funcionarios.find(func => func.run === c.funcionario_run)?.estamento === 'Docente')
+                      .filter(c => normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)) && funcionarios.find(func => func.run === c.funcionario_run)?.estamento === 'Docente')
                       .filter(c => {
                         const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
                         const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs, cargosPersonalizados) : null;
@@ -2104,7 +2104,7 @@ export default function EscuelaDashboard() {
                                   <div className="mt-2 bg-slate-50 p-2 rounded border border-slate-200 inline-block text-left w-full max-w-xs">
                                     {(() => {
                                       const matchedReemp = reemplazosList.find(r => 
-                                        String(r.rbd) === String(selectedRbd) && 
+                                        normalizarRbd(String(r.rbd)) === normalizarRbd(String(selectedRbd)) && 
                                         r.validado_por_director && 
                                         (r.contrato_titular_id.includes(f.run) || r.contrato_titular_id === hasCont.id)
                                       );
@@ -2772,7 +2772,7 @@ export default function EscuelaDashboard() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {(() => {
-                        const schoolConts = contratos.filter(c => String(c.rbd) === String(selectedRbd));
+                        const schoolConts = contratos.filter(c => normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)));
                         const sortedConts = [...schoolConts].sort((a, b) => {
                           const fA = funcionarios.find(func => func.run === a.funcionario_run);
                           const fB = funcionarios.find(func => func.run === b.funcionario_run);
@@ -2977,7 +2977,7 @@ export default function EscuelaDashboard() {
                         const pieFuncs = funcionarios.filter(f => {
                           const hasPieContract = contratos.some(c => 
                             c.funcionario_run === f.run && 
-                            String(c.rbd) === String(selectedRbd) && 
+                            normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)) && 
                             (c.horas_totales > 0)
                           );
                           const isSpecialistCargo = ['DOCENTE DIFERENCIAL', 'COORDINADOR/A PIE'].includes(f.cargo || '') || 
@@ -2998,7 +2998,7 @@ export default function EscuelaDashboard() {
                         return (
                           <div className="space-y-3">
                             {pieFuncs.map(f => {
-                              const contrs = contratos.filter(c => c.funcionario_run === f.run && String(c.rbd) === String(selectedRbd));
+                              const contrs = contratos.filter(c => c.funcionario_run === f.run && normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)));
                               const totHrs = contrs.reduce((sum, c) => sum + c.horas_totales, 0);
                               const contrsIds = contrs.map(c => c.id);
                               const assignedHrs = asignaciones

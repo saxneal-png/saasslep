@@ -927,7 +927,7 @@ export default function SostenedorDashboard() {
     }
 
     const funcContratos = contratos.filter(c => normalizarRun(c.funcionario_run) === cleanRun).map(c => {
-      const escuela = establecimientos.find(e => String(e.rbd) === String(c.rbd));
+      const escuela = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(c.rbd)));
       const fins = financiamientos.filter(f => f.contrato_id === c.id);
       return {
         ...c,
@@ -1401,7 +1401,7 @@ export default function SostenedorDashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredEstablecimientos.map(e => {
-                    const escConts = contratos.filter(c => String(c.rbd) === String(e.rbd));
+                    const escConts = contratos.filter(c => normalizarRbd(String(c.rbd)) === normalizarRbd(String(e.rbd)));
                     const escContsIds = escConts.map(c => c.id);
                     const escFins = financiamientos.filter(f => escContsIds.includes(f.contrato_id));
                     
@@ -1423,7 +1423,7 @@ export default function SostenedorDashboard() {
                     const regularHrs = escFins.filter(f => f.origen_fondo === 'Subvención Regular').reduce((sum, f) => sum + f.horas, 0);
                     const sepHrs = escFins.filter(f => f.origen_fondo === 'SEP').reduce((sum, f) => sum + f.horas, 0);
                     const pieHrs = escFins.filter(f => f.origen_fondo === 'PIE').reduce((sum, f) => sum + f.horas, 0);
-                    const activeAlts = alertas.filter(a => String(a.rbd) === String(e.rbd) && !a.resuelta).length;
+                    const activeAlts = alertas.filter(a => normalizarRbd(String(a.rbd)) === normalizarRbd(String(e.rbd)) && !a.resuelta).length;
 
                     return (
                       <tr key={e.rbd} className="hover:bg-slate-50">
@@ -1551,7 +1551,7 @@ export default function SostenedorDashboard() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredEstablecimientos.map(e => {
-                      const supervisorList = tutelas.filter(t => String(t.establecimiento_rbd) === String(e.rbd));
+                      const supervisorList = tutelas.filter(t => normalizarRbd(String(t.establecimiento_rbd)) === normalizarRbd(String(e.rbd)));
                       return (
                         <tr key={e.rbd} className="hover:bg-slate-50">
                           <td className="p-3 pl-6 text-center">
@@ -1834,7 +1834,7 @@ export default function SostenedorDashboard() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {tutelas.map(t => {
-                      const esc = establecimientos.find(e => String(e.rbd) === String(t.establecimiento_rbd));
+                      const esc = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(t.establecimiento_rbd)));
                       const sup = supervisores.find(s => s.run === t.profesional_run);
                       return (
                         <tr key={`${t.profesional_run}-${t.establecimiento_rbd}`}>
@@ -2097,7 +2097,7 @@ export default function SostenedorDashboard() {
             const relatedCont = contratos.find(c => c.funcionario_run === editingFuncionario.run);
             const teacherAsigs = asignaciones.filter(a => a.contrato_id === relatedCont?.id);
             const leyCalculo = relatedCont && relatedCont.rbd ? (() => {
-              const esc = establecimientos.find(e => String(e.rbd) === String(relatedCont.rbd));
+              const esc = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(relatedCont.rbd)));
               return esc ? validarCargaDocente(relatedCont, esc, teacherAsigs, cargosPersonalizados) : null;
             })() : null;
 
@@ -2401,7 +2401,7 @@ export default function SostenedorDashboard() {
             const filteredAsignaciones = asignaciones.filter(a => {
               const cont = contratos.find(c => c.id === a.contrato_id);
               if (!cont) return false;
-              const est = establecimientos.find(e => String(e.rbd) === String(cont.rbd));
+              const est = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(cont.rbd)));
               if (!est || !est.comuna) return false;
               return resumenSelectedComunas.includes(est.comuna);
             });
@@ -2427,7 +2427,7 @@ export default function SostenedorDashboard() {
                 
                 const spareHours = totalCont - (totalAsig + totalCargs);
                 const mainRbd = teacherConts.length > 0 ? teacherConts[0].rbd : 'Desconocido';
-                const school = establecimientos.find(e => String(e.rbd) === String(mainRbd));
+                const school = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(mainRbd)));
                 const schoolName = school ? school.nombre : `RBD ${mainRbd}`;
                 const schoolComuna = school ? school.comuna : '';
                 
@@ -2452,9 +2452,9 @@ export default function SostenedorDashboard() {
               const plan = planesEstudio.find(p => p.nivel === curso.nivel && p.regimen === curso.regimen);
               const limit = plan ? plan.horasObligatorias : 38;
               
-              const school = establecimientos.find(e => String(e.rbd) === String(curso.rbd));
+              const school = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(curso.rbd)));
               
-              const schoolConts = contratos.filter(c => String(c.rbd) === String(curso.rbd));
+              const schoolConts = contratos.filter(c => normalizarRbd(String(c.rbd)) === normalizarRbd(String(curso.rbd)));
               const schoolContIds = schoolConts.map(c => c.id);
               const courseAsigs = asignaciones.filter(a => schoolContIds.includes(a.contrato_id) && a.curso === curso.nombre);
               const assignedHours = courseAsigs.reduce((sum, a) => sum + a.horas, 0);
@@ -2750,7 +2750,7 @@ export default function SostenedorDashboard() {
                           
                           const detailList = targetAsigs.map(a => {
                             const cont = contratos.find(c => c.id === a.contrato_id);
-                            const school = cont ? establecimientos.find(e => String(e.rbd) === String(cont.rbd)) : null;
+                            const school = cont ? establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(cont.rbd))) : null;
                             const teacher = cont ? funcionarios.find(f => f.run === cont.funcionario_run) : null;
                             return {
                               rbd: cont ? cont.rbd : 'N/A',
@@ -3177,9 +3177,9 @@ export default function SostenedorDashboard() {
                     const isChecked = pendingIngest.selectedSchools.includes(rbd);
                     
                     const schoolFuncs = pendingIngest.funcionarios.filter(f => 
-                      pendingIngest.contratos.some(c => c.funcionario_run === f.run && String(c.rbd) === String(rbd))
+                      pendingIngest.contratos.some(c => c.funcionario_run === f.run && normalizarRbd(String(c.rbd)) === normalizarRbd(String(rbd)))
                     ).length;
-                    const schoolConts = pendingIngest.contratos.filter(c => String(c.rbd) === String(rbd)).length;
+                    const schoolConts = pendingIngest.contratos.filter(c => normalizarRbd(String(c.rbd)) === normalizarRbd(String(rbd))).length;
                     
                     return (
                       <label 
