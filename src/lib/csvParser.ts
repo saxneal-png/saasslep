@@ -315,9 +315,9 @@ export function parsearNominaCsv(
       }
     }
 
-    const funcion_principal = estamento === 'Docente' 
-      ? normalizarCargoDocente(raw_funcion_principal) 
-      : raw_funcion_principal;
+    const funcion_principal = raw_funcion_principal && raw_funcion_principal.trim() !== ''
+      ? raw_funcion_principal.toUpperCase().trim()
+      : (estamento === 'Docente' ? 'DOCENTE DE AULA' : 'ASISTENTE DE LA EDUCACIÓN');
     
     const horas_totales = parseDecimalHours(row.horastotales || row.horascontrato || row.horas_totales_sige || row.horas_totales_remun);
 
@@ -1216,6 +1216,8 @@ export function parsearArchivoExcelOJson(
       const centroCosto = idxCentroCosto !== -1 ? String(row[idxCentroCosto] || '').trim() : '';
       const rbdVal = idxRbd !== -1 ? normalizarRbd(row[idxRbd]) : '';
       const tipoContrato = idxTipoContrato !== -1 ? String(row[idxTipoContrato] || '').trim() : '';
+      const idxTermino = headers.findIndex(h => h === 'termino');
+      const fechaTerminoRaw = idxTermino !== -1 ? String(row[idxTermino] || '').trim() : '';
 
       let rbd = rbdVal || '';
       if (!rbd && centroCosto) {
@@ -1296,9 +1298,21 @@ export function parsearArchivoExcelOJson(
 
       if (!isRelevanceZero) {
         let calidad_juridica: CalidadJuridica = 'A contrata';
-        const tipoContClean = tipoContrato.toLowerCase();
-        if (tipoContClean.includes('titular')) calidad_juridica = 'Titular';
-        else if (tipoContClean.includes('reemplazo')) calidad_juridica = 'Reemplazo';
+        if (tipoContrato) {
+          const tipoContClean = tipoContrato.toLowerCase();
+          if (tipoContClean.includes('titular')) calidad_juridica = 'Titular';
+          else if (tipoContClean.includes('reemplazo')) calidad_juridica = 'Reemplazo';
+          else if (tipoContClean.includes('indefinido')) calidad_juridica = 'Indefinido';
+          else if (tipoContClean.includes('plazo fijo')) calidad_juridica = 'Plazo fijo';
+        } else {
+          // Inferencia inteligente chilena de calidad contractual basada en fecha de término
+          const termClean = fechaTerminoRaw.toLowerCase();
+          if (!termClean || termClean === '' || termClean === 'nan' || termClean === '--' || termClean === 'null' || termClean === 'undefined') {
+            calidad_juridica = estamento === 'Docente' ? 'Titular' : 'Indefinido';
+          } else {
+            calidad_juridica = estamento === 'Docente' ? 'A contrata' : 'Plazo fijo';
+          }
+        }
 
         let contrato = contratosFallback.find(c => c.funcionario_run === run && c.rbd === rbd);
         const horasRegular = idxRegular !== -1 ? parseDecimalHours(row[idxRegular]) : 0;
