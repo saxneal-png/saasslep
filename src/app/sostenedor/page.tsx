@@ -137,6 +137,11 @@ export default function SostenedorDashboard() {
   const [planImportLogs, setPlanImportLogs] = useState('');
   const planFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Establecimientos drag-and-drop & file states
+  const [dragActiveEst, setDragActiveEst] = useState(false);
+  const [uploadEstLogs, setUploadEstLogs] = useState('');
+  const estFileInputRef = useRef<HTMLInputElement>(null);
+
   // Confirmation state for Excel/CSV ingestion
   const [pendingIngest, setPendingIngest] = useState<{
     funcionarios: Funcionario[];
@@ -586,6 +591,61 @@ export default function SostenedorDashboard() {
         setImportLogsAsis('');
       } catch (err: any) {
         setImportLogsAsis(`❌ Error al procesar archivo: ${err.message}`);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleDragEst = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActiveEst(true);
+    } else if (e.type === "dragleave") {
+      setDragActiveEst(false);
+    }
+  };
+
+  const handleDropEst = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActiveEst(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processEstablecimientosFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileChangeEst = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    if (e.target.files && e.target.files[0]) {
+      processEstablecimientosFile(e.target.files[0]);
+    }
+  };
+
+  const processEstablecimientosFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const buffer = event.target?.result as ArrayBuffer;
+      try {
+        const { establecimientos: newEsts } = parsearArchivoExcelOJson(
+          buffer,
+          file.name,
+          '10201'
+        );
+
+        if (!newEsts || newEsts.length === 0) {
+          throw new Error('No se encontraron establecimientos válidos en el archivo. Verifique la pestaña "Establecimientos" o los encabezados.');
+        }
+
+        // Save directly to DB
+        await api.upsertEstablecimientosBulk(newEsts);
+
+        // Refresh state
+        const updated = await api.getEstablecimientos();
+        setEstablecimientos(updated);
+        setUploadEstLogs(`✅ Éxito: Se cargaron ${newEsts.length} establecimientos correctamente.`);
+      } catch (err: any) {
+        setUploadEstLogs(`❌ Error al procesar archivo: ${err.message}`);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -1819,6 +1879,42 @@ export default function SostenedorDashboard() {
               {importLogsAsis && (
                 <pre className="mt-3 p-2.5 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
                   {importLogsAsis}
+                </pre>
+              )}
+            </div>
+
+            {/* Drag-and-Drop Uploader for Establecimientos */}
+            <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>🏢</span> Cargar Establecimientos (Colegios)
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">Sube la planilla Excel (`.xlsx`, `.xls`) o CSV con la base de colegios (RBD, Establecimiento, Comuna).</p>
+
+              <div 
+                onDragEnter={handleDragEst} 
+                onDragOver={handleDragEst} 
+                onDragLeave={handleDragEst} 
+                onDrop={handleDropEst}
+                className={`mt-4 border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                  dragActiveEst ? 'border-slep-blue bg-blue-50/50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
+                }`}
+                onClick={() => estFileInputRef.current?.click()}
+              >
+                <input 
+                  ref={estFileInputRef}
+                  type="file" 
+                  accept=".csv,.xlsx,.xls"
+                  className="hidden" 
+                  onChange={handleFileChangeEst}
+                />
+                <span className="text-2xl block mb-2">🏫</span>
+                <p className="text-xs font-bold text-slate-700">Arrastra planilla de Establecimientos o haz clic</p>
+                <p className="text-[10px] text-slate-500 mt-1">Soporta formatos .CSV y Excel (.xlsx, .xls)</p>
+              </div>
+
+              {uploadEstLogs && (
+                <pre className="mt-3 p-2.5 bg-slate-100 border rounded text-[9px] text-slate-600 whitespace-pre-wrap">
+                  {uploadEstLogs}
                 </pre>
               )}
             </div>
