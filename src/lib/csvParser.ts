@@ -600,10 +600,10 @@ export function parsearArchivoExcelOJson(
 
           establecimientos.push({
             rbd,
-            nombre: String(row[idxNombre] || `Establecimiento RBD ${rbd}`).trim(),
-            ivm: parseFloat(String(row[idxIvm]).replace(',', '.')) || 70,
-            comuna: String(row[idxComuna] || 'Chillán Viejo').trim(),
-            regimen: String(row[idxRegimen]).toUpperCase().includes('NO') ? 'No JEC' : 'JEC'
+            nombre: idxNombre !== -1 && row[idxNombre] ? String(row[idxNombre]).trim() : `Establecimiento RBD ${rbd}`,
+            ivm: idxIvm !== -1 && row[idxIvm] ? parseFloat(String(row[idxIvm]).replace(',', '.')) || 70 : 70,
+            comuna: idxComuna !== -1 && row[idxComuna] ? String(row[idxComuna]).trim() : 'Chillán',
+            regimen: idxRegimen !== -1 && row[idxRegimen] ? (String(row[idxRegimen]).toUpperCase().includes('NO') ? 'No JEC' : 'JEC') : 'JEC'
           });
         }
       }
@@ -1248,9 +1248,9 @@ export function descargarPlantillaExcel(tipo: 1 | 2 | 3): void {
   
   if (tipo === 1) {
     const dataEst = [
-      ['RBD', 'Nombre', 'IVM', 'Comuna', 'Regimen'],
-      ['10201', 'Liceo Polivalente Manuel Bulnes', 85.4, 'Bulnes', 'JEC'],
-      ['10202', 'Escuela E-250 San Ignacio', 92.1, 'San Ignacio', 'JEC']
+      ['RBD', 'Establecimiento', 'Comuna'],
+      ['3638', 'LICEO BICENTENARIO MARTA BRUNET CÁRAVES', 'Chillán'],
+      ['3639', 'LICEO NARCISO TONDREAU', 'Chillán']
     ];
     const wsEst = XLSX.utils.aoa_to_sheet(dataEst);
     XLSX.utils.book_append_sheet(wb, wsEst, 'Establecimientos');
