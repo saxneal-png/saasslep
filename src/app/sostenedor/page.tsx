@@ -958,7 +958,7 @@ export default function SostenedorDashboard() {
 
   const comunas = ['Todas', ...comunasList];
   const filteredEstablecimientos = establecimientos.filter(e => {
-    const matchesSearch = e.nombre.toLowerCase().includes(searchEst.toLowerCase()) || e.rbd.includes(searchEst);
+    const matchesSearch = e.nombre.toLowerCase().includes(searchEst.toLowerCase()) || String(e.rbd || '').includes(searchEst);
     const matchesComuna = selectedComuna === 'Todas' || e.comuna === selectedComuna;
     return matchesSearch && matchesComuna;
   });

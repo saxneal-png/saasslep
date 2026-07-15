@@ -594,6 +594,7 @@ export default function RRHHPage() {
 
   // Filter staff
   const [filterRbd, setFilterRbd] = useState<string>('all');
+  const [sortOrder, setSortOrder] = useState<string>('nombre-az');
 
   const filteredFuncionarios = funcionarios.filter(f => {
     const matchesSearch = f.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || f.run.includes(searchTerm);
@@ -607,6 +608,31 @@ export default function RRHHPage() {
     if (filterEstamento === 'P01') return matchesSearch && esP01;
     if (filterEstamento === 'P02') return matchesSearch && esP02;
     return matchesSearch;
+  });
+
+  // 📊 Aplicar ordenamiento dinámico
+  const sortedFuncionarios = [...filteredFuncionarios].sort((a, b) => {
+    if (sortOrder === 'nombre-az') {
+      return a.nombre.localeCompare(b.nombre);
+    }
+    if (sortOrder === 'nombre-za') {
+      return b.nombre.localeCompare(a.nombre);
+    }
+    if (sortOrder === 'horas-max' || sortOrder === 'horas-min') {
+      const runA = normalizarRun(a.run);
+      const runB = normalizarRun(b.run);
+      
+      const horasA = contratos
+        .filter(c => normalizarRun(c.funcionario_run) === runA)
+        .reduce((sum, c) => sum + (Number(c.horas_totales) || 0), 0);
+        
+      const horasB = contratos
+        .filter(c => normalizarRun(c.funcionario_run) === runB)
+        .reduce((sum, c) => sum + (Number(c.horas_totales) || 0), 0);
+
+      return sortOrder === 'horas-max' ? horasB - horasA : horasA - horasB;
+    }
+    return 0;
   });
 
   if (!authorized) {
@@ -1046,6 +1072,17 @@ export default function RRHHPage() {
                         <option key={e.rbd} value={e.rbd}>{e.nombre || `RBD ${e.rbd}`} (RBD {e.rbd})</option>
                       ))}
                     </select>
+                    {/* Dropdown para ordenar la lista de funcionarios */}
+                    <select
+                      className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 font-bold"
+                      value={sortOrder}
+                      onChange={(e) => setSortOrder(e.target.value)}
+                    >
+                      <option value="nombre-az">🔤 Ordenar: Nombre (A-Z)</option>
+                      <option value="nombre-za">🔤 Ordenar: Nombre (Z-A)</option>
+                      <option value="horas-max">⏳ Ordenar: Mayor Carga Horaria</option>
+                      <option value="horas-min">⏳ Ordenar: Menor Carga Horaria</option>
+                    </select>
                   </div>
                 </div>
 
@@ -1058,12 +1095,12 @@ export default function RRHHPage() {
                             type="checkbox" 
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedFuncs(filteredFuncionarios.map(f => f.run));
+                                setSelectedFuncs(sortedFuncionarios.map(f => f.run));
                               } else {
                                 setSelectedFuncs([]);
                               }
                             }}
-                            checked={selectedFuncs.length === filteredFuncionarios.length && filteredFuncionarios.length > 0}
+                            checked={selectedFuncs.length === sortedFuncionarios.length && sortedFuncionarios.length > 0}
                           />
                         </th>
                         <th className="p-3">Funcionario</th>
@@ -1075,7 +1112,7 @@ export default function RRHHPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredFuncionarios.map(f => {
+                      {sortedFuncionarios.map(f => {
                         // Normalize RUN for matching (handle format differences)
                         const normalRun = normalizarRun(f.run);
                         // Get ALL contracts for this teacher (a teacher can have multiple RBDs)
@@ -1190,7 +1227,7 @@ export default function RRHHPage() {
                           </tr>
                         );
                       })}
-                      {filteredFuncionarios.length === 0 && (
+                      {sortedFuncionarios.length === 0 && (
                         <tr>
                           <td colSpan={7} className="p-4 text-center text-slate-400 italic">
                             No hay funcionarios contratados bajo este filtro.
