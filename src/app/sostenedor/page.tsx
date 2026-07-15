@@ -710,7 +710,14 @@ export default function SostenedorDashboard() {
       // 1. Fetch pre-existing schools to validate foreign key constraints
       const existingEsts = await api.getEstablecimientos();
       const existingRbds = new Set(existingEsts.map(e => normalizarRbd(String(e.rbd))));
+      
+      // Ensure virtual central offices are in the allowed set and will be upserted
+      existingRbds.add('99999');
+      existingRbds.add('10201');
       const cleanSelectedSchools = selectedSchools.map(s => normalizarRbd(String(s)));
+      // Also make sure if central RBDs are in the contracts, they are selected
+      if (contratos.some(c => normalizarRbd(String(c.rbd)) === '99999')) cleanSelectedSchools.push('99999');
+      if (contratos.some(c => normalizarRbd(String(c.rbd)) === '10201')) cleanSelectedSchools.push('10201');
 
       const filteredConts = contratos.filter(c => {
         const cRbd = normalizarRbd(String(c.rbd));
@@ -737,6 +744,13 @@ export default function SostenedorDashboard() {
       if (filteredFuncs.length > 0) {
         await (api as any).upsertFuncionariosBulk(filteredFuncs);
       }
+
+      // Upsert virtual administrative establishments before contracts to satisfy foreign keys
+      const virtualEsts: Establecimiento[] = [
+        { rbd: '99999', nombre: 'NIVEL CENTRAL SLEP', regimen: 'No JEC', ivm: 0, comuna: 'Yungay' },
+        { rbd: '10201', nombre: 'ADMINISTRACIÓN CENTRAL SLEP', regimen: 'No JEC', ivm: 0, comuna: 'Yungay' }
+      ];
+      await api.upsertEstablecimientosBulk(virtualEsts);
 
       // 3. Create Contratos & Financiamientos in Bulk
       setIngestProgress(75);

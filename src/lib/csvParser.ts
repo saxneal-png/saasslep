@@ -398,34 +398,55 @@ export function parsearNominaCsv(
       });
     }
 
-    // Add Contrato
-    const nuevoContrato: Contrato = {
-      id: contrato_id,
-      funcionario_run: run,
-      rbd,
-      calidad_juridica,
-      funcion_principal,
-      estado: 'Activo',
-      horas_totales,
-      dias_trabajados,
-      dias_licencia_medica,
-      inasistencias,
-      legislacion_laboral,
-      horas_directivas,
-      horas_aula,
-      horas_tecnico_pedagogicas
-    };
-    contratos.push(nuevoContrato);
+    // Add Contrato with merge logic
+    const existingContratoIdx = contratos.findIndex(c => c.id === contrato_id);
+    if (existingContratoIdx >= 0) {
+      const existing = contratos[existingContratoIdx];
+      existing.horas_totales = (existing.horas_totales || 0) + (horas_totales || 0);
+      if (horas_directivas !== undefined) {
+        existing.horas_directivas = (existing.horas_directivas || 0) + horas_directivas;
+      }
+      if (horas_aula !== undefined) {
+        existing.horas_aula = (existing.horas_aula || 0) + horas_aula;
+      }
+      if (horas_tecnico_pedagogicas !== undefined) {
+        existing.horas_tecnico_pedagogicas = (existing.horas_tecnico_pedagogicas || 0) + horas_tecnico_pedagogicas;
+      }
+    } else {
+      const nuevoContrato: Contrato = {
+        id: contrato_id,
+        funcionario_run: run,
+        rbd,
+        calidad_juridica,
+        funcion_principal,
+        estado: 'Activo',
+        horas_totales,
+        dias_trabajados,
+        dias_licencia_medica,
+        inasistencias,
+        legislacion_laboral,
+        horas_directivas,
+        horas_aula,
+        horas_tecnico_pedagogicas
+      };
+      contratos.push(nuevoContrato);
+    }
 
-    // Add Financiamientos
+    // Add Financiamientos with merge logic
     const agregarFondo = (origen: OrigenFondo, hrs: number) => {
       if (hrs > 0) {
-        financiamientos.push({
-          id: generarUuidDeterminista(`financiamiento-${contrato_id}-${origen.replace(/\s+/g, '')}`),
-          contrato_id,
-          origen_fondo: origen,
-          horas: hrs
-        });
+        const finId = generarUuidDeterminista(`financiamiento-${contrato_id}-${origen.replace(/\s+/g, '')}`);
+        const existingFinIdx = financiamientos.findIndex(f => f.id === finId);
+        if (existingFinIdx >= 0) {
+          financiamientos[existingFinIdx].horas = (financiamientos[existingFinIdx].horas || 0) + hrs;
+        } else {
+          financiamientos.push({
+            id: finId,
+            contrato_id,
+            origen_fondo: origen,
+            horas: hrs
+          });
+        }
       }
     };
 
