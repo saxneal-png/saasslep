@@ -158,6 +158,7 @@ export default function SostenedorDashboard() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // Search and filters
+  const [selectedBulkRbd, setSelectedBulkRbd] = useState<string[]>([]);
   const [searchEst, setSearchEst] = useState('');
   const [selectedComuna, setSelectedComuna] = useState('Todas');
   const [searchRun, setSearchRun] = useState('');
@@ -419,6 +420,18 @@ export default function SostenedorDashboard() {
     if (confirm('¿Está seguro de eliminar esta escuela?')) {
       await api.deleteEstablecimiento(rbd);
       await loadAllData();
+    }
+  };
+
+  const handleBulkDeleteEscuelas = async () => {
+    if (selectedBulkRbd.length === 0) return;
+    if (confirm(`¿Está seguro de eliminar de manera masiva los ${selectedBulkRbd.length} establecimientos seleccionados y todos sus contratos asociados?`)) {
+      for (const rbd of selectedBulkRbd) {
+        await api.deleteEstablecimiento(rbd);
+      }
+      setSelectedBulkRbd([]);
+      await loadAllData();
+      alert('✅ Establecimientos eliminados correctamente.');
     }
   };
 
@@ -1465,6 +1478,14 @@ export default function SostenedorDashboard() {
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
+                  {selectedBulkRbd.length > 0 && (
+                    <button
+                      onClick={handleBulkDeleteEscuelas}
+                      className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow flex items-center gap-1 cursor-pointer"
+                    >
+                      🗑️ Eliminar Seleccionadas ({selectedBulkRbd.length})
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1472,7 +1493,22 @@ export default function SostenedorDashboard() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className="bg-slate-100 font-bold text-slate-600 uppercase border-b">
                     <tr>
-                      <th className="p-3 pl-6">RBD</th>
+                      <th className="p-3 pl-6 w-12 text-center">
+                        <input
+                          type="checkbox"
+                          checked={filteredEstablecimientos.length > 0 && filteredEstablecimientos.every(e => selectedBulkRbd.includes(e.rbd))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const allFilteredRbds = filteredEstablecimientos.map(es => es.rbd);
+                              setSelectedBulkRbd(prev => Array.from(new Set([...prev, ...allFilteredRbds])));
+                            } else {
+                              const allFilteredRbds = filteredEstablecimientos.map(es => es.rbd);
+                              setSelectedBulkRbd(prev => prev.filter(r => !allFilteredRbds.includes(r)));
+                            }
+                          }}
+                        />
+                      </th>
+                      <th className="p-3">RBD</th>
                       <th className="p-3">Establecimiento</th>
                       <th className="p-3 text-center">Prioritarios %</th>
                       <th className="p-3">Comuna</th>
@@ -1485,7 +1521,20 @@ export default function SostenedorDashboard() {
                       const supervisorList = tutelas.filter(t => t.establecimiento_rbd === e.rbd);
                       return (
                         <tr key={e.rbd} className="hover:bg-slate-50">
-                          <td className="p-3 pl-6 font-mono font-bold text-slate-500">{e.rbd}</td>
+                          <td className="p-3 pl-6 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedBulkRbd.includes(e.rbd)}
+                              onChange={(el) => {
+                                if (el.target.checked) {
+                                  setSelectedBulkRbd(prev => [...prev, e.rbd]);
+                                } else {
+                                  setSelectedBulkRbd(prev => prev.filter(r => r !== e.rbd));
+                                }
+                              }}
+                            />
+                          </td>
+                          <td className="p-3 font-mono font-bold text-slate-500">{e.rbd}</td>
                           <td className="p-3 font-semibold text-slate-800">
                             <button
                               onClick={() => handleManageSchool(e.rbd)}

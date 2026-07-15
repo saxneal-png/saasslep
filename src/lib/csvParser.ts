@@ -67,6 +67,25 @@ export function normalizarFecha(val: any): string {
   return str;
 }
 
+export function normalizarComuna(comunaRaw: any): string {
+  if (comunaRaw === undefined || comunaRaw === null) return 'Chillán';
+  const clean = String(comunaRaw).trim();
+  if (!clean) return 'Chillán';
+  const lower = clean.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  
+  if (lower.includes('chillan viejo') || lower.includes('chillanviejo')) return 'Chillán Viejo';
+  if (lower.includes('san ignacio') || lower.includes('sanignacio')) return 'San Ignacio';
+  if (lower.includes('el carmen') || lower.includes('elcarmen')) return 'El Carmen';
+  if (lower.includes('chillan')) return 'Chillán';
+  if (lower.includes('bulnes')) return 'Bulnes';
+  if (lower.includes('pemuco')) return 'Pemuco';
+  if (lower.includes('yungay')) return 'Yungay';
+  if (lower.includes('quillon')) return 'Quillón';
+
+  // Fallback to title case
+  return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
 export function parseDecimalHours(value: string | number | undefined | null): number {
   if (value === undefined || value === null) return 0;
   if (typeof value === 'number') return isNaN(value) ? 0 : value;
@@ -575,7 +594,7 @@ export function parsearArchivoExcelOJson(
         rbd,
         nombre: idxNombre !== -1 && row[idxNombre] ? String(row[idxNombre]).trim() : `Establecimiento RBD ${rbd}`,
         ivm: idxIvm !== -1 && row[idxIvm] ? parseFloat(String(row[idxIvm]).replace(',', '.')) || 70 : 70,
-        comuna: idxComuna !== -1 && row[idxComuna] ? String(row[idxComuna]).trim() : 'Chillán',
+        comuna: idxComuna !== -1 && row[idxComuna] ? normalizarComuna(row[idxComuna]) : 'Chillán',
         regimen: idxRegimen !== -1 && row[idxRegimen] ? (String(row[idxRegimen]).toUpperCase().includes('NO') ? 'No JEC' : 'JEC') : 'JEC'
       });
     }
@@ -653,7 +672,7 @@ export function parsearArchivoExcelOJson(
             rbd,
             nombre: idxNombre !== -1 && row[idxNombre] ? String(row[idxNombre]).trim() : `Establecimiento RBD ${rbd}`,
             ivm: idxIvm !== -1 && row[idxIvm] ? parseFloat(String(row[idxIvm]).replace(',', '.')) || 70 : 70,
-            comuna: idxComuna !== -1 && row[idxComuna] ? String(row[idxComuna]).trim() : 'Chillán',
+            comuna: idxComuna !== -1 && row[idxComuna] ? normalizarComuna(row[idxComuna]) : 'Chillán',
             regimen: idxRegimen !== -1 && row[idxRegimen] ? (String(row[idxRegimen]).toUpperCase().includes('NO') ? 'No JEC' : 'JEC') : 'JEC'
           });
         }
@@ -1130,7 +1149,7 @@ export function parsearArchivoExcelOJson(
       }
       if (!rbd) rbd = rbdContext;
 
-      let comuna = comunaRaw.charAt(0).toUpperCase() + comunaRaw.slice(1).toLowerCase().trim();
+      let comuna = comunaRaw ? normalizarComuna(comunaRaw) : '';
       if (!comuna && centroCosto) {
         const ccLower = centroCosto.toLowerCase();
         if (ccLower.includes('bulnes')) comuna = 'Bulnes';
