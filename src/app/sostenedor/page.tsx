@@ -637,12 +637,22 @@ export default function SostenedorDashboard() {
           throw new Error('No se encontraron establecimientos válidos en el archivo. Verifique la pestaña "Establecimientos" o los encabezados.');
         }
 
+        // Extract unique communes and insert them first to satisfy database constraints
+        const uniqueComunas = Array.from(new Set(newEsts.map(e => e.comuna).filter(Boolean)));
+        if (uniqueComunas.length > 0) {
+          await api.upsertComunasBulk(uniqueComunas);
+        }
+
         // Save directly to DB
         await api.upsertEstablecimientosBulk(newEsts);
 
         // Refresh state
         const updated = await api.getEstablecimientos();
+        const updatedComs = await api.getComunas();
         setEstablecimientos(updated);
+        setComunasList(updatedComs);
+        setResumenSelectedComunas(updatedComs);
+        
         setUploadEstLogs(`✅ Éxito: Se cargaron ${newEsts.length} establecimientos correctamente.`);
       } catch (err: any) {
         setUploadEstLogs(`❌ Error al procesar archivo: ${err.message}`);
@@ -1419,7 +1429,7 @@ export default function SostenedorDashboard() {
             <div className="bg-white rounded-xl shadow border border-slate-200/60 overflow-hidden">
               <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
                 <div>
-                  <h2 className="text-base font-bold text-slate-800">Mapa de Establecimientos del Territorio (131)</h2>
+                  <h2 className="text-base font-bold text-slate-800">Mapa de Establecimientos del Territorio ({establecimientos.length})</h2>
                   <p className="text-xs text-slate-500 mt-1 font-medium">Control territorial y auditoría de tutela.</p>
                 </div>
 

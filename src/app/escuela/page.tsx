@@ -1338,11 +1338,11 @@ export default function EscuelaDashboard() {
           <div className="flex gap-6 text-center text-xs">
             <div>
               <p className="text-slate-400 font-bold uppercase">Docentes activos</p>
-              <p className="text-xl font-bold text-slep-blue">{funcionarios.filter(f => f.estamento === 'Docente').length}</p>
+              <p className="text-xl font-bold text-slep-blue">{funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run)).length}</p>
             </div>
             <div className="border-l border-slate-200 pl-6">
               <p className="text-slate-400 font-bold uppercase">Asistentes activos</p>
-              <p className="text-xl font-bold text-slep-blue">{funcionarios.filter(f => f.estamento === 'Asistente de la Educación').length}</p>
+              <p className="text-xl font-bold text-slep-blue">{funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run)).length}</p>
             </div>
             <div className="border-l border-slate-200 pl-6">
               <p className="text-slate-400 font-bold uppercase">Cursos Creados</p>
