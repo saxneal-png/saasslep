@@ -640,6 +640,8 @@ export default function SostenedorDashboard() {
     reader.onload = async (event) => {
       const buffer = event.target?.result as ArrayBuffer;
       try {
+        setUploadEstLogs('⏳ Procesando archivo...');
+
         const { establecimientos: newEsts } = parsearArchivoExcelOJson(
           buffer,
           file.name,
@@ -651,19 +653,22 @@ export default function SostenedorDashboard() {
         );
 
         if (!newEsts || newEsts.length === 0) {
-          throw new Error('No se encontraron establecimientos válidos en el archivo. Verifique la pestaña "Establecimientos" o los encabezados.');
+          throw new Error('No se encontraron establecimientos válidos en el archivo. Verifique los encabezados (RBD, NOMBRE, COMUNA, RÉGIMEN).');
         }
 
-        // Extract unique communes and insert them first to satisfy database constraints
+        setUploadEstLogs(`⏳ Se detectaron ${newEsts.length} establecimientos. Insertando comunas...`);
+
+        // Extract unique communes and insert them first to satisfy FK constraints
         const uniqueComunas = Array.from(new Set(newEsts.map(e => e.comuna).filter(Boolean)));
         if (uniqueComunas.length > 0) {
           await api.upsertComunasBulk(uniqueComunas);
         }
 
+        setUploadEstLogs(`⏳ Comunas insertadas (${uniqueComunas.length}). Insertando establecimientos en Supabase...`);
+
         // Deduplicate by RBD to avoid duplicate conflicts in bulk upsert
         const uniqueEsts = Array.from(new Map(newEsts.map(e => [e.rbd, e])).values());
 
-        // Insert communes first (already extracted) then establishments
         await api.upsertEstablecimientosBulk(uniqueEsts);
 
         // Refresh state
@@ -673,13 +678,15 @@ export default function SostenedorDashboard() {
         setComunasList(updatedComs);
         setResumenSelectedComunas(updatedComs);
         
-        setUploadEstLogs(`✅ Éxito: Se cargaron ${newEsts.length} establecimientos correctamente.`);
+        setUploadEstLogs(`✅ Éxito: Se cargaron ${uniqueEsts.length} establecimientos y ${uniqueComunas.length} comunas correctamente.`);
       } catch (err: any) {
-        setUploadEstLogs(`❌ Error al procesar archivo: ${err.message}`);
+        console.error('❌ Error en processEstablecimientosFile:', err);
+        setUploadEstLogs(`❌ Error: ${err.message}`);
       }
     };
     reader.readAsArrayBuffer(file);
   };
+
 
   const handleConfirmIngest = async () => {
     if (!pendingIngest) return;

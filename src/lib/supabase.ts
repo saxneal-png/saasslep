@@ -422,38 +422,32 @@ export const api = {
   },
 
   upsertEstablecimientosBulk: async (establecimientos: Establecimiento[]): Promise<void> => {
-    try {
-      const { error } = await supabase.from('establecimientos').upsert(establecimientos);
-      if (error) throw error;
-    } catch (error: any) {
-      console.error("❌ ERROR PROFUNDO EN SUPABASE BULK ESTABLECIMIENTOS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
-      const list = dbLocal.establecimientos;
-      for (const est of establecimientos) {
-        const idx = list.findIndex(e => e.rbd === est.rbd);
-        if (idx >= 0) {
-          list[idx] = est;
-        } else {
-          list.push(est);
-        }
+    // Insert in small chunks to avoid Supabase payload / timeout limits
+    const CHUNK_SIZE = 50;
+    const errors: string[] = [];
+    for (let i = 0; i < establecimientos.length; i += CHUNK_SIZE) {
+      const chunk = establecimientos.slice(i, i + CHUNK_SIZE);
+      const { error } = await supabase
+        .from('establecimientos')
+        .upsert(chunk, { onConflict: 'rbd' });
+      if (error) {
+        console.error(`❌ Error en chunk [${i}-${i + chunk.length}]:`, error.message, JSON.stringify(error));
+        errors.push(error.message);
       }
-      dbLocal.establecimientos = list;
+    }
+    if (errors.length > 0) {
+      throw new Error(`Errores al insertar establecimientos en Supabase: ${errors.join(' | ')}`);
     }
   },
 
   upsertComunasBulk: async (comunas: string[]): Promise<void> => {
     const payload = comunas.map(c => ({ nombre: c }));
-    try {
-      const { error } = await supabase.from('comunas').upsert(payload);
-      if (error) throw error;
-    } catch (error: any) {
-      console.error("❌ ERROR PROFUNDO EN SUPABASE BULK COMUNAS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
-      const list = [...dbLocal.comunas];
-      for (const c of comunas) {
-        if (!list.includes(c)) {
-          list.push(c);
-        }
-      }
-      dbLocal.comunas = list;
+    const { error } = await supabase
+      .from('comunas')
+      .upsert(payload, { onConflict: 'nombre' });
+    if (error) {
+      console.error("❌ Error en upsertComunasBulk:", error.message, JSON.stringify(error));
+      throw new Error(`Error al insertar comunas: ${error.message}`);
     }
   },
 
