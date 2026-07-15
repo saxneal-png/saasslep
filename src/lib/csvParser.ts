@@ -676,7 +676,8 @@ export function parsearArchivoExcelOJson(
 
   const targetSheetKeys = [
     'establecimientos', 'planesdeestudio', 'cursos', 'asignaturas', 
-    'funcionarios', 'contratos', 'cargahoraria', 'remuneraciones', 'licenciasyreemplazos'
+    'funcionarios', 'contratos', 'cargahoraria', 'remuneraciones', 'licenciasyreemplazos',
+    'dotacion', 'dotacionycontratos'
   ];
 
   if (sheetNamesNorm.some(sn => targetSheetKeys.includes(sn))) {
@@ -940,41 +941,47 @@ export function parsearArchivoExcelOJson(
           }
 
           const contrato_id = generarUuidDeterminista(`contrato-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`);
-          contratos.push({
-            id: contrato_id,
-            funcionario_run: run,
-            rbd,
-            calidad_juridica,
-            funcion_principal: cargo,
-            estado: 'Activo',
-            horas_totales,
-            horas_aula: regular
-          });
+          // Add Contrato with merge logic (using Math.max for repeating contract-level hours)
+          const existingContratoIdx = contratos.findIndex(c => c.id === contrato_id);
+          if (existingContratoIdx >= 0) {
+            const existing = contratos[existingContratoIdx];
+            existing.horas_totales = Math.max(existing.horas_totales || 0, horas_totales || 0);
+            if (regular > 0) {
+              existing.horas_aula = Math.max(existing.horas_aula || 0, regular);
+            }
+          } else {
+            contratos.push({
+              id: contrato_id,
+              funcionario_run: run,
+              rbd,
+              calidad_juridica,
+              funcion_principal: cargo,
+              estado: 'Activo',
+              horas_totales,
+              horas_aula: regular
+            });
+          }
 
-          if (regular > 0) {
-            financiamientos.push({
-              id: generarUuidDeterminista(`financiamiento-${contrato_id}-Regular`),
-              contrato_id,
-              origen_fondo: 'Subvención Regular',
-              horas: regular
-            });
-          }
-          if (sep > 0) {
-            financiamientos.push({
-              id: generarUuidDeterminista(`financiamiento-${contrato_id}-SEP`),
-              contrato_id,
-              origen_fondo: 'SEP',
-              horas: sep
-            });
-          }
-          if (pie > 0) {
-            financiamientos.push({
-              id: generarUuidDeterminista(`financiamiento-${contrato_id}-PIE`),
-              contrato_id,
-              origen_fondo: 'PIE',
-              horas: pie
-            });
-          }
+          const agregarFondo = (origen: OrigenFondo, hrs: number) => {
+            if (hrs > 0) {
+              const finId = generarUuidDeterminista(`financiamiento-${contrato_id}-${origen.replace(/\s+/g, '')}`);
+              const existingFinIdx = financiamientos.findIndex(f => f.id === finId);
+              if (existingFinIdx >= 0) {
+                financiamientos[existingFinIdx].horas = (financiamientos[existingFinIdx].horas || 0) + hrs;
+              } else {
+                financiamientos.push({
+                  id: finId,
+                  contrato_id,
+                  origen_fondo: origen,
+                  horas: hrs
+                });
+              }
+            }
+          };
+
+          agregarFondo('Subvención Regular', regular);
+          agregarFondo('SEP', sep);
+          agregarFondo('PIE', pie);
         }
       }
 

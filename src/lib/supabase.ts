@@ -476,9 +476,27 @@ export const api = {
 
   getFuncionarios: async (): Promise<Funcionario[]> => {
     try {
-      const { data, error } = await supabase.from('funcionarios').select('*');
-      if (error) return handleFallback(error, dbLocal.funcionarios, 'funcionarios');
-      return data || [];
+      let allData: Funcionario[] = [];
+      let from = 0;
+      let to = 999;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('funcionarios')
+          .select('*')
+          .range(from, to);
+
+        if (error) return handleFallback(error, dbLocal.funcionarios, 'funcionarios');
+        if (data && data.length > 0) {
+          allData.push(...data);
+          from += 1000;
+          to += 1000;
+        } else {
+          hasMore = false;
+        }
+      }
+      return allData;
     } catch (err) {
       return handleFallback(err, dbLocal.funcionarios, 'funcionarios');
     }
@@ -486,19 +504,33 @@ export const api = {
 
   getContratos: async (rbd?: string): Promise<Contrato[]> => {
     try {
-      let query = supabase.from('contratos').select('*');
-      if (rbd) {
-        const cleanRbd = rbd.trim();
-        const normRbd = normalizarRbd(cleanRbd);
-        const zeroPadded = cleanRbd.padStart(5, '0');
+      let allData: Contrato[] = [];
+      let from = 0;
+      let to = 999;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase.from('contratos').select('*').range(from, to);
+        if (rbd) {
+          const cleanRbd = rbd.trim();
+          const normRbd = normalizarRbd(cleanRbd);
+          const zeroPadded = cleanRbd.padStart(5, '0');
+          const matches = Array.from(new Set([cleanRbd, normRbd, zeroPadded])).filter(Boolean);
+          query = query.or(matches.map(m => `rbd.eq.${m}`).join(','));
+        }
         
-        // Build query using OR to cover any DB format discrepancies (leading zero or not)
-        const matches = Array.from(new Set([cleanRbd, normRbd, zeroPadded])).filter(Boolean);
-        query = query.or(matches.map(m => `rbd.eq.${m}`).join(','));
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData.push(...data);
+          from += 1000;
+          to += 1000;
+        } else {
+          hasMore = false;
+        }
       }
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
+      return allData;
     } catch (error) {
       const fallback = rbd ? dbLocal.contratos.filter(c => c.rbd === rbd) : dbLocal.contratos;
       return handleFallback(error, fallback, 'contratos');
