@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { api, dbLocal, supabase } from '@/lib/supabase';
-import { parsearNominaCsv, normalizarRun, parsearRemuneracionesCsv, parsearArchivoExcelOJson } from '@/lib/csvParser';
+import { parsearNominaCsv, normalizarRun, parsearRemuneracionesCsv, parsearArchivoExcelOJson, descargarPlantillaExcel } from '@/lib/csvParser';
 import { 
   Establecimiento, 
   Funcionario, 
@@ -475,8 +475,8 @@ export default function SostenedorDashboard() {
       const buffer = event.target?.result as ArrayBuffer;
       try {
         const controlPrevioMock = [
-          { run: '12.345.678-9', funcion: 'Docente de Aula', horas: 44 },
-          { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
+          { run: '12345678-9', funcion: 'Docente de Aula', horas: 44 },
+          { run: '15432987-K', funcion: 'Director de Escuela', horas: 38 }
         ];
 
         const schoolMap: Record<string, string> = {};
@@ -1706,6 +1706,51 @@ export default function SostenedorDashboard() {
           {/* Right Column: Files drag and drop and central statistics */}
           <div className="space-y-6">
             
+            {/* Descargar Plantillas Excel */}
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl shadow-lg border border-slate-700/50 p-6 text-white">
+              <h2 className="text-sm font-bold flex items-center gap-2 text-emerald-400">
+                <span>📊</span> Plantillas Excel de Carga
+              </h2>
+              <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
+                Descarga las planillas oficiales pre-estructuradas con los formatos, columnas y guías requeridas para nutrir la base de datos del SLEP.
+              </p>
+              
+              <div className="mt-4 space-y-2.5">
+                <button 
+                  onClick={() => descargarPlantillaExcel(1)}
+                  className="w-full bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 rounded-lg p-2.5 text-left text-xs transition-all flex items-center justify-between hover:border-emerald-500/30 group cursor-pointer"
+                >
+                  <div>
+                    <p className="font-bold text-slate-100 group-hover:text-emerald-400 text-xs">Planilla 1: Maestros y Configuración</p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">Establecimientos, Planes, Cursos, Asignaturas</p>
+                  </div>
+                  <span className="text-emerald-400 font-semibold group-hover:translate-x-0.5 transition-transform text-xs">⬇️</span>
+                </button>
+
+                <button 
+                  onClick={() => descargarPlantillaExcel(2)}
+                  className="w-full bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 rounded-lg p-2.5 text-left text-xs transition-all flex items-center justify-between hover:border-emerald-500/30 group cursor-pointer"
+                >
+                  <div>
+                    <p className="font-bold text-slate-100 group-hover:text-emerald-400 text-xs">Planilla 2: Dotación y Contratos</p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">Funcionarios, Contratos, Cargas Horarias en Aula</p>
+                  </div>
+                  <span className="text-emerald-400 font-semibold group-hover:translate-x-0.5 transition-transform text-xs">⬇️</span>
+                </button>
+
+                <button 
+                  onClick={() => descargarPlantillaExcel(3)}
+                  className="w-full bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 rounded-lg p-2.5 text-left text-xs transition-all flex items-center justify-between hover:border-emerald-500/30 group cursor-pointer"
+                >
+                  <div>
+                    <p className="font-bold text-slate-100 group-hover:text-emerald-400 text-xs">Planilla 3: Remuneraciones y Reemplazos</p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">Asistencias, Total Haberes, Licencias Médicas</p>
+                  </div>
+                  <span className="text-emerald-400 font-semibold group-hover:translate-x-0.5 transition-transform text-xs">⬇️</span>
+                </button>
+              </div>
+            </div>
+
             {/* Drag-and-Drop Uploader for CSV/JSON Docentes */}
             <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
               <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">

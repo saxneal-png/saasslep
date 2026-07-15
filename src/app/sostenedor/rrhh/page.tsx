@@ -342,7 +342,6 @@ export default function RRHHPage() {
         id: `reemplazo-task-${Date.now()}-${c.id}`,
         rbd: c.rbd,
         funcionario_titular_run: selectedLicenciaRun,
-        funcionario_titular_nombre: func ? func.nombre : selectedLicenciaRun,
         horas_a_cubrir: c.horas_totales,
         estado: 'Pendiente'
       };
@@ -424,7 +423,6 @@ export default function RRHHPage() {
       id: `reemp-${Date.now()}`,
       contrato_titular_id: contratoId,
       reemplazo_run: finalRun,
-      reemplazo_nombre: finalNombre,
       rbd: titularContrato.rbd,
       horas: reemplazoHoras,
       fecha_inicio: reemplazoFInicio,
@@ -1444,7 +1442,9 @@ export default function RRHHPage() {
                                     {reemps.map(r => (
                                       <div key={r.id} className="bg-slate-50 border p-2 rounded-lg text-[10px] flex justify-between items-start">
                                         <div>
-                                          <p className="font-bold text-slate-800">{r.reemplazo_nombre}</p>
+                                          <p className="font-bold text-slate-800">
+                                            {funcionarios.find(f => f.run === r.reemplazo_run)?.nombre || r.reemplazo_run}
+                                          </p>
                                           <p className="text-[9px] text-slate-500 mt-0.5">Horas: <span className="font-semibold text-slep-blue">{r.horas} hrs</span></p>
                                           <p className="text-[9px] text-slate-500">Periodo: {r.fecha_inicio} al {r.fecha_termino}</p>
                                         </div>

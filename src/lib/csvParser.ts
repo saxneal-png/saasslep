@@ -1,9 +1,9 @@
 // @ts-ignore
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion, CalidadJuridica, normalizarCargoDocente, Establecimiento, EstadoContrato, LegislacionLaboral } from './types';
+import { Funcionario, Contrato, FinanciamientoContrato, OrigenFondo, AlertaConciliacion, RegistroRemuneracion, CalidadJuridica, normalizarCargoDocente, Establecimiento, EstadoContrato, LegislacionLaboral, PlanEstudioNorm, CursoDinamico, AsignaturaDinamica, ReemplazoDetalle } from './types';
 
-// Normalization function for RUN
+// Normalization function for RUN (Format: 12345678-9, no dots, with hyphen)
 export function normalizarRun(runRaw: any): string {
   if (runRaw === undefined || runRaw === null) return '';
   const strVal = String(runRaw).trim();
@@ -17,8 +17,54 @@ export function normalizarRun(runRaw: any): string {
   const num = parseInt(cuerpo, 10);
   if (isNaN(num)) return clean.toUpperCase();
   
-  const fmtCuerpo = num.toLocaleString('es-CL').replace(/,/g, '.');
-  return `${fmtCuerpo}-${dv}`;
+  return `${num}-${dv}`;
+}
+
+// Normalization function for dates to ISO YYYY-MM-DD format
+export function normalizarFecha(val: any): string {
+  if (!val) return '';
+  const str = String(val).trim();
+  if (str === '' || str === '--' || str === '-') return '';
+  
+  // If it is an Excel serial number
+  const num = Number(str);
+  if (!isNaN(num) && num > 20000 && num < 60000) {
+    const date = new Date(Math.round((num - 25569) * 86400 * 1000));
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  
+  // Try matching DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    const year = dmyMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+  
+  // Try matching YYYY/MM/DD or YYYY-MM-DD
+  const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (ymdMatch) {
+    const year = ymdMatch[1];
+    const month = ymdMatch[2].padStart(2, '0');
+    const day = ymdMatch[3].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // Try standard JS Date parsing
+  const parsed = Date.parse(str);
+  if (!isNaN(parsed)) {
+    const date = new Date(parsed);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  
+  return str;
 }
 
 export function parseDecimalHours(value: string | number | undefined | null): number {
@@ -55,6 +101,11 @@ export interface ParseResult {
   financiamientos: FinanciamientoContrato[];
   alertas: AlertaConciliacion[];
   establecimientos?: Establecimiento[];
+  planesEstudio?: PlanEstudioNorm[];
+  cursosDinamicos?: CursoDinamico[];
+  asignaturasDinamicas?: AsignaturaDinamica[];
+  remuneraciones?: RegistroRemuneracion[];
+  reemplazosLicencias?: ReemplazoDetalle[];
 }
 
 export function parsearNominaCsv(
@@ -456,6 +507,11 @@ export function parsearArchivoExcelOJson(
   const financiamientos: FinanciamientoContrato[] = [];
   const alertas: AlertaConciliacion[] = [];
   const establecimientos: Establecimiento[] = [];
+  const planesEstudio: PlanEstudioNorm[] = [];
+  const cursosDinamicos: CursoDinamico[] = [];
+  const asignaturasDinamicas: AsignaturaDinamica[] = [];
+  const remuneraciones: RegistroRemuneracion[] = [];
+  const reemplazosLicencias: ReemplazoDetalle[] = [];
 
   // Check if it's JSON or text first
   let isJson = false;
@@ -475,20 +531,333 @@ export function parsearArchivoExcelOJson(
   // Parse using SheetJS (XLSX/XLS or CSV)
   const workbook = XLSX.read(fileBuffer, { type: 'array' });
   
+  // Detect if the workbook contains sheet names corresponding to the 3 planillas
+  let hasRecognizedSheets = false;
+  const sheetNamesNorm = workbook.SheetNames.map(s => 
+    s.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\.\-\s_]/g, "")
+  );
+
+  const targetSheetKeys = [
+    'establecimientos', 'planesdeestudio', 'cursos', 'asignaturas', 
+    'funcionarios', 'contratos', 'cargahoraria', 'remuneraciones', 'licenciasyreemplazos'
+  ];
+
+  if (sheetNamesNorm.some(sn => targetSheetKeys.includes(sn))) {
+    hasRecognizedSheets = true;
+  }
+
+  if (hasRecognizedSheets) {
+    // Helper to extract clean indexes
+    const getIndex = (hdrs: string[], kws: string[]): number => {
+      for (const kw of kws) {
+        const idx = hdrs.findIndex(h => h === kw);
+        if (idx !== -1) return idx;
+      }
+      for (const kw of kws) {
+        const idx = hdrs.findIndex(h => h.includes(kw));
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+
+    workbook.SheetNames.forEach(sheetName => {
+      const sheet = workbook.Sheets[sheetName];
+      const rawRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
+      if (rawRows.length === 0) return;
+
+      const normName = sheetName.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\.\-\s_]/g, "");
+
+      // Find header row
+      let headerRowIdx = 0;
+      for (let i = 0; i < Math.min(rawRows.length, 8); i++) {
+        const row = rawRows[i];
+        if (row && row.filter(c => String(c || '').trim() !== '').length > 2) {
+          headerRowIdx = i;
+          break;
+        }
+      }
+
+      const headers = rawRows[headerRowIdx].map(h => 
+        String(h || '').trim().toLowerCase().normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[\.\-\s_]/g, "")
+      );
+
+      const startRow = headerRowIdx + 1;
+
+      if (normName === 'establecimientos') {
+        const idxRbd = getIndex(headers, ['rbd']);
+        const idxNombre = getIndex(headers, ['nombre', 'establecimiento', 'escuela']);
+        const idxIvm = getIndex(headers, ['indicevulnerabilidad', 'ivm', 'vulnerabilidad']);
+        const idxComuna = getIndex(headers, ['comuna']);
+        const idxRegimen = getIndex(headers, ['regimen', 'tipo']);
+
+        for (let i = startRow; i < rawRows.length; i++) {
+          const row = rawRows[i];
+          if (!row || !row[idxRbd]) continue;
+          const rbd = String(row[idxRbd]).trim();
+          if (!rbd) continue;
+
+          establecimientos.push({
+            rbd,
+            nombre: String(row[idxNombre] || `Establecimiento RBD ${rbd}`).trim(),
+            ivm: parseFloat(String(row[idxIvm]).replace(',', '.')) || 70,
+            comuna: String(row[idxComuna] || 'Chillán Viejo').trim(),
+            regimen: String(row[idxRegimen]).toUpperCase().includes('NO') ? 'No JEC' : 'JEC'
+          });
+        }
+      }
+
+      else if (normName === 'planesdeestudio') {
+        const idxNivel = getIndex(headers, ['nivel', 'curso']);
+        const idxRegimen = getIndex(headers, ['regimen']);
+        const idxHoras = getIndex(headers, ['horasobligatorias', 'horas']);
+        const idxPie = getIndex(headers, ['horaspie', 'pie']);
+
+        for (let i = startRow; i < rawRows.length; i++) {
+          const row = rawRows[i];
+          if (!row || !row[idxNivel]) continue;
+          const nivel = String(row[idxNivel]).trim();
+          if (!nivel) continue;
+
+          planesEstudio.push({
+            nivel,
+            regimen: String(row[idxRegimen]).toUpperCase().includes('NO') ? 'No JEC' : 'JEC',
+            horasObligatorias: parseDecimalHours(row[idxHoras]),
+            horasPIEReglamentarias: parseDecimalHours(row[idxPie]),
+            asignaturasBase: [] // base subjects populated by templates
+          });
+        }
+      }
+
+      else if (normName === 'cursos') {
+        const idxRbd = getIndex(headers, ['rbd']);
+        const idxNombre = getIndex(headers, ['nombre', 'curso', 'nombrecurso']);
+        const idxNivel = getIndex(headers, ['nivel']);
+        const idxProf = getIndex(headers, ['profesorjefe', 'runprofesorjefe', 'runjefe']);
+
+        for (let i = startRow; i < rawRows.length; i++) {
+          const row = rawRows[i];
+          if (!row || !row[idxNombre]) continue;
+          const rbd = String(row[idxRbd] || rbdContext).trim();
+          const nombre = String(row[idxNombre]).trim();
+          if (!nombre) continue;
+
+          cursosDinamicos.push({
+            rbd,
+            nombre,
+            nivel: String(row[idxNivel] || '1° a 4° Básico').trim(),
+            regimen: 'JEC',
+            profesor_jefe_run: normalizarRun(row[idxProf]) || undefined
+          });
+        }
+      }
+
+      else if (normName === 'asignaturas') {
+        const idxRbd = getIndex(headers, ['rbd']);
+        const idxCurso = getIndex(headers, ['curso', 'nombrecurso']);
+        const idxNombre = getIndex(headers, ['asignatura', 'nombre']);
+        const idxHoras = getIndex(headers, ['horas', 'horassugeridas']);
+
+        for (let i = startRow; i < rawRows.length; i++) {
+          const row = rawRows[i];
+          if (!row || !row[idxNombre]) continue;
+          const rbd = String(row[idxRbd] || rbdContext).trim();
+          const cursoNombre = String(row[idxCurso]).trim();
+          const nombre = String(row[idxNombre]).trim();
+          if (!nombre) continue;
+
+          asignaturasDinamicas.push({
+            rbd,
+            cursoNombre,
+            nombre,
+            horasSugeridas: parseDecimalHours(row[idxHoras])
+          });
+        }
+      }
+
+      else if (normName === 'funcionarios') {
+        const idxRun = getIndex(headers, ['run', 'rut']);
+        const idxNombre = getIndex(headers, ['nombre', 'funcionario', 'completo']);
+        const idxEmail = getIndex(headers, ['email', 'correo']);
+        const idxTel = getIndex(headers, ['telefono', 'fono']);
+        const idxGen = getIndex(headers, ['genero', 'sexo']);
+        const idxNac = getIndex(headers, ['fechanacimiento', 'nacimiento', 'fecha']);
+        const idxTitulo = getIndex(headers, ['titulo', 'profesion']);
+        const idxEstamento = getIndex(headers, ['estamento', 'tipo']);
+
+        for (let i = startRow; i < rawRows.length; i++) {
+          const row = rawRows[i];
+          if (!row || !row[idxRun]) continue;
+          const run = normalizarRun(row[idxRun]);
+          if (!run) continue;
+
+          const est = String(row[idxEstamento] || '').toLowerCase();
+          const estamento = (est.includes('docente') || est.includes('profesor')) ? 'Docente' : 'Asistente de la Educación';
+
+          funcionarios.push({
+            run,
+            nombre: String(row[idxNombre] || 'Funcionario Sin Nombre').trim(),
+            email: String(row[idxEmail] || '').trim() || undefined,
+            telefono: String(row[idxTel] || '').trim() || undefined,
+            genero: String(row[idxGen] || '').trim() || undefined,
+            fecha_nacimiento: normalizarFecha(row[idxNac]) || undefined,
+            titulo: String(row[idxTitulo] || '').trim() || undefined,
+            estamento
+          });
+        }
+      }
+
+      else if (normName === 'contratos') {
+        const idxRun = getIndex(headers, ['run', 'rut']);
+        const idxRbd = getIndex(headers, ['rbd']);
+        const idxFuncion = getIndex(headers, ['funcionprincipal', 'funcion', 'cargo']);
+        const idxCalidad = getIndex(headers, ['calidadjuridica', 'calidad']);
+        const idxHoras = getIndex(headers, ['horastotales', 'horas']);
+        const idxHorasAula = getIndex(headers, ['horasaula', 'aula']);
+        const idxHorasDir = getIndex(headers, ['horasdirectivas', 'directiva']);
+        const idxHorasUtp = getIndex(headers, ['horasutp', 'utp', 'tecnicopedagogicas']);
+        const idxFondo = getIndex(headers, ['origenfondo', 'financiamiento', 'subvencion', 'fondo']);
+
+        for (let i = startRow; i < rawRows.length; i++) {
+          const row = rawRows[i];
+          if (!row || !row[idxRun]) continue;
+          const run = normalizarRun(row[idxRun]);
+          if (!run) continue;
+
+          const rbd = String(row[idxRbd] || rbdContext).trim();
+          const horas_totales = parseDecimalHours(row[idxHoras]);
+          const cargo = String(row[idxFuncion] || 'Docente de Aula').trim();
+
+          const calClean = String(row[idxCalidad] || '').toLowerCase();
+          let calidad_juridica: CalidadJuridica = 'A contrata';
+          if (calClean.includes('titular')) calidad_juridica = 'Titular';
+          else if (calClean.includes('plazo fijo')) calidad_juridica = 'Plazo fijo';
+          else if (calClean.includes('indefinido')) calidad_juridica = 'Indefinido';
+          else if (calClean.includes('reemplazo')) calidad_juridica = 'Reemplazo';
+
+          const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
+
+          contratos.push({
+            id: contrato_id,
+            funcionario_run: run,
+            rbd,
+            calidad_juridica,
+            funcion_principal: cargo,
+            estado: 'Activo',
+            horas_totales,
+            horas_aula: parseDecimalHours(row[idxHorasAula]),
+            horas_directivas: parseDecimalHours(row[idxHorasDir]),
+            horas_tecnico_pedagogicas: parseDecimalHours(row[idxHorasUtp])
+          });
+
+          // Insert funding source
+          const fondo = String(row[idxFondo] || 'Subvención Regular').trim();
+          let origen_fondo: OrigenFondo = 'Subvención Regular';
+          if (fondo.toUpperCase().includes('SEP')) origen_fondo = 'SEP';
+          else if (fondo.toUpperCase().includes('PIE')) origen_fondo = 'PIE';
+          else if (fondo.toUpperCase().includes('REFORZAMIENTO')) origen_fondo = 'Reforzamiento';
+          else if (fondo.toUpperCase().includes('RETENCION')) origen_fondo = 'Pro-retención';
+
+          financiamientos.push({
+            id: `f-${contrato_id}-${origen_fondo.replace(/\s+/g, '')}`,
+            contrato_id,
+            origen_fondo,
+            horas: horas_totales
+          });
+        }
+      }
+
+      else if (normName === 'remuneraciones') {
+        const idxRun = getIndex(headers, ['run', 'rut']);
+        const idxMes = getIndex(headers, ['mes', 'mespago']);
+        const idxDiasTrab = getIndex(headers, ['diastrabajados']);
+        const idxInasist = getIndex(headers, ['inasistencias']);
+        const idxDiasLic = getIndex(headers, ['diaslicencia', 'licencia']);
+        const idxHaberes = getIndex(headers, ['totalhaberes', 'haberes', 'sueldo']);
+        const idxLey20903 = getIndex(headers, ['ley20903', 'aplicaley20903']);
+
+        for (let i = startRow; i < rawRows.length; i++) {
+          const row = rawRows[i];
+          if (!row || !row[idxRun]) continue;
+          const run = normalizarRun(row[idxRun]);
+          if (!run) continue;
+
+          remuneraciones.push({
+            id: `rem-${run.replace(/[^a-zA-Z0-9]/g, '')}-${i}`,
+            funcionario_run: run,
+            horas_pagadas: 44, // default
+            total_haberes: parseInt(String(row[idxHaberes] || '0').replace(/[^0-9]/g, ''), 10) || 0,
+            mes_pago: normalizarFecha(row[idxMes]) || '2026-06-01',
+            grupo_estamento: 'P02_Educacion',
+            dias_trabajados: parseInt(row[idxDiasTrab], 10) || 30,
+            inasistencias: parseInt(row[idxInasist], 10) || 0,
+            dias_licencia_medica: parseInt(row[idxDiasLic], 10) || 0,
+            aplica_ley_20903_art5: String(row[idxLey20903]).toUpperCase().includes('SI') ? 'Sí' : 'No'
+          });
+        }
+      }
+
+      else if (normName === 'licenciasyreemplazos' || normName === 'reemplazos') {
+        const idxTitular = getIndex(headers, ['runtitular', 'titular']);
+        const idxFInicio = getIndex(headers, ['fechainiciolicencia', 'fechainicio']);
+        const idxFTermino = getIndex(headers, ['fechatermino']);
+        const idxReemplazo = getIndex(headers, ['runreemplazante', 'reemplazante']);
+        const idxHoras = getIndex(headers, ['horasreemplazo', 'horas']);
+        const idxFondo = getIndex(headers, ['origenfondoreemplazo', 'origenfondo', 'fondo']);
+
+        for (let i = startRow; i < rawRows.length; i++) {
+          const row = rawRows[i];
+          if (!row || !row[idxTitular]) continue;
+          const runTitular = normalizarRun(row[idxTitular]);
+          const runReemp = normalizarRun(row[idxReemplazo]);
+          if (!runTitular || !runReemp) continue;
+
+          reemplazosLicencias.push({
+            id: `reemp-${runTitular.replace(/[^a-zA-Z0-9]/g, '')}-${runReemp.replace(/[^a-zA-Z0-9]/g, '')}`,
+            contrato_titular_id: `csv-${rbdContext}-${runTitular.replace(/[^a-zA-Z0-9]/g, '')}`,
+            reemplazo_run: runReemp,
+            rbd: rbdContext,
+            horas: parseDecimalHours(row[idxHoras]),
+            fecha_inicio: normalizarFecha(row[idxFInicio]) || '2026-06-01',
+            fecha_termino: normalizarFecha(row[idxFTermino]) || '2026-06-30'
+          });
+        }
+      }
+    });
+
+    return {
+      funcionarios,
+      contratos,
+      financiamientos,
+      alertas,
+      establecimientos: establecimientos.length > 0 ? establecimientos : undefined,
+      planesEstudio: planesEstudio.length > 0 ? planesEstudio : undefined,
+      cursosDinamicos: cursosDinamicos.length > 0 ? cursosDinamicos : undefined,
+      asignaturasDinamicas: asignaturasDinamicas.length > 0 ? asignaturasDinamicas : undefined,
+      remuneraciones: remuneraciones.length > 0 ? remuneraciones : undefined,
+      reemplazosLicencias: reemplazosLicencias.length > 0 ? reemplazosLicencias : undefined
+    };
+  }
+
+  // Fallback to original single-sheet parser:
+  const funcionariosFallback: Funcionario[] = [];
+  const contratosFallback: Contrato[] = [];
+  const financiamientosFallback: FinanciamientoContrato[] = [];
+  const alertasFallback: AlertaConciliacion[] = [];
+  const establecimientosFallback: Establecimiento[] = [];
+
   workbook.SheetNames.forEach(sheetName => {
     const sheet = workbook.Sheets[sheetName];
     const rawRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
     if (rawRows.length === 0) return;
 
-    // Find the header row by searching for "run", "r.u.n.", "rut" and ensuring the row has multiple columns populated
     let headerRowIdx = 0;
     for (let i = 0; i < Math.min(rawRows.length, 12); i++) {
       const row = rawRows[i];
       if (!row || !Array.isArray(row)) continue;
-      
       const nonCount = row.filter(cell => String(cell || '').trim() !== '').length;
-      if (nonCount < 4) continue; // Skip title rows with very few columns populated
-      
+      if (nonCount < 4) continue;
       const hasRun = row.some(cell => {
         const val = String(cell || '').trim().toLowerCase();
         return val === 'run' || val === 'r.u.n.' || val === 'rut' || val === 'r.u.n' || val.includes('run') || val.includes('rut');
@@ -506,12 +875,10 @@ export function parsearArchivoExcelOJson(
     );
 
     const getIndex = (kws: string[], fallback: number): number => {
-      // 1. Exact matches in order of keyword preference
       for (const kw of kws) {
         const idx = headers.findIndex(h => h === kw);
         if (idx !== -1) return idx;
       }
-      // 2. Substring matches in order of keyword preference
       for (const kw of kws) {
         const idx = headers.findIndex(h => h.includes(kw));
         if (idx !== -1) return idx;
@@ -538,8 +905,6 @@ export function parsearArchivoExcelOJson(
     const idxTotalHaberes = getIndex(['totalhaberes', 'sueldoliquido', 'sueldo', 'haberes'], -1);
     const idxIngreso = getIndex(['ingreso', 'fechaingreso'], -1);
 
-    // Multi-column hours / dotaciones
-    const idxHorasMaestro = getIndex(['horascontratomaestro'], -1);
     const idxRegular = getIndex(['horasdotacionregular', 'regular', 'horascorriente', 'corriente'], -1);
     const idxPIE = getIndex(['horasdotacionpie', 'pie', 'horaspie'], -1);
     const idxSEP = getIndex(['horasdotacionsep', 'sep', 'horassep'], -1);
@@ -557,30 +922,12 @@ export function parsearArchivoExcelOJson(
         if (raw === undefined || raw === null) return '';
         const str = String(raw).trim();
         if (!str || str === 'NaN') return '';
-        
-        // Clean dots and spaces
         const clean = str.replace(/[\.\s]/g, '');
-        
-        // If it has a hyphen, it has a DV
         if (clean.includes('-')) {
           return normalizarRun(clean);
         }
-        
-        // If it has no hyphen, let's look at the length and contents
         const digitsOnly = clean.replace(/[^0-9]/g, '');
-        const hasK = clean.toUpperCase().includes('K');
-        
-        // If it has a K, it has a DV
-        if (hasK) {
-          return normalizarRun(clean);
-        }
-        
-        // If it is numeric only:
-        // Chilean RUT bodies are between 5,000,000 and 28,000,000 (length 7 or 8).
-        // If the length of digits is 7 or 8, it is likely just the body (missing the DV).
-        // If length is 9, the last digit is the DV.
         if (digitsOnly.length === 7 || digitsOnly.length === 8) {
-          // It's a body-only RUT! We calculate the DV.
           let m = 0, s = 1;
           let t = parseInt(digitsOnly, 10);
           for (; t; t = Math.floor(t / 10)) {
@@ -589,8 +936,6 @@ export function parsearArchivoExcelOJson(
           const dv = s ? String(s - 1) : 'K';
           return normalizarRun(`${digitsOnly}-${dv}`);
         }
-        
-        // Otherwise, use standard normalization
         return normalizarRun(clean);
       };
 
@@ -601,17 +946,12 @@ export function parsearArchivoExcelOJson(
       }
 
       if (!run) continue;
-
-      // If the row contains header names, skip it
-      if (run.toLowerCase().includes('run') || run.toLowerCase().includes('r.u.n')) {
-        continue;
-      }
+      if (run.toLowerCase().includes('run') || run.toLowerCase().includes('r.u.n')) continue;
 
       const apePat = idxPat !== -1 ? String(row[idxPat] || '').trim() : '';
       const apeMat = idxMat !== -1 ? String(row[idxMat] || '').trim() : '';
       const nombres = idxNom !== -1 ? String(row[idxNom] || '').trim() : '';
       const nombreCompleto = `${nombres} ${apePat} ${apeMat}`.replace(/\s+/g, ' ').trim();
-
       const cargoRaw = idxCargo !== -1 ? String(row[idxCargo] || '').trim() : '';
 
       const sexVal = idxSexo !== -1 ? String(row[idxSexo] || '').trim().toUpperCase() : '';
@@ -624,34 +964,15 @@ export function parsearArchivoExcelOJson(
       const cargoLower = cargoRaw.toLowerCase();
 
       if (legLab) {
-        if (legLab.toLowerCase().includes('docente')) {
-          estamento = 'Docente';
-        } else if (legLab.toLowerCase().includes('asistente') || legLab.toLowerCase().includes('auxiliar')) {
-          estamento = 'Asistente de la Educación';
-        } else if (forceEstamento) {
-          estamento = forceEstamento;
-        }
+        if (legLab.toLowerCase().includes('docente')) estamento = 'Docente';
+        else if (legLab.toLowerCase().includes('asistente')) estamento = 'Asistente de la Educación';
       } else if (cargoRaw) {
-        // Fallback to cargo analysis if no legLab column is found
-        if (cargoLower.includes('docente') || cargoLower.includes('profesor') || cargoLower.includes('educador') || cargoLower.includes('director') || cargoLower.includes('tecnico pedagogico') || cargoLower.includes('psicopedagog') || cargoLower.includes('pie') || cargoLower.includes('orientador')) {
+        if (cargoLower.includes('docente') || cargoLower.includes('profesor') || cargoLower.includes('educador') || cargoLower.includes('pie')) {
           estamento = 'Docente';
-        } else if (cargoLower.includes('asistente') || cargoLower.includes('auxiliar') || cargoLower.includes('inspector') || cargoLower.includes('paradocente') || cargoLower.includes('administrativo') || cargoLower.includes('secretaria')) {
-          estamento = 'Asistente de la Educación';
-        } else if (forceEstamento) {
-          estamento = forceEstamento;
         }
-      } else if (forceEstamento) {
-        estamento = forceEstamento;
       }
 
       let legislacion_laboral: LegislacionLaboral = estamento === 'Docente' ? 'Estatuto docente' : 'Asistentes de la educación';
-      const legLabClean = legLab.toLowerCase();
-      if (legLabClean.includes('docente')) {
-        legislacion_laboral = 'Estatuto docente';
-      } else if (legLabClean.includes('asistente') || legLabClean.includes('auxiliar')) {
-        legislacion_laboral = 'Asistentes de la educación';
-      }
-
       let estado: EstadoContrato = 'Activo';
       if (idxActivo !== -1) {
         const principalActivo = String(row[idxActivo] || '').trim().toUpperCase();
@@ -667,8 +988,8 @@ export function parsearArchivoExcelOJson(
       else if (tramoClean.includes('inicial')) tramo = 'Inicial';
       else if (tramoClean.includes('temprano')) tramo = 'Temprano';
       else if (tramoClean.includes('avanzado')) tramo = 'Avanzado';
-      else if (tramoClean.includes('experto i') || tramoClean.includes('experto 1')) tramo = 'Experto I';
-      else if (tramoClean.includes('experto ii') || tramoClean.includes('experto 2')) tramo = 'Experto II';
+      else if (tramoClean.includes('experto i')) tramo = 'Experto I';
+      else if (tramoClean.includes('experto ii')) tramo = 'Experto II';
 
       const programa = idxProg !== -1 ? String(row[idxProg] || '').trim() : '';
       const comunaRaw = idxComuna !== -1 ? String(row[idxComuna] || '').trim() : '';
@@ -678,86 +999,46 @@ export function parsearArchivoExcelOJson(
 
       let rbd = rbdVal || '';
       if (!rbd && centroCosto) {
-        // Try mapping from schoolNameToRbdMap
         const cleanString = (str: string): string => {
-          return str
-            .toLowerCase()
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .replace(/n[°ºo]\s*\d+/g, "")
-            .replace(/[^a-z0-9]/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
+          return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, " ").replace(/\s+/g, " ").trim();
         };
-
         const cleanCC = cleanString(centroCosto);
         let foundRbd = '';
         for (const [dbName, dbRbd] of Object.entries(schoolNameToRbdMap)) {
-          const cleanDbName = cleanString(dbName);
-          if (cleanDbName === cleanCC || cleanDbName.includes(cleanCC) || cleanCC.includes(cleanDbName)) {
+          if (cleanString(dbName).includes(cleanCC) || cleanCC.includes(cleanString(dbName))) {
             foundRbd = dbRbd;
             break;
           }
         }
-        if (foundRbd) {
-          rbd = foundRbd;
-        } else {
-          // Fallback to hashing
+        if (foundRbd) rbd = foundRbd;
+        else {
           let hash = 0;
-          for (let i = 0; i < centroCosto.length; i++) {
-            hash = centroCosto.charCodeAt(i) + ((hash << 5) - hash);
+          for (let k = 0; k < centroCosto.length; k++) {
+            hash = centroCosto.charCodeAt(k) + ((hash << 5) - hash);
           }
           rbd = String(900000 + Math.abs(hash % 100000));
         }
       }
-
-      if (!rbd) {
-        rbd = rbdContext;
-      }
+      if (!rbd) rbd = rbdContext;
 
       let comuna = comunaRaw.charAt(0).toUpperCase() + comunaRaw.slice(1).toLowerCase().trim();
-      if (!comuna) {
+      if (!comuna && centroCosto) {
         const ccLower = centroCosto.toLowerCase();
         if (ccLower.includes('bulnes')) comuna = 'Bulnes';
         else if (ccLower.includes('carmen')) comuna = 'El Carmen';
         else if (ccLower.includes('pemuco')) comuna = 'Pemuco';
         else if (ccLower.includes('yungay')) comuna = 'Yungay';
-        else if (ccLower.includes('quillon') || ccLower.includes('quillón')) comuna = 'Quillón';
-        else if (ccLower.includes('san ignacio')) comuna = 'San Ignacio';
         else comuna = 'Chillán Viejo';
       }
 
       if (rbd && centroCosto) {
-        if (!establecimientos.some(e => e.rbd === rbd)) {
-          establecimientos.push({
-            rbd,
-            nombre: centroCosto,
-            ivm: 75.0,
-            comuna,
-            regimen: 'JEC'
-          });
+        if (!establecimientosFallback.some(e => e.rbd === rbd)) {
+          establecimientosFallback.push({ rbd, nombre: centroCosto, ivm: 75.0, comuna, regimen: 'JEC' });
         }
       }
 
-      // Add or update Funcionario with completeness prioritization
-      let func = funcionarios.find(f => f.run === run);
-      
-      const getCompletenessScore = (est: string, cargo: string, tr: string) => {
-        let score = 0;
-        if (est && est.trim() !== '') score++;
-        
-        const cClean = (cargo || '').trim().toLowerCase();
-        if (cClean !== '' && cClean !== 'docente de aula' && cClean !== 'docente' && cClean !== 'asistente' && cClean !== 'funcionario') {
-          score += 2; // Specific cargos get higher score
-        } else if (cClean !== '') {
-          score += 1; // Generic cargos get lower score
-        }
-        
-        if (tr && tr.trim() !== '' && tr !== 'Sin Tramo') score++;
-        return score;
-      };
-
-      const fechaIngreso = idxIngreso !== -1 ? String(row[idxIngreso] || '').trim() : undefined;
+      let func = funcionariosFallback.find(f => f.run === run);
+      const fechaIngreso = idxIngreso !== -1 ? normalizarFecha(row[idxIngreso]) : undefined;
 
       if (!func) {
         func = {
@@ -766,118 +1047,52 @@ export function parsearArchivoExcelOJson(
           estamento,
           cargo: cargoRaw || (estamento === 'Docente' ? 'Docente de Aula' : 'Asistente'),
           genero,
-          tramo: tramo,
+          tramo,
           fecha_ingreso_establecimiento: fechaIngreso
         };
-        funcionarios.push(func);
-      } else {
-        const existingScore = getCompletenessScore(func.estamento || '', func.cargo || '', func.tramo || '');
-        const currentScore = getCompletenessScore(estamento, cargoRaw, tramo);
-        
-        if (currentScore > existingScore) {
-          func.estamento = estamento;
-          if (cargoRaw) func.cargo = cargoRaw;
-          if (genero) func.genero = genero;
-          if (tramo && tramo !== 'Sin Tramo') func.tramo = tramo;
-          if (nombreCompleto && nombreCompleto !== 'Funcionario Sin Nombre') func.nombre = nombreCompleto;
-          if (fechaIngreso) func.fecha_ingreso_establecimiento = fechaIngreso;
-        } else {
-          if (!func.genero && genero) func.genero = genero;
-          
-          const existingCargoClean = (func.cargo || '').trim().toLowerCase();
-          const isExistingGeneric = existingCargoClean === '' || existingCargoClean === 'docente de aula' || existingCargoClean === 'docente' || existingCargoClean === 'asistente' || existingCargoClean === 'funcionario';
-          const newCargoClean = (cargoRaw || '').trim().toLowerCase();
-          const isNewSpecific = newCargoClean !== '' && newCargoClean !== 'docente de aula' && newCargoClean !== 'docente' && newCargoClean !== 'asistente' && newCargoClean !== 'funcionario';
-          if ((isExistingGeneric && isNewSpecific) || (!func.cargo && cargoRaw)) {
-            func.cargo = cargoRaw;
-          }
-          
-          if ((!func.tramo || func.tramo === 'Sin Tramo') && tramo !== 'Sin Tramo') func.tramo = tramo;
-          if (!func.fecha_ingreso_establecimiento && fechaIngreso) func.fecha_ingreso_establecimiento = fechaIngreso;
-        }
+        funcionariosFallback.push(func);
       }
 
-      // Relevance filter check on Total Haberes / Sueldo Líquido
       const totalHaberesRaw = idxTotalHaberes !== -1 ? row[idxTotalHaberes] : undefined;
       const totalHaberes = parseDecimalHours(totalHaberesRaw);
-      const isRelevanceZero = idxTotalHaberes !== -1 && totalHaberesRaw !== null && totalHaberesRaw !== undefined && String(totalHaberesRaw).trim() !== '' && totalHaberes === 0;
+      const isRelevanceZero = idxTotalHaberes !== -1 && totalHaberesRaw !== null && totalHaberesRaw !== undefined && totalHaberes === 0;
 
-      // Create/update Contratos & Financiamientos ONLY if not relevance zero
       if (!isRelevanceZero) {
-        // Quality mapping
         let calidad_juridica: CalidadJuridica = 'A contrata';
         const tipoContClean = tipoContrato.toLowerCase();
         if (tipoContClean.includes('titular')) calidad_juridica = 'Titular';
-        else if (tipoContClean.includes('plazo fijo') || tipoContClean.includes('plazofijo')) calidad_juridica = 'Plazo fijo';
-        else if (tipoContClean.includes('indefinido')) calidad_juridica = 'Indefinido';
         else if (tipoContClean.includes('reemplazo')) calidad_juridica = 'Reemplazo';
-        else if (tipoContClean.includes('habilitacion') || tipoContClean.includes('habilitación')) calidad_juridica = 'Habilitación especial';
 
-        // Add or update Contrato (Consolidación)
-        let contrato = contratos.find(c => c.funcionario_run === run && c.rbd === rbd);
-        
-        // Multi-column hours parsing
+        let contrato = contratosFallback.find(c => c.funcionario_run === run && c.rbd === rbd);
         const horasRegular = idxRegular !== -1 ? parseDecimalHours(row[idxRegular]) : 0;
         const horasPIE = idxPIE !== -1 ? parseDecimalHours(row[idxPIE]) : 0;
         const horasSEP = idxSEP !== -1 ? parseDecimalHours(row[idxSEP]) : 0;
-        
         const hasDirectDotaciones = idxRegular !== -1 || idxPIE !== -1 || idxSEP !== -1;
         
-        let totalRowHoras = 0;
-        if (hasDirectDotaciones) {
-          totalRowHoras = horasRegular + horasPIE + horasSEP;
-          if (totalRowHoras === 0 && idxHorasMaestro !== -1) {
-            totalRowHoras = parseDecimalHours(row[idxHorasMaestro]);
-          }
-        } else {
-          const fallbackHorasRaw = idxHorasMaestro !== -1 ? row[idxHorasMaestro] : (idxHoras !== -1 ? row[idxHoras] : 0);
-          totalRowHoras = parseDecimalHours(fallbackHorasRaw);
-        }
-        
+        let totalRowHoras = hasDirectDotaciones ? (horasRegular + horasPIE + horasSEP) : parseDecimalHours(row[idxHoras]);
+
         if (!contrato) {
           const contrato_id = `csv-${rbd}-${run.replace(/[^a-zA-Z0-9]/g, '')}`;
-          const nuevoContrato: Contrato = {
+          contrato = {
             id: contrato_id,
             funcionario_run: run,
             rbd,
-            calidad_juridica, 
-            funcion_principal: cargoRaw || func.cargo || (estamento === 'Docente' ? 'Docente de Aula' : 'Asistente'),
+            calidad_juridica,
+            funcion_principal: cargoRaw || func.cargo || 'Docente de Aula',
             estado,
             horas_totales: 0,
             legislacion_laboral
           };
-          contratos.push(nuevoContrato);
-          contrato = nuevoContrato;
-        } else {
-          // Consolidate funcion_principal: update if current is generic and new is specific
-          const currentFunc = (contrato.funcion_principal || '').trim().toLowerCase();
-          const isCurrentGeneric = currentFunc === '' || currentFunc === 'docente de aula' || currentFunc === 'docente' || currentFunc === 'asistente' || currentFunc === 'funcionario';
-          const newFunc = (cargoRaw || '').trim().toLowerCase();
-          const isNewSpecific = newFunc !== '' && newFunc !== 'docente de aula' && newFunc !== 'docente' && newFunc !== 'asistente' && newFunc !== 'funcionario';
-          
-          if (isCurrentGeneric && isNewSpecific) {
-            contrato.funcion_principal = cargoRaw;
-          }
+          contratosFallback.push(contrato);
         }
-        
-        // Aggregate hours
         contrato.horas_totales += totalRowHoras;
 
-        // Financiamiento aggregation logic
         const upsertFinanciamiento = (origen: OrigenFondo, hrs: number) => {
           if (hrs <= 0) return;
           const finId = `f-${contrato.id}-${origen.replace(/\s+/g, '')}`;
-          let financiamiento = financiamientos.find(f => f.id === finId);
-          if (financiamiento) {
-            financiamiento.horas += hrs;
-          } else {
-            financiamientos.push({
-              id: finId,
-              contrato_id: contrato.id,
-              origen_fondo: origen,
-              horas: hrs
-            });
-          }
+          let financiamiento = financiamientosFallback.find(f => f.id === finId);
+          if (financiamiento) financiamiento.horas += hrs;
+          else financiamientosFallback.push({ id: finId, contrato_id: contrato.id, origen_fondo: origen, horas: hrs });
         };
 
         if (hasDirectDotaciones) {
@@ -887,21 +1102,21 @@ export function parsearArchivoExcelOJson(
         } else if (totalRowHoras > 0) {
           let progKey = programa.toLowerCase();
           let origen: OrigenFondo = 'Subvención Regular';
-          
           if (progKey.includes('sep')) origen = 'SEP';
           else if (progKey.includes('pie')) origen = 'PIE';
-          else if (progKey.includes('reforzamiento')) origen = 'Reforzamiento';
-          else if (progKey.includes('retencion') || progKey.includes('retención')) origen = 'Pro-retención';
-          else if (progKey.includes('bicentenario')) origen = 'Liceos Bicentenarios';
-          else if (progKey) origen = 'Otro';
-
           upsertFinanciamiento(origen, totalRowHoras);
         }
       }
     }
   });
 
-  return { funcionarios, contratos, financiamientos, alertas, establecimientos };
+  return {
+    funcionarios: funcionariosFallback,
+    contratos: contratosFallback,
+    financiamientos: financiamientosFallback,
+    alertas: alertasFallback,
+    establecimientos: establecimientosFallback
+  };
 }
 
 export function parsearRemuneracionesCsv(csvContent: string): RegistroRemuneracion[] {
@@ -953,7 +1168,6 @@ export function parsearRemuneracionesCsv(csvContent: string): RegistroRemuneraci
     result.push({
       id: `rem-${run.replace(/[^a-zA-Z0-9]/g, '')}-${idx}`,
       funcionario_run: run,
-      nombre_esta: row.NombreEsta || row.nombre_esta || row.Establecimiento || row.establecimiento || undefined,
       horas_pagadas,
       total_haberes,
       mes_pago,
@@ -969,5 +1183,87 @@ export function parsearRemuneracionesCsv(csvContent: string): RegistroRemuneraci
   });
 
   return result;
+}
+
+export function descargarPlantillaExcel(tipo: 1 | 2 | 3): void {
+  const wb = XLSX.utils.book_new();
+  
+  if (tipo === 1) {
+    const dataEst = [
+      ['RBD', 'Nombre', 'IVM', 'Comuna', 'Regimen'],
+      ['10201', 'Liceo Polivalente Manuel Bulnes', 85.4, 'Bulnes', 'JEC'],
+      ['10202', 'Escuela E-250 San Ignacio', 92.1, 'San Ignacio', 'JEC']
+    ];
+    const wsEst = XLSX.utils.aoa_to_sheet(dataEst);
+    XLSX.utils.book_append_sheet(wb, wsEst, 'Establecimientos');
+
+    const dataPlanes = [
+      ['Nivel', 'Regimen', 'Horas Obligatorias', 'Horas PIE'],
+      ['1° a 4° Básico', 'JEC', 38, 10],
+      ['5° a 8° Básico', 'JEC', 38, 10]
+    ];
+    const wsPlanes = XLSX.utils.aoa_to_sheet(dataPlanes);
+    XLSX.utils.book_append_sheet(wb, wsPlanes, 'Planes de Estudio');
+
+    const dataCursos = [
+      ['RBD', 'Nombre Curso', 'Nivel', 'RUN Profesor Jefe'],
+      ['10202', '3° Básico A', '1° a 4° Básico', '15432987-K']
+    ];
+    const wsCursos = XLSX.utils.aoa_to_sheet(dataCursos);
+    XLSX.utils.book_append_sheet(wb, wsCursos, 'Cursos');
+
+    const dataAsig = [
+      ['RBD', 'Nombre Curso', 'Asignatura', 'Horas Sugeridas'],
+      ['10202', '3° Básico A', 'Lenguaje y Comunicación', 8],
+      ['10202', '3° Básico A', 'Matemática', 8]
+    ];
+    const wsAsig = XLSX.utils.aoa_to_sheet(dataAsig);
+    XLSX.utils.book_append_sheet(wb, wsAsig, 'Asignaturas');
+
+    XLSX.writeFile(wb, 'Planilla_1_Maestros_Configuracion.xlsx');
+  } else if (tipo === 2) {
+    const dataFunc = [
+      ['RUN', 'Nombre', 'Email', 'Telefono', 'Genero', 'Fecha Nacimiento', 'Titulo', 'Estamento'],
+      ['12345678-9', 'María Loreto González Soto', 'mgonzalez@slepvallediguillin.cl', '999999999', 'Femenino', '1985-04-12', 'Profesor de Básica', 'Docente'],
+      ['15432987-K', 'Carlos Andrés Muñoz Riquelme', 'cmunoz@slepvallediguillin.cl', '988888888', 'Masculino', '1981-08-25', 'Licenciado en Educación', 'Docente']
+    ];
+    const wsFunc = XLSX.utils.aoa_to_sheet(dataFunc);
+    XLSX.utils.book_append_sheet(wb, wsFunc, 'Funcionarios');
+
+    const dataCont = [
+      ['RUN', 'RBD', 'Función Principal', 'Calidad Jurídica', 'Horas Totales', 'Horas Aula', 'Horas Directivas', 'Horas UTP', 'Origen Fondo'],
+      ['12345678-9', '10201', 'Docente de Aula', 'Titular', 44, 30, 0, 0, 'SEP'],
+      ['15432987-K', '10202', 'Docente de Aula', 'A contrata', 38, 30, 8, 0, 'PIE']
+    ];
+    const wsCont = XLSX.utils.aoa_to_sheet(dataCont);
+    XLSX.utils.book_append_sheet(wb, wsCont, 'Contratos');
+
+    const dataCarga = [
+      ['RUN', 'RBD', 'Curso', 'Asignatura', 'Horas Asignadas'],
+      ['12345678-9', '10201', '7° Básico A', 'Lenguaje y Comunicación', 6],
+      ['15432987-K', '10202', '3° Básico A', 'Matemática', 8]
+    ];
+    const wsCarga = XLSX.utils.aoa_to_sheet(dataCarga);
+    XLSX.utils.book_append_sheet(wb, wsCarga, 'Carga Horaria');
+
+    XLSX.writeFile(wb, 'Planilla_2_Dotacion_Contratos.xlsx');
+  } else if (tipo === 3) {
+    const dataRem = [
+      ['RUN', 'Mes de Pago', 'Días Trabajados', 'Inasistencias', 'Días Licencia', 'Total Haberes', 'Aplica Ley 20903'],
+      ['12345678-9', '2026-06-01', 30, 0, 0, 1850000, 'Sí'],
+      ['15432987-K', '2026-06-01', 30, 0, 0, 1500000, 'No']
+    ];
+    const wsRem = XLSX.utils.aoa_to_sheet(dataRem);
+    XLSX.utils.book_append_sheet(wb, wsRem, 'Remuneraciones');
+
+    const dataReemp = [
+      ['RUN Titular', 'Fecha Inicio Licencia', 'Fecha Término', 'RUN Reemplazante', 'Horas Reemplazo', 'Origen Fondo Reemplazo'],
+      ['16789012-3', '2026-06-05', '2026-06-20', '10876543-2', 44, 'PIE']
+    ];
+    const wsReemp = XLSX.utils.aoa_to_sheet(dataReemp);
+    XLSX.utils.book_append_sheet(wb, wsReemp, 'Licencias y Reemplazos');
+
+    XLSX.writeFile(wb, 'Planilla_3_Remuneraciones_Reemplazos.xlsx');
+  }
 }
 

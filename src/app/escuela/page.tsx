@@ -260,6 +260,8 @@ export default function EscuelaDashboard() {
       return;
     }
     const cleanRun = normalizarRun(reemplazoRun);
+    const titularFunc = funcionarios.find(f => f.run === tarea.funcionario_titular_run);
+    const titularNombre = titularFunc ? titularFunc.nombre : tarea.funcionario_titular_run;
 
     // 1. Check if replacement funcionario profile exists; if not, create a default profile
     const existingFunc = funcionarios.find(f => f.run === cleanRun);
@@ -273,7 +275,7 @@ export default function EscuelaDashboard() {
         run: cleanRun,
         nombre: nomPlaceholder.toUpperCase(),
         estamento: 'Docente',
-        cargo: `Reemplazo de ${tarea.funcionario_titular_nombre}`
+        cargo: `Reemplazo de ${titularNombre}`
       });
     }
 
@@ -284,7 +286,7 @@ export default function EscuelaDashboard() {
       funcionario_run: cleanRun,
       rbd: selectedRbd,
       calidad_juridica: 'A contrata',
-      funcion_principal: `Reemplazo Docente (${tarea.funcionario_titular_nombre})`,
+      funcion_principal: `Reemplazo Docente (${titularNombre})`,
       estado: 'Pendiente_Aprobacion',
       horas_totales: tarea.horas_a_cubrir,
       vinculo_titular_id: `c-${selectedRbd}-${tarea.funcionario_titular_run.replace(/[^a-zA-Z0-9]/g, '')}`
@@ -1482,7 +1484,7 @@ export default function EscuelaDashboard() {
                                   className="underline hover:text-slep-blue text-left font-bold"
                                   title="Ver Ficha Oficial"
                                 >
-                                  {t.funcionario_titular_nombre}
+                                  {funcionarios.find(f => f.run === t.funcionario_titular_run)?.nombre || t.funcionario_titular_run}
                                 </button>
                               </p>
                               <p className="text-[10px] text-slate-500 mt-0.5">RUN: {t.funcionario_titular_run} | Horas a Cubrir: <span className="font-bold text-slep-blue">{t.horas_a_cubrir} hrs</span></p>
@@ -1501,7 +1503,7 @@ export default function EscuelaDashboard() {
                                 return (
                                   <div className="bg-emerald-100 text-emerald-800 border border-emerald-300 rounded px-3 py-1.5 font-bold flex items-center gap-1.5">
                                     <span>✓ Cubierto:</span>
-                                    <span>{reempMatch.reemplazo_nombre} (Ingreso Confirmado)</span>
+                                    <span>{funcionarios.find(f => f.run === reempMatch.reemplazo_run)?.nombre || reempMatch.reemplazo_run} (Ingreso Confirmado)</span>
                                   </div>
                                 );
                               }
@@ -1588,7 +1590,7 @@ export default function EscuelaDashboard() {
                                     className="underline hover:text-slep-blue text-left font-bold"
                                     title="Ver Ficha Oficial"
                                   >
-                                    {r.reemplazo_nombre}
+                                    {funcionarios.find(f => f.run === r.reemplazo_run)?.nombre || r.reemplazo_run}
                                   </button>
                                 </p>
                                 <p className="text-[10px] text-slate-500 mt-0.5">
@@ -1847,7 +1849,7 @@ export default function EscuelaDashboard() {
 
                                       if (hasReplacement) {
                                         const rplFunc = hasReempContract ? funcionarios.find(func => func.run === hasReempContract.funcionario_run) : null;
-                                        const rplName = rplFunc ? rplFunc.nombre : (matchedReemp ? matchedReemp.reemplazo_nombre : hasReempContract?.funcionario_run || 'Asignado');
+                                        const rplName = rplFunc ? rplFunc.nombre : (matchedReemp ? (funcionarios.find(func => func.run === matchedReemp.reemplazo_run)?.nombre || matchedReemp.reemplazo_run) : hasReempContract?.funcionario_run || 'Asignado');
                                         const rplRun = hasReempContract ? hasReempContract.funcionario_run : (matchedReemp ? matchedReemp.reemplazo_run : '');
                                         return (
                                           <div className="text-slate-600 font-medium text-[10px] text-center">
@@ -2111,7 +2113,7 @@ export default function EscuelaDashboard() {
 
                                       if (hasReplacement) {
                                         const rplFunc = hasReempContract ? funcionarios.find(func => func.run === hasReempContract.funcionario_run) : null;
-                                        const rplName = rplFunc ? rplFunc.nombre : (matchedReemp ? matchedReemp.reemplazo_nombre : hasReempContract?.funcionario_run || 'Asignado');
+                                        const rplName = rplFunc ? rplFunc.nombre : (matchedReemp ? (funcionarios.find(func => func.run === matchedReemp.reemplazo_run)?.nombre || matchedReemp.reemplazo_run) : hasReempContract?.funcionario_run || 'Asignado');
                                         const rplRun = hasReempContract ? hasReempContract.funcionario_run : (matchedReemp ? matchedReemp.reemplazo_run : '');
                                         return (
                                           <div className="text-slate-600 font-medium text-[10px] text-center">

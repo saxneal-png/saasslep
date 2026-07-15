@@ -137,30 +137,30 @@ function generarEstablecimientosMock(): Establecimiento[] {
 }
 
 const FUNCIONARIOS_MOCK_INICIAL: Funcionario[] = [
-  { run: '12.345.678-9', nombre: 'María Loreto González Soto', email: 'mgonzalez@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
-  { run: '15.432.987-K', nombre: 'Carlos Andrés Muñoz Riquelme', email: 'cmunoz@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
-  { run: '16.789.012-3', nombre: 'Ana Luisa Parra Valenzuela', email: 'aparra@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente PIE' },
-  { run: '14.567.890-1', nombre: 'José Pedro Valdés Letelier', email: 'jvaldes@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Coordinador UTP' },
-  { run: '18.901.234-5', nombre: 'Daniela Paz Contreras Sepúlveda', email: 'dcontreras@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Psicóloga' },
-  { run: '10.876.543-2', nombre: 'Héctor Manuel Olivares Pinto', email: 'holivares@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
-  { run: '17.654.321-0', nombre: 'Verónica Andrea Torres Castro', email: 'vtorres@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Auxiliar de Servicios' },
+  { run: '12345678-9', nombre: 'María Loreto González Soto', email: 'mgonzalez@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
+  { run: '15432987-K', nombre: 'Carlos Andrés Muñoz Riquelme', email: 'cmunoz@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
+  { run: '16789012-3', nombre: 'Ana Luisa Parra Valenzuela', email: 'aparra@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente PIE' },
+  { run: '14567890-1', nombre: 'José Pedro Valdés Letelier', email: 'jvaldes@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Coordinador UTP' },
+  { run: '18901234-5', nombre: 'Daniela Paz Contreras Sepúlveda', email: 'dcontreras@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Psicóloga' },
+  { run: '10876543-2', nombre: 'Héctor Manuel Olivares Pinto', email: 'holivares@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Docente de Aula' },
+  { run: '17654321-0', nombre: 'Verónica Andrea Torres Castro', email: 'vtorres@slepvallediguillin.cl', estamento: 'Asistente de la Educación', cargo: 'Auxiliar de Servicios' },
   // Asesores
-  { run: '11.111.111-1', nombre: 'Asesor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Asesor UATP' },
-  { run: '22.222.222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Asesor UATP' },
+  { run: '11111111-1', nombre: 'Asesor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Asesor UATP' },
+  { run: '22222222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl', estamento: 'Docente', cargo: 'Asesor UATP' },
 ];
 
 const SUPERVISORES_INICIAL: Supervisor[] = [
-  { run: '11.111.111-1', nombre: 'Asesor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl' },
-  { run: '22.222.222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl' }
+  { run: '11111111-1', nombre: 'Asesor Técnico UATP Diguillín', email: 'supervisor1@slepvallediguillin.cl' },
+  { run: '22222222-2', nombre: 'Evaluadora Curricular SLEP', email: 'evaluadora2@slepvallediguillin.cl' }
 ];
 
 const CONTRATOS_MOCK_INICIAL: Contrato[] = [
-  { id: 'c1', funcionario_run: '12.345.678-9', rbd: '10201', calidad_juridica: 'Titular', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 44 },
-  { id: 'c2', funcionario_run: '15.432.987-K', rbd: '10202', calidad_juridica: 'A contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 38 },
-  { id: 'c3', funcionario_run: '16.789.012-3', rbd: '10202', calidad_juridica: 'Titular', funcion_principal: 'Docente PIE', estado: 'Licencia Médica', horas_totales: 44 },
-  { id: 'c4', funcionario_run: '10.876.543-2', rbd: '10202', calidad_juridica: 'A contrata', funcion_principal: 'Docente de Aula', estado: 'Reemplazo', horas_totales: 44, vinculo_titular_id: 'c3' },
-  { id: 'c5', funcionario_run: '15.432.987-K', rbd: '10201', calidad_juridica: 'A contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 10 },
-  { id: 'c6', funcionario_run: '17.654.321-0', rbd: '10204', calidad_juridica: 'Titular', funcion_principal: 'Auxiliar de Servicios', estado: 'Activo', horas_totales: 44 }
+  { id: 'c1', funcionario_run: '12345678-9', rbd: '10201', calidad_juridica: 'Titular', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 44 },
+  { id: 'c2', funcionario_run: '15432987-K', rbd: '10202', calidad_juridica: 'A contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 38 },
+  { id: 'c3', funcionario_run: '16789012-3', rbd: '10202', calidad_juridica: 'Titular', funcion_principal: 'Docente PIE', estado: 'Licencia Médica', horas_totales: 44 },
+  { id: 'c4', funcionario_run: '10876543-2', rbd: '10202', calidad_juridica: 'A contrata', funcion_principal: 'Docente de Aula', estado: 'Reemplazo', horas_totales: 44, vinculo_titular_id: 'c3' },
+  { id: 'c5', funcionario_run: '15432987-K', rbd: '10201', calidad_juridica: 'A contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 10 },
+  { id: 'c6', funcionario_run: '17654321-0', rbd: '10204', calidad_juridica: 'Titular', funcion_principal: 'Auxiliar de Servicios', estado: 'Activo', horas_totales: 44 }
 ];
 
 const FINANCIAMIENTOS_MOCK_INICIAL: FinanciamientoContrato[] = [
@@ -182,14 +182,14 @@ const ASIGNACIONES_MOCK_INICIAL: AsignacionAula[] = [
 ];
 
 const TUTELAS_INICIAL: ProfesionalEscuelaAsignada[] = [
-  { profesional_run: '11.111.111-1', establecimiento_rbd: '10202' },
-  { profesional_run: '11.111.111-1', establecimiento_rbd: '10204' },
+  { profesional_run: '11111111-1', establecimiento_rbd: '10202' },
+  { profesional_run: '11111111-1', establecimiento_rbd: '10204' },
 ];
 
 const ALERTAS_MOCK_INICIAL: AlertaConciliacion[] = [
   {
     id: 'al1',
-    run: '12.345.678-9',
+    run: '12345678-9',
     nombre_funcionario: 'María Loreto González Soto',
     rbd: '10201',
     tipo: 'descalce_horas',
@@ -200,7 +200,7 @@ const ALERTAS_MOCK_INICIAL: AlertaConciliacion[] = [
   },
   {
     id: 'al2',
-    run: '15.432.987-K',
+    run: '15432987-K',
     nombre_funcionario: 'Carlos Andrés Muñoz Riquelme',
     rbd: '10202',
     tipo: 'sobrecarga_horas',
@@ -1106,7 +1106,6 @@ export const api = {
       id: row.id,
       rbd: row.rbd,
       funcionario_titular_run: row.funcionario_titular_run,
-      funcionario_titular_nombre: row.nombre_titular,
       horas_a_cubrir: Number(row.horas_reemplazo),
       estado: row.estado,
       reemplazo_run: row.reemplazo_run || undefined
@@ -1118,7 +1117,6 @@ export const api = {
       id: tarea.id,
       rbd: tarea.rbd,
       funcionario_titular_run: tarea.funcionario_titular_run,
-      nombre_titular: tarea.funcionario_titular_nombre,
       horas_reemplazo: tarea.horas_a_cubrir,
       estado: tarea.estado,
       reemplazo_run: tarea.reemplazo_run || null,

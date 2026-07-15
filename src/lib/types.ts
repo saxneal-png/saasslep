@@ -133,10 +133,9 @@ export interface Supervisor {
 export interface RegistroRemuneracion {
   id: string;
   funcionario_run: string;
-  nombre_esta?: string;
   horas_pagadas: number;
   total_haberes: number;
-  mes_pago: string; // e.g. "2026-06"
+  mes_pago: string; // YYYY-MM-DD representing first day of month (date)
   grupo_estamento: GrupoEstamento;
   dias_trabajados?: number;
   dias_licencia_medica?: number;
@@ -151,7 +150,6 @@ export interface TareaReemplazo {
   id: string;
   rbd: string;
   funcionario_titular_run: string;
-  funcionario_titular_nombre: string;
   horas_a_cubrir: number;
   estado: 'Pendiente' | 'Asignado';
   reemplazo_run?: string;
@@ -221,11 +219,10 @@ export interface ReemplazoDetalle {
   id: string;
   contrato_titular_id: string;
   reemplazo_run: string;
-  reemplazo_nombre: string;
   rbd: string;
   horas: number;
-  fecha_inicio: string;
-  fecha_termino: string;
+  fecha_inicio: string; // YYYY-MM-DD
+  fecha_termino: string; // YYYY-MM-DD
   validado_por_director?: boolean;
   fecha_ingreso_real?: string;
   origen_fondo?: OrigenFondo;

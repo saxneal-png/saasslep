@@ -289,8 +289,8 @@ export default function ProfesionalDashboard() {
       const buffer = event.target?.result as ArrayBuffer;
       try {
         const controlPrevioMock = [
-          { run: '12.345.678-9', funcion: 'Docente de Aula', horas: 44 },
-          { run: '15.432.987-K', funcion: 'Director de Escuela', horas: 38 }
+          { run: '12345678-9', funcion: 'Docente de Aula', horas: 44 },
+          { run: '15432987-K', funcion: 'Director de Escuela', horas: 38 }
         ];
 
         const schoolMap: Record<string, string> = {};
