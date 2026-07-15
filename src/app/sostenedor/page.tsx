@@ -660,8 +660,11 @@ export default function SostenedorDashboard() {
           await api.upsertComunasBulk(uniqueComunas);
         }
 
-        // Save directly to DB
-        await api.upsertEstablecimientosBulk(newEsts);
+        // Deduplicate by RBD to avoid duplicate conflicts in bulk upsert
+        const uniqueEsts = Array.from(new Map(newEsts.map(e => [e.rbd, e])).values());
+
+        // Insert communes first (already extracted) then establishments
+        await api.upsertEstablecimientosBulk(uniqueEsts);
 
         // Refresh state
         const updated = await api.getEstablecimientos();
