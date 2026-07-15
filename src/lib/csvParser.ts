@@ -587,7 +587,7 @@ export function parsearArchivoExcelOJson(
 
       if (normName === 'establecimientos') {
         const idxRbd = getIndex(headers, ['rbd']);
-        const idxNombre = getIndex(headers, ['nombre', 'establecimiento', 'escuela']);
+        const idxNombre = getIndex(headers, ['nombre', 'establecimiento', 'establecimientos', 'escuela']);
         const idxIvm = getIndex(headers, ['indicevulnerabilidad', 'ivm', 'vulnerabilidad']);
         const idxComuna = getIndex(headers, ['comuna']);
         const idxRegimen = getIndex(headers, ['regimen', 'tipo']);
