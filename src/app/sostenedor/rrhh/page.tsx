@@ -1408,7 +1408,7 @@ export default function RRHHPage() {
                                 </td>
                                 <td className="p-3">
                                   <p className="font-semibold text-slate-700">RBD {c.rbd}</p>
-                                  <p className="text-[10px] text-slate-500 mt-0.5">{esc ? esc.nombre : 'Colegio'}</p>
+                                  <p className="text-[10px] text-slate-500 mt-0.5">{c.establecimientos?.nombre || esc?.nombre || 'Colegio'}</p>
                                 </td>
                                 <td className="p-3 font-medium text-slate-600">
                                   <div className="space-y-1">
@@ -2049,7 +2049,7 @@ export default function RRHHPage() {
                             <div className="flex justify-between items-start">
                               <div>
                                 <p className="font-bold text-slate-800 text-sm">
-                                  {c.rbd === '99999' ? '🏛️ Nivel Central (SLEP)' : `🏫 Establecimiento: ${esc ? esc.nombre : `RBD ${c.rbd}`}`}
+                                  {c.rbd === '99999' ? '🏛️ Nivel Central (SLEP)' : `🏫 Establecimiento: ${c.establecimientos?.nombre || esc?.nombre || `RBD ${c.rbd}`}`}
                                 </p>
                                 <p className="text-[10px] text-slate-400 mt-0.5">
                                   Calidad: {c.calidad_juridica} • Función: {c.funcion_principal} • Estado: <span className={`font-bold uppercase ${

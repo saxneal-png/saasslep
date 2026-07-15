@@ -485,7 +485,7 @@ export const api = {
 
   getContratos: async (rbd?: string): Promise<Contrato[]> => {
     try {
-      let query = supabase.from('contratos').select('*, funcionarios(*)');
+      let query = supabase.from('contratos').select('*, establecimientos(*), funcionarios(*)');
       if (rbd) {
         query = query.eq('rbd', rbd);
       }
