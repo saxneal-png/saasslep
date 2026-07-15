@@ -38,6 +38,7 @@ export interface Contrato {
   rbd: string;
   calidad_juridica: CalidadJuridica;
   funcion_principal: string;
+  funcionarios?: any; // The joined official data from Supabase
   estado: EstadoContrato;
   horas_totales: number;
   vinculo_titular_id?: string | null; // For replacements to link to titular contracts

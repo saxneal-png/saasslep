@@ -597,7 +597,7 @@ export default function RRHHPage() {
     const esP01 = f.grupo_estamento === 'P01_Administrativo';
 
     // Filter by school/RBD: only show funcionarios with at least one contract in the selected school
-    const matchesRbd = filterRbd === 'all' || contratos.some(c => c.funcionario_run === f.run && c.rbd === filterRbd);
+    const matchesRbd = filterRbd === 'all' || contratos.some(c => c.funcionario_run === f.run && String(c.rbd) === String(filterRbd));
 
     if (!matchesRbd) return false;
     if (filterEstamento === 'P01') return matchesSearch && esP01;
@@ -1111,7 +1111,7 @@ export default function RRHHPage() {
                                       );
                                     }
                                   } else if (cont.estado === 'Activo') {
-                                    const esc = escuelas.find(e => e.rbd === cont.rbd);
+                                    const esc = escuelas.find(e => String(e.rbd) === String(cont.rbd));
                                     const asigs = dbLocal.asignacionesAula.filter(a => a.contrato_id === cont.id);
                                     const leyCalculo = esc ? validarCargaDocente(cont, esc, asigs, []) : null;
                                     if (leyCalculo && !leyCalculo.cumpleLey20903) {
@@ -1389,11 +1389,11 @@ export default function RRHHPage() {
                         <tbody className="divide-y divide-slate-100">
                           {activeLicencias.map(c => {
                             const f = funcionarios.find(func => func.run === c.funcionario_run);
-                            const esc = escuelas.find(e => e.rbd === c.rbd);
+                            const esc = escuelas.find(e => String(e.rbd) === String(c.rbd));
                             const reemps = reemplazosList.filter(r => r.contrato_titular_id === c.id);
                             const totalCubierto = reemps.reduce((acc, curr) => acc + curr.horas, 0);
                             const cubiertoCompletamente = totalCubierto >= c.horas_totales;
-                            const task = tareas.find(t => t.funcionario_titular_run === c.funcionario_run && t.rbd === c.rbd);
+                            const task = tareas.find(t => t.funcionario_titular_run === c.funcionario_run && String(t.rbd) === String(c.rbd));
 
                             return (
                               <tr key={c.id} className="hover:bg-slate-50/50 align-top">
@@ -2043,7 +2043,7 @@ export default function RRHHPage() {
                       {relatedConts.map(c => {
                         const asigs = dbLocal.asignacionesAula.filter(a => a.contrato_id === c.id);
                         const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
-                        const esc = escuelas.find(e => e.rbd === c.rbd);
+                        const esc = escuelas.find(e => String(e.rbd) === String(c.rbd));
                         return (
                           <div key={c.id} className="border border-slate-200 rounded-xl p-4 space-y-3 bg-white hover:shadow-sm transition-shadow">
                             <div className="flex justify-between items-start">

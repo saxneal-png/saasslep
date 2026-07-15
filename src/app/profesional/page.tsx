@@ -755,7 +755,7 @@ export default function ProfesionalDashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredEsts.map(e => {
-                    const escConts = contratos.filter(c => c.rbd === e.rbd);
+                    const escConts = contratos.filter(c => String(c.rbd) === String(e.rbd));
                     const escContsIds = escConts.map(c => c.id);
                     const escFins = financiamientos.filter(f => escContsIds.includes(f.contrato_id));
                     
@@ -777,7 +777,7 @@ export default function ProfesionalDashboard() {
                     const regularHrs = escFins.filter(f => f.origen_fondo === 'Subvención Regular').reduce((sum, f) => sum + f.horas, 0);
                     const sepHrs = escFins.filter(f => f.origen_fondo === 'SEP').reduce((sum, f) => sum + f.horas, 0);
                     const pieHrs = escFins.filter(f => f.origen_fondo === 'PIE').reduce((sum, f) => sum + f.horas, 0);
-                    const activeAlts = alertas.filter(a => a.rbd === e.rbd && !a.resuelta).length;
+                    const activeAlts = alertas.filter(a => String(a.rbd) === String(e.rbd) && !a.resuelta).length;
 
                     return (
                       <tr key={e.rbd} className="hover:bg-slate-50">
@@ -869,7 +869,7 @@ export default function ProfesionalDashboard() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredEsts.map(e => {
-                      const estAlts = alertas.filter(a => a.rbd === e.rbd && !a.resuelta);
+                      const estAlts = alertas.filter(a => String(a.rbd) === String(e.rbd) && !a.resuelta);
                       return (
                         <tr key={e.rbd} className="hover:bg-slate-50">
                           <td className="p-3 pl-6 font-mono font-medium text-slate-500">{e.rbd}</td>
@@ -1041,7 +1041,7 @@ export default function ProfesionalDashboard() {
             </div>
 
             {selectedDotacionRbd ? (() => {
-              const schoolConts = contratos.filter(c => c.rbd === selectedDotacionRbd);
+              const schoolConts = contratos.filter(c => String(c.rbd) === String(selectedDotacionRbd));
               
               return (
                 <div className="space-y-4">
