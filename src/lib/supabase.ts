@@ -624,6 +624,21 @@ export const api = {
     contratos: Contrato[], 
     financiamientos: FinanciamientoContrato[]
   ): Promise<void> => {
+    // DB columns of the contratos table (excluding joined virtual fields)
+    const CONTRATO_DB_COLS = [
+      'id', 'funcionario_run', 'rbd', 'calidad_juridica', 'funcion_principal', 'estado',
+      'horas_totales', 'vinculo_titular_id', 'dias_trabajados', 'dias_licencia_medica',
+      'inasistencias', 'legislacion_laboral', 'horas_directivas', 'horas_aula',
+      'horas_tecnico_pedagogicas', 'fecha_inicio_licencia', 'fecha_termino_licencia'
+    ];
+    const sanitize = (c: Contrato): any => {
+      const out: any = {};
+      for (const col of CONTRATO_DB_COLS) {
+        if ((c as any)[col] !== undefined) out[col] = (c as any)[col];
+      }
+      return out;
+    };
+
     const withTimeout = <T>(p: Promise<T>, ms = 6000): Promise<T> => {
       return Promise.race([
         p,
@@ -633,7 +648,7 @@ export const api = {
 
     const batchSize = 100;
     for (let i = 0; i < contratos.length; i += batchSize) {
-      const batch = contratos.slice(i, i + batchSize);
+      const batch = contratos.slice(i, i + batchSize).map(sanitize);
       const { error } = await withTimeout<any>(Promise.resolve(supabase.from('contratos').upsert(batch)));
       if (error) {
         console.error("❌ ERROR PROFUNDO EN SUPABASE BULK CONTRATOS:", error.message, JSON.stringify(error));

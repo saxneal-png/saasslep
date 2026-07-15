@@ -1072,9 +1072,22 @@ export default function RRHHPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filteredFuncionarios.map(f => {
-                        const cont = contratos.find(c => c.funcionario_run === f.run);
+                        // Normalize RUN for matching (handle format differences)
+                        const normalRun = normalizarRun(f.run);
+                        // Get ALL contracts for this teacher (a teacher can have multiple RBDs)
+                        const funcConts = contratos.filter(c => normalizarRun(c.funcionario_run) === normalRun);
+                        // Primary contract for display (first active, or just first)
+                        const cont = funcConts.find(c => c.estado === 'Activo') || funcConts[0];
+                        // Total hours across all contracts
+                        const totalHoras = funcConts.reduce((sum, c) => sum + (Number(c.horas_totales) || 0), 0);
+                        // Resolve school name: prefer joined Supabase data, fallback to local lookup
+                        const escuelaNombre = cont
+                          ? (cont.establecimientos?.nombre
+                            || escuelas.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(cont.rbd)))?.nombre
+                            || null)
+                          : null;
                         const isP01 = f.grupo_estamento === 'P01_Administrativo';
-                        const haberEst = isP01 ? calcularHaberBaseEUS(f.grado_eus || 12) : (cont ? cont.horas_totales * 18500 * 4 : 0);
+                        const haberEst = isP01 ? calcularHaberBaseEUS(f.grado_eus || 12) : (totalHoras > 0 ? totalHoras * 18500 * 4 : 0);
 
                         return (
                           <tr key={f.run} className="hover:bg-slate-50">
@@ -1153,11 +1166,19 @@ export default function RRHHPage() {
                               {isP01 ? (
                                 <span>🏛️ Nivel Central</span>
                               ) : (
-                                <span>🏫 RBD {cont?.rbd || 'Desconocido'}</span>
+                                <div>
+                                  {escuelaNombre
+                                    ? <span className="font-semibold">{escuelaNombre}</span>
+                                    : <span className="text-slate-400 italic">Sin establecimiento</span>}
+                                  {cont && <p className="text-[10px] text-slate-400 font-mono">RBD {cont.rbd}</p>}
+                                  {funcConts.length > 1 && (
+                                    <p className="text-[9px] text-blue-500">(+{funcConts.length - 1} más)</p>
+                                  )}
+                                </div>
                               )}
                             </td>
                             <td className="p-3 text-center font-bold text-slate-800">
-                              {cont ? `${cont.horas_totales} hrs` : '--'}
+                              {funcConts.length > 0 ? `${totalHoras} hrs` : '--'}
                             </td>
                             <td className="p-3 text-right font-bold font-mono text-slate-700">
                               ${haberEst.toLocaleString('es-CL')}
