@@ -20,6 +20,17 @@ export function normalizarRun(runRaw: any): string {
   return `${num}-${dv}`;
 }
 
+export function normalizarRbd(rbdRaw: any): string {
+  if (rbdRaw === undefined || rbdRaw === null) return '';
+  const clean = String(rbdRaw).trim();
+  if (!clean) return '';
+  // Strip leading zeros for numeric RBDs
+  if (/^\d+$/.test(clean)) {
+    return String(parseInt(clean, 10));
+  }
+  return clean;
+}
+
 // Normalization function for dates to ISO YYYY-MM-DD format
 export function normalizarFecha(val: any): string {
   if (!val) return '';
@@ -244,7 +255,7 @@ export function parsearNominaCsv(
       nombre = limpiarCaracteresCorruptos(`${nom} ${pat} ${mat}`.replace(/\s+/g, ' ').trim()) || 'SIN NOMBRE REGISTRADO';
     }
 
-    const rbd = String(row.RBD || row.rbd || rbdContext).trim();
+    const rbd = normalizarRbd(row.RBD || row.rbd || rbdContext);
     
     // Quality mapping logic: map to expanded CalidadJuridica
     const rawCal = String(row.CalidadJuridica || row.calidad_juridica || row.CALIDAD_JURIDICA || 'A contrata').trim();
@@ -621,7 +632,7 @@ export function parsearArchivoExcelOJson(
     for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
       const row = rawRows[i];
       if (!row) continue;
-      const rbd = String(row[idxRbd] ?? '').trim();
+      const rbd = normalizarRbd(row[idxRbd]);
       if (!rbd) continue;
       const establecimientos_arr = establecimientos as Establecimiento[];
       establecimientos_arr.push({
@@ -712,7 +723,7 @@ export function parsearArchivoExcelOJson(
         for (let i = startRow; i < rawRows.length; i++) {
           const row = rawRows[i];
           if (!row || !row[idxRbd]) continue;
-          const rbd = String(row[idxRbd]).trim();
+          const rbd = normalizarRbd(row[idxRbd]);
           if (!rbd) continue;
 
           establecimientos.push({
@@ -756,7 +767,7 @@ export function parsearArchivoExcelOJson(
         for (let i = startRow; i < rawRows.length; i++) {
           const row = rawRows[i];
           if (!row || !row[idxNombre]) continue;
-          const rbd = String(row[idxRbd] || rbdContext).trim();
+          const rbd = normalizarRbd(row[idxRbd] || rbdContext);
           const nombre = String(row[idxNombre]).trim();
           if (!nombre) continue;
 
@@ -779,7 +790,7 @@ export function parsearArchivoExcelOJson(
         for (let i = startRow; i < rawRows.length; i++) {
           const row = rawRows[i];
           if (!row || !row[idxNombre]) continue;
-          const rbd = String(row[idxRbd] || rbdContext).trim();
+          const rbd = normalizarRbd(row[idxRbd] || rbdContext);
           const cursoNombre = String(row[idxCurso]).trim();
           const nombre = String(row[idxNombre]).trim();
           if (!nombre) continue;
@@ -835,7 +846,7 @@ export function parsearArchivoExcelOJson(
             nombreCompleto = 'SIN NOMBRE REGISTRADO';
           }
 
-          const rbd = idxRbd !== -1 ? String(row[idxRbd]).trim() : rbdContext;
+          const rbd = idxRbd !== -1 ? normalizarRbd(row[idxRbd]) : rbdContext;
           const estNombre = idxEstablecimiento !== -1 ? String(row[idxEstablecimiento]).trim() : '';
           
           const cargoRaw = idxFuncion !== -1 ? String(row[idxFuncion]).trim() : '';
@@ -1174,7 +1185,7 @@ export function parsearArchivoExcelOJson(
       const programa = idxProg !== -1 ? String(row[idxProg] || '').trim() : '';
       const comunaRaw = idxComuna !== -1 ? String(row[idxComuna] || '').trim() : '';
       const centroCosto = idxCentroCosto !== -1 ? String(row[idxCentroCosto] || '').trim() : '';
-      const rbdVal = idxRbd !== -1 ? String(row[idxRbd] || '').trim() : '';
+      const rbdVal = idxRbd !== -1 ? normalizarRbd(row[idxRbd]) : '';
       const tipoContrato = idxTipoContrato !== -1 ? String(row[idxTipoContrato] || '').trim() : '';
 
       let rbd = rbdVal || '';
