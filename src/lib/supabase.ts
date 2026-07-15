@@ -476,25 +476,30 @@ export const api = {
 
   getFuncionarios: async (): Promise<Funcionario[]> => {
     try {
-      let allData: Funcionario[] = [];
-      let from = 0;
-      let to = 999;
-      let hasMore = true;
+      // 1. Get exact total count first
+      const { count, error: countErr } = await supabase
+        .from('funcionarios')
+        .select('*', { count: 'exact', head: true });
 
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('funcionarios')
-          .select('*')
-          .range(from, to);
+      if (countErr) return handleFallback(countErr, dbLocal.funcionarios, 'funcionarios');
+      const total = count || 0;
+      if (total === 0) return [];
 
-        if (error) return handleFallback(error, dbLocal.funcionarios, 'funcionarios');
-        if (data && data.length > 0) {
-          allData.push(...data);
-          from += 1000;
-          to += 1000;
-        } else {
-          hasMore = false;
-        }
+      // 2. Fetch all ranges concurrently
+      const promises = [];
+      const CHUNK_SIZE = 1000;
+      for (let from = 0; from < total; from += CHUNK_SIZE) {
+        const to = from + CHUNK_SIZE - 1;
+        promises.push(
+          supabase.from('funcionarios').select('*').range(from, to)
+        );
+      }
+
+      const results = await Promise.all(promises);
+      const allData: Funcionario[] = [];
+      for (const res of results) {
+        if (res.error) return handleFallback(res.error, dbLocal.funcionarios, 'funcionarios');
+        if (res.data) allData.push(...res.data);
       }
       return allData;
     } catch (err) {
@@ -504,12 +509,26 @@ export const api = {
 
   getContratos: async (rbd?: string): Promise<Contrato[]> => {
     try {
-      let allData: Contrato[] = [];
-      let from = 0;
-      let to = 999;
-      let hasMore = true;
+      // 1. Get total count filtered by RBD if present
+      let countQuery = supabase.from('contratos').select('*', { count: 'exact', head: true });
+      if (rbd) {
+        const cleanRbd = rbd.trim();
+        const normRbd = normalizarRbd(cleanRbd);
+        const zeroPadded = cleanRbd.padStart(5, '0');
+        const matches = Array.from(new Set([cleanRbd, normRbd, zeroPadded])).filter(Boolean);
+        countQuery = countQuery.or(matches.map(m => `rbd.eq.${m}`).join(','));
+      }
 
-      while (hasMore) {
+      const { count, error: countErr } = await countQuery;
+      if (countErr) throw countErr;
+      const total = count || 0;
+      if (total === 0) return [];
+
+      // 2. Fetch all ranges concurrently
+      const promises = [];
+      const CHUNK_SIZE = 1000;
+      for (let from = 0; from < total; from += CHUNK_SIZE) {
+        const to = from + CHUNK_SIZE - 1;
         let query = supabase.from('contratos').select('*').range(from, to);
         if (rbd) {
           const cleanRbd = rbd.trim();
@@ -518,17 +537,14 @@ export const api = {
           const matches = Array.from(new Set([cleanRbd, normRbd, zeroPadded])).filter(Boolean);
           query = query.or(matches.map(m => `rbd.eq.${m}`).join(','));
         }
-        
-        const { data, error } = await query;
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          allData.push(...data);
-          from += 1000;
-          to += 1000;
-        } else {
-          hasMore = false;
-        }
+        promises.push(query);
+      }
+
+      const results = await Promise.all(promises);
+      const allData: Contrato[] = [];
+      for (const res of results) {
+        if (res.error) throw res.error;
+        if (res.data) allData.push(...res.data);
       }
       return allData;
     } catch (error) {
