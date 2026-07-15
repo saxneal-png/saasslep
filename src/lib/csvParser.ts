@@ -567,7 +567,7 @@ export function parsearArchivoExcelOJson(
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawRows = XLSX.utils.sheet_to_json<any[]>(firstSheet, { header: 1, defval: '' });
     // Find header row (first row with a column containing 'rbd')
-    let headerRowIdx = 0;
+    let headerRowIdx = -1;
     for (let i = 0; i < Math.min(rawRows.length, 12); i++) {
       const row = rawRows[i];
       if (row && Array.isArray(row)) {
@@ -576,6 +576,15 @@ export function parsearArchivoExcelOJson(
           return val === 'rbd' || val.includes('rbd');
         });
         if (hasRbd) {
+          headerRowIdx = i;
+          break;
+        }
+      }
+    }
+    if (headerRowIdx === -1) {
+      headerRowIdx = 0;
+      for (let i = 0; i < Math.min(rawRows.length, 8); i++) {
+        if (rawRows[i] && rawRows[i].filter((c: any) => String(c || '').trim() !== '').length > 1) {
           headerRowIdx = i;
           break;
         }

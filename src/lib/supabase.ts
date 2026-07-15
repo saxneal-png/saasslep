@@ -406,7 +406,7 @@ export const api = {
 
   upsertEstablecimiento: async (est: Establecimiento): Promise<void> => {
     try {
-      const { error } = await supabase.from('establecimientos').upsert(est, { onConflict: 'rbd' });
+      const { error } = await supabase.from('establecimientos').upsert(est);
       if (error) throw error;
     } catch (error) {
       console.warn("⚠️ Error en Supabase, guardando establecimiento en local:", error);
@@ -423,7 +423,7 @@ export const api = {
 
   upsertEstablecimientosBulk: async (establecimientos: Establecimiento[]): Promise<void> => {
     try {
-      const { error } = await supabase.from('establecimientos').upsert(establecimientos, { onConflict: 'rbd' });
+      const { error } = await supabase.from('establecimientos').upsert(establecimientos);
       if (error) throw error;
     } catch (error: any) {
       console.error("❌ ERROR PROFUNDO EN SUPABASE BULK ESTABLECIMIENTOS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
@@ -443,7 +443,7 @@ export const api = {
   upsertComunasBulk: async (comunas: string[]): Promise<void> => {
     const payload = comunas.map(c => ({ nombre: c }));
     try {
-      const { error } = await supabase.from('comunas').upsert(payload, { onConflict: 'nombre' });
+      const { error } = await supabase.from('comunas').upsert(payload);
       if (error) throw error;
     } catch (error: any) {
       console.error("❌ ERROR PROFUNDO EN SUPABASE BULK COMUNAS:", error?.message || error, "\nDetalle completo:", JSON.stringify(error || {}, null, 2));
