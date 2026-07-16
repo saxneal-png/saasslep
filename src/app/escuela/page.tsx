@@ -4438,9 +4438,9 @@ export default function EscuelaDashboard() {
                         <h4 className="font-bold text-slate-800 flex items-center gap-1">
                           ⚖️ Validador de Proporcionalidad Docente (Primer Ciclo Básico)
                         </h4>
-                        {colegio && colegio.ivm > 80 ? (
+                        {(colegio && colegio.ivm > 80) || (editingCurso && (editingCurso.concentracion_prioritarios || 0) >= 80) ? (
                           <span className="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-[9px] uppercase border border-amber-250 animate-pulse">
-                            Excepción 60/40 Activa (IVM {colegio.ivm}%) 🌟
+                            Excepción 60/40 Activa {(editingCurso && (editingCurso.concentracion_prioritarios || 0) >= 80) ? `(Concentración ${editingCurso.concentracion_prioritarios}%)` : `(IVM ${colegio?.ivm}%)`} 🌟
                           </span>
                         ) : (
                           <span className="bg-slate-200 text-slate-650 font-bold px-2 py-0.5 rounded text-[9px]">

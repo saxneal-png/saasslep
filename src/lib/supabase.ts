@@ -382,7 +382,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 function handleFallback<T>(error: any, fallbackData: T, tableName: string): T {
   console.warn(`⚠️ Error al consultar la tabla "${tableName}" en Supabase. Usando fallback local. Detalle:`, error.message || error);
   return fallbackData;
-}
+}let detectedCursoConcentracionCol: string | null = null;
 
 export const api = {
   getEstablecimientos: async (): Promise<Establecimiento[]> => {
@@ -1011,6 +1011,16 @@ export const api = {
   getCursosDinamicos: async (rbd: string): Promise<CursoDinamico[]> => {
     const { data, error } = await supabase.from('cursos_dinamicos').select('*').eq('rbd', rbd);
     if (error) return handleFallback(error, dbLocal.cursosDinamicos.filter(c => c.rbd === rbd), 'cursos_dinamicos');
+    
+    // Detect column name format for prioritarios concentration in the live DB instance
+    if (data && data.length > 0) {
+      if ('concentracion_prioritarios' in data[0]) {
+        detectedCursoConcentracionCol = 'concentracion_prioritarios';
+      } else if ('concentracionPrioritarios' in data[0]) {
+        detectedCursoConcentracionCol = 'concentracionPrioritarios';
+      }
+    }
+
     // Map DB columns to TS model (supports both snake_case and camelCase layouts)
     return (data || []).map(c => ({
       rbd: c.rbd,
@@ -1019,14 +1029,13 @@ export const api = {
       regimen: c.regimen,
       horasPIE: c.horasPIE !== undefined ? c.horasPIE : c.horas_pie,
       profesor_jefe_run: c.profesorJefeRun !== undefined ? c.profesorJefeRun : c.profesor_jefe_run,
-      concentracion_prioritarios: undefined
+      concentracion_prioritarios: c.concentracion_prioritarios !== undefined ? c.concentracion_prioritarios : c.concentracionPrioritarios
     }));
   },
 
   crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
-    // Schema: cursos_dinamicos(rbd, nombre, nivel, regimen, horas_pie, profesor_jefe_run)
-    // Note: concentracion_prioritarios is NOT a DB column, skip it
-    const dbCurso = {
+    // Schema: cursos_dinamicos(rbd, nombre, nivel, regimen, horas_pie, profesor_jefe_run, concentracion_prioritarios)
+    const dbCurso: any = {
       rbd: curso.rbd,
       nombre: curso.nombre,
       nivel: curso.nivel,
@@ -1034,6 +1043,11 @@ export const api = {
       horas_pie: curso.horasPIE ?? null,
       profesor_jefe_run: curso.profesor_jefe_run ?? null
     };
+
+    // Safely write the concentration column using the detected casing (defaults to snake_case)
+    const colName = detectedCursoConcentracionCol || 'concentracion_prioritarios';
+    dbCurso[colName] = curso.concentracion_prioritarios ?? 0;
+
     const { error } = await supabase.from('cursos_dinamicos').upsert(dbCurso, { onConflict: 'rbd,nombre' });
     // Always update local storage so UI reflects the change immediately
     const list = dbLocal.cursosDinamicos;
