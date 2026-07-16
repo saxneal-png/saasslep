@@ -45,6 +45,7 @@ export default function EscuelaDashboard() {
 
   // Navigation tab state: 'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'especial'
   const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'dotacion' | 'conciliacion' | 'especial'>('docentes');
+  const [subTabDotacion, setSubTabDotacion] = useState<'docentes' | 'asistentes'>('docentes');
   const [tareasReemplazo, setTareasReemplazo] = useState<TareaReemplazo[]>([]);
   const [taskReemplazoRun, setTaskReemplazoRun] = useState<{[key: string]: string}>({});
 
@@ -860,6 +861,26 @@ export default function EscuelaDashboard() {
         { key: 'cargo', label: 'Cargo / Función', checked: true },
         { key: 'horas', label: 'Horas Contratadas', checked: true }
       ];
+    } else if (tab === 'dotacion_docentes' || tab === 'dotacion_asistentes') {
+      const isDoc = tab === 'dotacion_docentes';
+      cols = [
+        { key: 'run', label: 'RUT / RUN', checked: true },
+        { key: 'nombre', label: 'Funcionario', checked: true },
+        { key: 'cargo', label: 'Cargo / Función', checked: true },
+        { key: 'titulo', label: 'Título Profesional', checked: true },
+        { key: 'calidad', label: 'Calidad Jurídica', checked: true },
+        { key: 'horas', label: 'Horas Contrato', checked: true },
+        { key: 'aula', label: 'Aula', checked: true },
+        { key: 'pie_titular', label: isDoc ? 'PIE Titular' : 'PIE Indefinido', checked: true },
+        { key: 'pie_contrata', label: isDoc ? 'PIE Contrata' : 'PIE Plazo Fijo', checked: true },
+        { key: 'sep_titular', label: isDoc ? 'SEP Titular' : 'SEP Indefinido', checked: true },
+        { key: 'sep_contrata', label: isDoc ? 'SEP Contrata' : 'SEP Plazo Fijo', checked: true },
+        { key: 'directivas', label: 'Directivas', checked: true },
+        { key: 'tecnicas', label: 'Técnicas', checked: true },
+        { key: 'otras_func', label: 'Otras Func.', checked: true },
+        { key: 'vacantes', label: 'Vacantes', checked: true },
+        { key: 'clases', label: 'Cursos / Clases Asignadas', checked: true }
+      ];
     }
     setExportModal({
       isOpen: true,
@@ -917,6 +938,67 @@ export default function EscuelaDashboard() {
           estamento: f.estamento || 'No registrado',
           cargo: f.cargo || 'No registrado',
           horas: c ? c.horas_totales : 0
+        };
+      });
+    } else if (exportModal.tab === 'dotacion_docentes' || exportModal.tab === 'dotacion_asistentes') {
+      const isDoc = exportModal.tab === 'dotacion_docentes';
+      const targetEstamento = isDoc ? 'Docente' : 'Asistente de la Educación';
+
+      const filteredConts = contratos.filter(c => {
+        if (normalizarRbd(String(c.rbd)) !== normalizarRbd(String(selectedRbd))) return false;
+        const f = funcionarios.find(func => func.run === c.funcionario_run);
+        return f?.estamento === targetEstamento;
+      });
+
+      dataToExport = filteredConts.map(c => {
+        const f = funcionarios.find(func => func.run === c.funcionario_run);
+        const name = f ? f.nombre : 'No registrado';
+        const rut = f ? f.run : c.funcionario_run;
+        const cargo = f ? (f.cargo || 'No registrado') : 'No registrado';
+        const titulo = f ? (f.titulo || 'No registrado') : 'No registrado';
+
+        const cAsigs = asignaciones.filter(a => a.contrato_id === c.id);
+        const pedagogicas = cAsigs.reduce((sum, a) => sum + a.horas, 0);
+
+        const pieHrs = dbLocal.financiamientoContratos
+          .filter(fc => fc.contrato_id === c.id && fc.origen_fondo === 'PIE')
+          .reduce((sum, fc) => sum + fc.horas, 0);
+        const sepHrs = dbLocal.financiamientoContratos
+          .filter(fc => fc.contrato_id === c.id && fc.origen_fondo === 'SEP')
+          .reduce((sum, fc) => sum + fc.horas, 0);
+
+        const isTitularOrIndefinido = c.calidad_juridica === 'Titular' || c.calidad_juridica === 'Indefinido';
+        const pieTit = isTitularOrIndefinido ? pieHrs : 0;
+        const pieCon = !isTitularOrIndefinido ? pieHrs : 0;
+        const sepTit = isTitularOrIndefinido ? sepHrs : 0;
+        const sepCon = !isTitularOrIndefinido ? sepHrs : 0;
+
+        const dirHrs = c.horas_directivas || 0;
+        const tecHrs = c.horas_tecnico_pedagogicas || 0;
+        const otrasFuncionesHrs = cargosPersonalizados
+          .filter(cp => cp.funcionario_run === c.funcionario_run)
+          .reduce((sum, cp) => sum + cp.horas, 0);
+
+        const vacantesHrs = Math.max(0, c.horas_totales - pedagogicas - dirHrs - tecHrs - otrasFuncionesHrs);
+        const coursesString = cAsigs.map(a => `${a.curso} (${a.asignatura})`).join(', ');
+
+        return {
+          run: rut,
+          nombre: name,
+          cargo: cargo,
+          titulo: titulo,
+          calidad: c.calidad_juridica || 'No registrada',
+          horas: c.horas_totales,
+          aula: pedagogicas,
+          pie_titular: pieTit,
+          pie_contrata: pieCon,
+          sep_titular: sepTit,
+          sep_contrata: sepCon,
+          directivas: dirHrs,
+          tecnicas: tecHrs,
+          otras_func: otrasFuncionesHrs,
+          vacantes: vacantesHrs,
+          clases: coursesString || 'Ninguno'
         };
       });
     }
@@ -2881,18 +2963,42 @@ export default function EscuelaDashboard() {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => triggerExport('dotacion', 'xlsx')}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                      onClick={() => triggerExport(subTabDotacion === 'docentes' ? 'dotacion_docentes' : 'dotacion_asistentes', 'xlsx')}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer transition-all"
                     >
-                      📊 Excel
+                      📊 Excel ({subTabDotacion === 'docentes' ? 'Docentes' : 'Asistentes'})
                     </button>
                     <button
-                      onClick={() => triggerExport('dotacion', 'pdf')}
-                      className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer"
+                      onClick={() => triggerExport(subTabDotacion === 'docentes' ? 'dotacion_docentes' : 'dotacion_asistentes', 'pdf')}
+                      className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1 cursor-pointer transition-all"
                     >
-                      📄 PDF
+                      📄 PDF ({subTabDotacion === 'docentes' ? 'Docentes' : 'Asistentes'})
                     </button>
                   </div>
+                </div>
+
+                {/* Sub-tabs selector */}
+                <div className="flex border-b border-slate-200">
+                  <button
+                    onClick={() => setSubTabDotacion('docentes')}
+                    className={`py-2.5 px-5 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                      subTabDotacion === 'docentes'
+                        ? 'border-slep-blue text-slep-blue'
+                        : 'border-transparent text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    🍎 Docentes (Profesores)
+                  </button>
+                  <button
+                    onClick={() => setSubTabDotacion('asistentes')}
+                    className={`py-2.5 px-5 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                      subTabDotacion === 'asistentes'
+                        ? 'border-slep-blue text-slep-blue'
+                        : 'border-transparent text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    👥 Asistentes de la Educación
+                  </button>
                 </div>
 
                 {/* Visual Hours Distribution Grid */}
@@ -2926,11 +3032,11 @@ export default function EscuelaDashboard() {
                   <div className="space-y-2 text-[11px]">
                     <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Funciones Docentes</h4>
                     {[
-                      { label: '💼 Directivas', value: horasDirectivas, color: 'bg-rose-500' },
-                      { label: '⚙️ Téc. Pedagógicas', value: horasTecnicoPedagogicas, color: 'bg-emerald-500' },
-                      { label: '📊 Coord. UTP', value: horasCoordinacionesUTP, color: 'bg-amber-500' },
-                      { label: '🔍 Apoyo UTP', value: horasApoyoUTP, color: 'bg-indigo-500' },
-                      { label: '🧑‍🏫 Aula / Otras', value: horasDocenciaAulaOtras, color: 'bg-slate-405' }
+                      { label: '💼 Directivas', value: horasDirectivas },
+                      { label: '⚙️ Téc. Pedagógicas', value: horasTecnicoPedagogicas },
+                      { label: '📊 Coord. UTP', value: horasCoordinacionesUTP },
+                      { label: '🔍 Apoyo UTP', value: horasApoyoUTP },
+                      { label: '🧑‍🏫 Aula / Otras', value: horasDocenciaAulaOtras }
                     ].map(item => (
                       <div key={item.label} className="flex justify-between items-center py-0.5">
                         <span className="font-semibold text-slate-600">{item.label}</span>
@@ -2941,14 +3047,13 @@ export default function EscuelaDashboard() {
 
                   {/* Column 3: Financiamientos */}
                   <div className="space-y-2 text-[11px]">
-                    <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Financiamiento Docente</h4>
+                    <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-wider border-b pb-1">Financiamiento General</h4>
                     {[
-                      { label: 'Subv. Regular', value: horasSubvencionRegular },
-                      { label: 'Horas SEP', value: horasSEP },
-                      { label: 'Horas PIE', value: horasPIE },
-                      { label: 'Horas Proretención', value: horasProretencion },
-                      { label: 'Liceos Bic.', value: horasLiceosBicentenarios },
-                      { label: 'Otras Horas/Fondos', value: horasOtrasFondo }
+                      { label: 'Subv. Regular', value: getFinsSum('Docente', 'Subvención Regular') + getFinsSum('Asistente de la Educación', 'Subvención Regular') },
+                      { label: 'Horas SEP', value: getFinsSum('Docente', 'SEP') + getFinsSum('Asistente de la Educación', 'SEP') },
+                      { label: 'Horas PIE', value: getFinsSum('Docente', 'PIE') + getFinsSum('Asistente de la Educación', 'PIE') },
+                      { label: 'Horas Proretención', value: getFinsSum('Docente', 'Pro-retención') + getFinsSum('Asistente de la Educación', 'Pro-retención') },
+                      { label: 'Liceos Bic.', value: getFinsSum('Docente', 'Liceos Bicentenarios') + getFinsSum('Asistente de la Educación', 'Liceos Bicentenarios') }
                     ].map(item => (
                       <div key={item.label} className="flex justify-between items-center py-0.5">
                         <span className="font-semibold text-slate-600">💰 {item.label}</span>
@@ -2963,16 +3068,15 @@ export default function EscuelaDashboard() {
                     <thead className="bg-slate-100 font-bold text-slate-600 border-b">
                       <tr>
                         <th className="p-3 pl-4">Funcionario</th>
-                        <th className="p-3">Estamento</th>
                         <th className="p-3">Cargo / Función</th>
                         <th className="p-3">Título Profesional</th>
                         <th className="p-3 text-center">Calidad Jurídica</th>
                         <th className="p-3 text-center">Horas Contrato</th>
                         <th className="p-3 text-center">Aula</th>
-                        <th className="p-3 text-center">PIE Tit/Ind</th>
-                        <th className="p-3 text-center">PIE Con/Plz</th>
-                        <th className="p-3 text-center">SEP Tit/Ind</th>
-                        <th className="p-3 text-center">SEP Con/Plz</th>
+                        <th className="p-3 text-center">{subTabDotacion === 'docentes' ? 'PIE Titular' : 'PIE Indefinido'}</th>
+                        <th className="p-3 text-center">{subTabDotacion === 'docentes' ? 'PIE Contrata' : 'PIE Plazo Fijo'}</th>
+                        <th className="p-3 text-center">{subTabDotacion === 'docentes' ? 'SEP Titular' : 'SEP Indefinido'}</th>
+                        <th className="p-3 text-center">{subTabDotacion === 'docentes' ? 'SEP Contrata' : 'SEP Plazo Fijo'}</th>
                         <th className="p-3 text-center">Directivas</th>
                         <th className="p-3 text-center">Técnicas</th>
                         <th className="p-3 text-center">Otras Func.</th>
@@ -2982,12 +3086,28 @@ export default function EscuelaDashboard() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {(() => {
-                        const schoolConts = contratos.filter(c => normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)));
+                        const targetEst = subTabDotacion === 'docentes' ? 'Docente' : 'Asistente de la Educación';
+                        const schoolConts = contratos.filter(c => {
+                          if (normalizarRbd(String(c.rbd)) !== normalizarRbd(String(selectedRbd))) return false;
+                          const f = funcionarios.find(func => func.run === c.funcionario_run);
+                          return f?.estamento === targetEst;
+                        });
+
                         const sortedConts = [...schoolConts].sort((a, b) => {
                           const fA = funcionarios.find(func => func.run === a.funcionario_run);
                           const fB = funcionarios.find(func => func.run === b.funcionario_run);
                           return (fA?.nombre || '').localeCompare(fB?.nombre || '');
                         });
+
+                        if (sortedConts.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={15} className="p-8 text-center text-slate-400 italic">
+                                No se registran contratos en el estamento de {subTabDotacion === 'docentes' ? 'Docentes' : 'Asistentes de la Educación'} para este colegio.
+                              </td>
+                            </tr>
+                          );
+                        }
 
                         return sortedConts.map(c => {
                           const f = funcionarios.find(func => func.run === c.funcionario_run);
@@ -3007,10 +3127,15 @@ export default function EscuelaDashboard() {
                             .filter(cp => cp.funcionario_run === c.funcionario_run)
                             .reduce((sum, cp) => sum + cp.horas, 0);
 
-                          // Vacantes/Disponibles = total hours minus assignments and directiva/tecnica/other cargos
                           const vacantesHrs = Math.max(0, c.horas_totales - pedagogicas - dirHrs - tecHrs - otrasFuncionesHrs);
                           const coursesString = cAsigs.map(a => `${a.curso} (${a.asignatura})`).join(', ');
                           const isDirector = f.cargo?.toUpperCase() === 'DIRECTOR';
+
+                          const isTitularOrIndefinido = c.calidad_juridica === 'Titular' || c.calidad_juridica === 'Indefinido';
+                          const pieTit = isTitularOrIndefinido ? pieHrs : 0;
+                          const pieCon = !isTitularOrIndefinido ? pieHrs : 0;
+                          const sepTit = isTitularOrIndefinido ? sepHrs : 0;
+                          const sepCon = !isTitularOrIndefinido ? sepHrs : 0;
 
                           return (
                             <tr key={c.id} className={`hover:bg-slate-50 ${isDirector ? 'bg-rose-50/20 font-bold' : ''}`}>
@@ -3023,52 +3148,31 @@ export default function EscuelaDashboard() {
                                 </button>
                                 <p className="text-[10px] font-mono text-slate-400 mt-0.5">{f.run}</p>
                               </td>
-                              <td className="p-3">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  f.estamento === 'Docente' 
-                                    ? 'bg-blue-100 text-blue-800' 
-                                    : 'bg-purple-100 text-purple-800'
-                                }`}>
-                                  {f.estamento}
-                                </span>
-                              </td>
                               <td className="p-3 text-slate-700 font-medium">{f.cargo || '--'}</td>
                               <td className="p-3 text-slate-500 font-medium">{f.titulo || 'No registrado'}</td>
                               <td className="p-3 text-center">
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  c.calidad_juridica === 'Titular' || c.calidad_juridica === 'Indefinido'
+                                  isTitularOrIndefinido
                                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-250/60'
                                     : 'bg-amber-100 text-amber-800 border border-amber-250/60'
                                 }`}>
-                                  {c.calidad_juridica || 'A contrata'}
+                                  {c.calidad_juridica || (subTabDotacion === 'docentes' ? 'A contrata' : 'Plazo fijo')}
                                 </span>
                               </td>
                               <td className="p-3 text-center font-bold text-slate-800">{c.horas_totales} hrs</td>
                               <td className="p-3 text-center font-bold text-slep-blue">{pedagogicas} hrs</td>
-                              {(() => {
-                                const isTitularOrIndefinido = c.calidad_juridica === 'Titular' || c.calidad_juridica === 'Indefinido';
-                                const pieTit = isTitularOrIndefinido ? pieHrs : 0;
-                                const pieCon = !isTitularOrIndefinido ? pieHrs : 0;
-                                const sepTit = isTitularOrIndefinido ? sepHrs : 0;
-                                const sepCon = !isTitularOrIndefinido ? sepHrs : 0;
-
-                                return (
-                                  <>
-                                    <td className="p-3 text-center">
-                                      {pieTit > 0 ? <span className="text-blue-600 font-bold">{pieTit} hrs</span> : <span className="text-slate-400">0 hrs</span>}
-                                    </td>
-                                    <td className="p-3 text-center">
-                                      {pieCon > 0 ? <span className="text-blue-600 font-bold">{pieCon} hrs</span> : <span className="text-slate-400">0 hrs</span>}
-                                    </td>
-                                    <td className="p-3 text-center">
-                                      {sepTit > 0 ? <span className="text-emerald-600 font-bold">{sepTit} hrs</span> : <span className="text-slate-400">0 hrs</span>}
-                                    </td>
-                                    <td className="p-3 text-center">
-                                      {sepCon > 0 ? <span className="text-emerald-600 font-bold">{sepCon} hrs</span> : <span className="text-slate-400">0 hrs</span>}
-                                    </td>
-                                  </>
-                                );
-                              })()}
+                              <td className="p-3 text-center">
+                                {pieTit > 0 ? <span className="text-blue-600 font-bold">{pieTit} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                              </td>
+                              <td className="p-3 text-center">
+                                {pieCon > 0 ? <span className="text-blue-600 font-bold">{pieCon} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                              </td>
+                              <td className="p-3 text-center">
+                                {sepTit > 0 ? <span className="text-emerald-600 font-bold">{sepTit} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                              </td>
+                              <td className="p-3 text-center">
+                                {sepCon > 0 ? <span className="text-emerald-600 font-bold">{sepCon} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                              </td>
                               <td className="p-3 text-center text-slate-500">{dirHrs} hrs</td>
                               <td className="p-3 text-center text-slate-500">{tecHrs} hrs</td>
                               <td className="p-3 text-center text-purple-650">{otrasFuncionesHrs} hrs</td>
