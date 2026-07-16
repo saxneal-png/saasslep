@@ -461,7 +461,7 @@ export function calcularDesgloseContrato(
   
   let recreoCalculado = 0;
   if (config.duracionLectivaMinutos === 45) {
-    recreoCalculado = parseFloat((horasAula * (3 / 38)).toFixed(2));
+    recreoCalculado = parseFloat((horasTotales * (3 / 44)).toFixed(2));
   } else if (config.esParvularia && config.duracionLectivaMinutos === 60) {
     recreoCalculado = 0; 
   } else {
