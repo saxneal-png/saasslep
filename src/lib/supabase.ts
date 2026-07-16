@@ -1015,9 +1015,9 @@ export const api = {
       nombre: c.nombre,
       nivel: c.nivel,
       regimen: c.regimen,
-      horasPIE: c.horas_pie,
-      profesor_jefe_run: c.profesor_jefe_run,
-      concentracion_prioritarios: c.concentracion_prioritarios
+      horasPIE: c.horasPIE !== undefined ? c.horasPIE : c.horas_pie,
+      profesor_jefe_run: c.profesorJefeRun !== undefined ? c.profesorJefeRun : c.profesor_jefe_run,
+      concentracion_prioritarios: c.concentracionPrioritarios !== undefined ? c.concentracionPrioritarios : c.concentracion_prioritarios
     }));
   },
 
@@ -1028,8 +1028,11 @@ export const api = {
       nivel: curso.nivel,
       regimen: curso.regimen,
       horas_pie: curso.horasPIE,
+      horasPIE: curso.horasPIE,
       profesor_jefe_run: curso.profesor_jefe_run,
-      concentracion_prioritarios: curso.concentracion_prioritarios
+      profesorJefeRun: curso.profesor_jefe_run,
+      concentracion_prioritarios: curso.concentracion_prioritarios,
+      concentracionPrioritarios: curso.concentracion_prioritarios
     };
     const { error } = await supabase.from('cursos_dinamicos').upsert(dbCurso);
     // Always update local storage
@@ -1047,7 +1050,10 @@ export const api = {
   },
 
   eliminarCursoDinamico: async (rbd: string, nombre: string): Promise<void> => {
+    // Delete in both formats for compatibility
     await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq('curso_nombre', nombre);
+    await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq('cursoNombre', nombre);
+    
     const { data: contratos } = await supabase.from('contratos').select('id').eq('rbd', rbd);
     if (contratos && contratos.length > 0) {
       const ids = contratos.map(c => c.id);
@@ -1067,22 +1073,31 @@ export const api = {
   },
 
   getAsignaturasDinamicas: async (rbd: string, cursoNombre: string): Promise<AsignaturaDinamica[]> => {
-    const { data, error } = await supabase.from('asignaturas_dinamicas').select('*').eq('rbd', rbd).eq('curso_nombre', cursoNombre);
+    // Try querying using both column layouts since PostgREST rejects invalid filters. We query select * and filter in memory if needed, or query safely
+    const { data, error } = await supabase.from('asignaturas_dinamicas').select('*').eq('rbd', rbd);
     if (error) return handleFallback(error, dbLocal.asignaturasDinamicas.filter(a => a.rbd === rbd && a.cursoNombre === cursoNombre), 'asignaturas_dinamicas');
-    return (data || []).map(a => ({
-      rbd: a.rbd,
-      cursoNombre: a.curso_nombre,
-      nombre: a.nombre,
-      horasSugeridas: a.horas_sugeridas
-    }));
+    
+    return (data || [])
+      .filter(a => {
+        const cName = a.cursoNombre !== undefined ? a.cursoNombre : a.curso_nombre;
+        return cName === cursoNombre;
+      })
+      .map(a => ({
+        rbd: a.rbd,
+        cursoNombre: a.cursoNombre !== undefined ? a.cursoNombre : a.curso_nombre,
+        nombre: a.nombre,
+        horasSugeridas: a.horasSugeridas !== undefined ? a.horasSugeridas : a.horas_sugeridas
+      }));
   },
 
   crearAsignaturaDinamica: async (asignatura: AsignaturaDinamica): Promise<void> => {
     const dbAsig = {
       rbd: asignatura.rbd,
       curso_nombre: asignatura.cursoNombre,
+      cursoNombre: asignatura.cursoNombre,
       nombre: asignatura.nombre,
-      horas_sugeridas: asignatura.horasSugeridas
+      horas_sugeridas: asignatura.horasSugeridas,
+      horasSugeridas: asignatura.horasSugeridas
     };
     const { error } = await supabase.from('asignaturas_dinamicas').upsert(dbAsig);
     // Always update local storage
