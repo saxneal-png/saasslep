@@ -383,34 +383,6 @@ function handleFallback<T>(error: any, fallbackData: T, tableName: string): T {
   console.warn(`⚠️ Error al consultar la tabla "${tableName}" en Supabase. Usando fallback local. Detalle:`, error.message || error);
   return fallbackData;
 }
-// Global casing flags detected dynamically
-let isCursosDinamicosSnakeCase = false;
-let isAsignaturasDinamicasSnakeCase = false;
-let isSchemaDetected = false;
-
-async function detectSchemaCasing() {
-  if (isSchemaDetected) return;
-  try {
-    const { data: cursoData } = await supabase.from('cursos_dinamicos').select('*').limit(1);
-    if (cursoData && cursoData.length > 0) {
-      isCursosDinamicosSnakeCase = 'horas_pie' in cursoData[0];
-    } else {
-      isCursosDinamicosSnakeCase = false;
-    }
-
-    const { data: asigData } = await supabase.from('asignaturas_dinamicas').select('*').limit(1);
-    if (asigData && asigData.length > 0) {
-      isAsignaturasDinamicasSnakeCase = 'curso_nombre' in asigData[0];
-    } else {
-      isAsignaturasDinamicasSnakeCase = false;
-    }
-    
-    isSchemaDetected = true;
-  } catch (e) {
-    console.warn("⚠️ Fallback detection: ", e);
-    isSchemaDetected = true;
-  }
-}
 
 export const api = {
   getEstablecimientos: async (): Promise<Establecimiento[]> => {
@@ -418,6 +390,7 @@ export const api = {
       const { data, error } = await supabase.from('establecimientos').select('*');
       if (error) return handleFallback(error, dbLocal.establecimientos, 'establecimientos');
       return data || [];
+
     } catch (err) {
       return handleFallback(err, dbLocal.establecimientos, 'establecimientos');
     }
@@ -1036,46 +1009,33 @@ export const api = {
   },
 
   getCursosDinamicos: async (rbd: string): Promise<CursoDinamico[]> => {
-    await detectSchemaCasing();
     const { data, error } = await supabase.from('cursos_dinamicos').select('*').eq('rbd', rbd);
     if (error) return handleFallback(error, dbLocal.cursosDinamicos.filter(c => c.rbd === rbd), 'cursos_dinamicos');
+    // Map snake_case DB columns to TS model
     return (data || []).map(c => ({
       rbd: c.rbd,
       nombre: c.nombre,
       nivel: c.nivel,
       regimen: c.regimen,
-      horasPIE: c.horasPIE !== undefined ? c.horasPIE : c.horas_pie,
-      profesor_jefe_run: c.profesorJefeRun !== undefined ? c.profesorJefeRun : c.profesor_jefe_run,
-      concentracion_prioritarios: c.concentracionPrioritarios !== undefined ? c.concentracionPrioritarios : c.concentracion_prioritarios
+      horasPIE: c.horas_pie,
+      profesor_jefe_run: c.profesor_jefe_run,
+      concentracion_prioritarios: undefined // column not in DB schema
     }));
   },
 
   crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
-    await detectSchemaCasing();
-    let dbCurso: any;
-    if (isCursosDinamicosSnakeCase) {
-      dbCurso = {
-        rbd: curso.rbd,
-        nombre: curso.nombre,
-        nivel: curso.nivel,
-        regimen: curso.regimen,
-        horas_pie: curso.horasPIE,
-        profesor_jefe_run: curso.profesor_jefe_run,
-        concentracion_prioritarios: curso.concentracion_prioritarios
-      };
-    } else {
-      dbCurso = {
-        rbd: curso.rbd,
-        nombre: curso.nombre,
-        nivel: curso.nivel,
-        regimen: curso.regimen,
-        horasPIE: curso.horasPIE,
-        profesorJefeRun: curso.profesor_jefe_run,
-        concentracionPrioritarios: curso.concentracion_prioritarios
-      };
-    }
-    const { error } = await supabase.from('cursos_dinamicos').upsert(dbCurso);
-    // Always update local storage
+    // Schema: cursos_dinamicos(rbd, nombre, nivel, regimen, horas_pie, profesor_jefe_run)
+    // Note: concentracion_prioritarios is NOT a DB column, skip it
+    const dbCurso = {
+      rbd: curso.rbd,
+      nombre: curso.nombre,
+      nivel: curso.nivel,
+      regimen: curso.regimen,
+      horas_pie: curso.horasPIE ?? null,
+      profesor_jefe_run: curso.profesor_jefe_run ?? null
+    };
+    const { error } = await supabase.from('cursos_dinamicos').upsert(dbCurso, { onConflict: 'rbd,nombre' });
+    // Always update local storage so UI reflects the change immediately
     const list = dbLocal.cursosDinamicos;
     const index = list.findIndex(c => c.rbd === curso.rbd && c.nombre === curso.nombre);
     if (index >= 0) {
@@ -1085,22 +1045,20 @@ export const api = {
     }
     dbLocal.cursosDinamicos = list;
     if (error) {
-      console.warn("⚠️ Error en Supabase, creando curso dinámico:", error);
+      console.error("❌ Error en Supabase al crear curso dinámico:", error);
+      throw error; // propagate so the UI can show the error
     }
   },
 
   eliminarCursoDinamico: async (rbd: string, nombre: string): Promise<void> => {
-    await detectSchemaCasing();
-    const colName = isAsignaturasDinamicasSnakeCase ? 'curso_nombre' : 'cursoNombre';
-    await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq(colName, nombre);
-    
+    // Delete children (asignaturas) first to respect FK, then delete parent course
+    await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq('curso_nombre', nombre);
     const { data: contratos } = await supabase.from('contratos').select('id').eq('rbd', rbd);
     if (contratos && contratos.length > 0) {
       const ids = contratos.map(c => c.id);
       await supabase.from('asignaciones_aula').delete().eq('curso', nombre).in('contrato_id', ids);
     }
     const { error } = await supabase.from('cursos_dinamicos').delete().eq('rbd', rbd).eq('nombre', nombre);
-    
     // Always update local storage
     dbLocal.cursosDinamicos = dbLocal.cursosDinamicos.filter(c => !(c.rbd === rbd && c.nombre === nombre));
     dbLocal.asignaturasDinamicas = dbLocal.asignaturasDinamicas.filter(a => !(a.rbd === rbd && a.cursoNombre === nombre));
@@ -1108,47 +1066,34 @@ export const api = {
     const contIds = conts.map(c => c.id);
     dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => !(a.curso === nombre && contIds.includes(a.contrato_id)));
     if (error) {
-      console.warn("⚠️ Error en Supabase, eliminando curso dinámico:", error);
+      console.error("❌ Error en Supabase al eliminar curso dinámico:", error);
     }
   },
 
   getAsignaturasDinamicas: async (rbd: string, cursoNombre: string): Promise<AsignaturaDinamica[]> => {
-    await detectSchemaCasing();
-    const { data, error } = await supabase.from('asignaturas_dinamicas').select('*').eq('rbd', rbd);
+    const { data, error } = await supabase
+      .from('asignaturas_dinamicas')
+      .select('*')
+      .eq('rbd', rbd)
+      .eq('curso_nombre', cursoNombre);
     if (error) return handleFallback(error, dbLocal.asignaturasDinamicas.filter(a => a.rbd === rbd && a.cursoNombre === cursoNombre), 'asignaturas_dinamicas');
-    
-    return (data || [])
-      .filter(a => {
-        const cName = a.cursoNombre !== undefined ? a.cursoNombre : a.curso_nombre;
-        return cName === cursoNombre;
-      })
-      .map(a => ({
-        rbd: a.rbd,
-        cursoNombre: a.cursoNombre !== undefined ? a.cursoNombre : a.curso_nombre,
-        nombre: a.nombre,
-        horasSugeridas: a.horasSugeridas !== undefined ? a.horasSugeridas : a.horas_sugeridas
-      }));
+    return (data || []).map(a => ({
+      rbd: a.rbd,
+      cursoNombre: a.curso_nombre,
+      nombre: a.nombre,
+      horasSugeridas: a.horas_sugeridas
+    }));
   },
 
   crearAsignaturaDinamica: async (asignatura: AsignaturaDinamica): Promise<void> => {
-    await detectSchemaCasing();
-    let dbAsig: any;
-    if (isAsignaturasDinamicasSnakeCase) {
-      dbAsig = {
-        rbd: asignatura.rbd,
-        curso_nombre: asignatura.cursoNombre,
-        nombre: asignatura.nombre,
-        horas_sugeridas: asignatura.horasSugeridas
-      };
-    } else {
-      dbAsig = {
-        rbd: asignatura.rbd,
-        cursoNombre: asignatura.cursoNombre,
-        nombre: asignatura.nombre,
-        horasSugeridas: asignatura.horasSugeridas
-      };
-    }
-    const { error } = await supabase.from('asignaturas_dinamicas').upsert(dbAsig);
+    // Schema: asignaturas_dinamicas(rbd, curso_nombre, nombre, horas_sugeridas)
+    const dbAsig = {
+      rbd: asignatura.rbd,
+      curso_nombre: asignatura.cursoNombre,
+      nombre: asignatura.nombre,
+      horas_sugeridas: asignatura.horasSugeridas
+    };
+    const { error } = await supabase.from('asignaturas_dinamicas').upsert(dbAsig, { onConflict: 'rbd,curso_nombre,nombre' });
     // Always update local storage
     const list = dbLocal.asignaturasDinamicas;
     const index = list.findIndex(a => a.rbd === asignatura.rbd && a.cursoNombre === asignatura.cursoNombre && a.nombre === asignatura.nombre);
@@ -1159,7 +1104,8 @@ export const api = {
     }
     dbLocal.asignaturasDinamicas = list;
     if (error) {
-      console.warn("⚠️ Error en Supabase, creando asignatura dinámica:", error);
+      console.error("❌ Error en Supabase al crear asignatura dinámica:", error);
+      throw error; // propagate so the UI can show the error
     }
   },
 
