@@ -391,11 +391,19 @@ let isSchemaDetected = false;
 async function detectSchemaCasing() {
   if (isSchemaDetected) return;
   try {
-    const { error: cursoErr } = await supabase.from('cursos_dinamicos').select('horas_pie').limit(1);
-    isCursosDinamicosSnakeCase = !cursoErr || (cursoErr.code !== '42703');
+    const { data: cursoData } = await supabase.from('cursos_dinamicos').select('*').limit(1);
+    if (cursoData && cursoData.length > 0) {
+      isCursosDinamicosSnakeCase = 'horas_pie' in cursoData[0];
+    } else {
+      isCursosDinamicosSnakeCase = false;
+    }
 
-    const { error: asigErr } = await supabase.from('asignaturas_dinamicas').select('curso_nombre').limit(1);
-    isAsignaturasDinamicasSnakeCase = !asigErr || (asigErr.code !== '42703');
+    const { data: asigData } = await supabase.from('asignaturas_dinamicas').select('*').limit(1);
+    if (asigData && asigData.length > 0) {
+      isAsignaturasDinamicasSnakeCase = 'curso_nombre' in asigData[0];
+    } else {
+      isAsignaturasDinamicasSnakeCase = false;
+    }
     
     isSchemaDetected = true;
   } catch (e) {
