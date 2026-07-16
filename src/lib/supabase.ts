@@ -1010,57 +1010,92 @@ export const api = {
   getCursosDinamicos: async (rbd: string): Promise<CursoDinamico[]> => {
     const { data, error } = await supabase.from('cursos_dinamicos').select('*').eq('rbd', rbd);
     if (error) return handleFallback(error, dbLocal.cursosDinamicos.filter(c => c.rbd === rbd), 'cursos_dinamicos');
-    return data || [];
+    return (data || []).map(c => ({
+      rbd: c.rbd,
+      nombre: c.nombre,
+      nivel: c.nivel,
+      regimen: c.regimen,
+      horasPIE: c.horas_pie,
+      profesor_jefe_run: c.profesor_jefe_run,
+      concentracion_prioritarios: c.concentracion_prioritarios
+    }));
   },
 
   crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
-    const { error } = await supabase.from('cursos_dinamicos').upsert(curso);
+    const dbCurso = {
+      rbd: curso.rbd,
+      nombre: curso.nombre,
+      nivel: curso.nivel,
+      regimen: curso.regimen,
+      horas_pie: curso.horasPIE,
+      profesor_jefe_run: curso.profesor_jefe_run,
+      concentracion_prioritarios: curso.concentracion_prioritarios
+    };
+    const { error } = await supabase.from('cursos_dinamicos').upsert(dbCurso);
+    // Always update local storage
+    const list = dbLocal.cursosDinamicos;
+    const index = list.findIndex(c => c.rbd === curso.rbd && c.nombre === curso.nombre);
+    if (index >= 0) {
+      list[index] = curso;
+    } else {
+      list.push(curso);
+    }
+    dbLocal.cursosDinamicos = list;
     if (error) {
-      console.warn("⚠️ Error en Supabase, creando curso dinámico en local:", error);
-      const list = dbLocal.cursosDinamicos;
-      const index = list.findIndex(c => c.rbd === curso.rbd && c.nombre === curso.nombre);
-      if (index >= 0) {
-        list[index] = curso;
-      } else {
-        list.push(curso);
-      }
-      dbLocal.cursosDinamicos = list;
+      console.warn("⚠️ Error en Supabase, creando curso dinámico:", error);
     }
   },
 
   eliminarCursoDinamico: async (rbd: string, nombre: string): Promise<void> => {
-    await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq('cursoNombre', nombre);
+    await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq('curso_nombre', nombre);
     const { data: contratos } = await supabase.from('contratos').select('id').eq('rbd', rbd);
     if (contratos && contratos.length > 0) {
       const ids = contratos.map(c => c.id);
       await supabase.from('asignaciones_aula').delete().eq('curso', nombre).in('contrato_id', ids);
     }
     const { error } = await supabase.from('cursos_dinamicos').delete().eq('rbd', rbd).eq('nombre', nombre);
+    
+    // Always update local storage
+    dbLocal.cursosDinamicos = dbLocal.cursosDinamicos.filter(c => !(c.rbd === rbd && c.nombre === nombre));
+    dbLocal.asignaturasDinamicas = dbLocal.asignaturasDinamicas.filter(a => !(a.rbd === rbd && a.cursoNombre === nombre));
+    const conts = dbLocal.contratos.filter(c => c.rbd === rbd);
+    const contIds = conts.map(c => c.id);
+    dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => !(a.curso === nombre && contIds.includes(a.contrato_id)));
     if (error) {
-      console.warn("⚠️ Error en Supabase, eliminando curso dinámico en local:", error);
-      dbLocal.cursosDinamicos = dbLocal.cursosDinamicos.filter(c => !(c.rbd === rbd && c.nombre === nombre));
-      dbLocal.asignaturasDinamicas = dbLocal.asignaturasDinamicas.filter(a => !(a.rbd === rbd && a.cursoNombre === nombre));
-      const conts = dbLocal.contratos.filter(c => c.rbd === rbd);
-      const contIds = conts.map(c => c.id);
-      dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => !(a.curso === nombre && contIds.includes(a.contrato_id)));
+      console.warn("⚠️ Error en Supabase, eliminando curso dinámico:", error);
     }
   },
 
   getAsignaturasDinamicas: async (rbd: string, cursoNombre: string): Promise<AsignaturaDinamica[]> => {
-    const { data, error } = await supabase.from('asignaturas_dinamicas').select('*').eq('rbd', rbd).eq('cursoNombre', cursoNombre);
+    const { data, error } = await supabase.from('asignaturas_dinamicas').select('*').eq('rbd', rbd).eq('curso_nombre', cursoNombre);
     if (error) return handleFallback(error, dbLocal.asignaturasDinamicas.filter(a => a.rbd === rbd && a.cursoNombre === cursoNombre), 'asignaturas_dinamicas');
-    return data || [];
+    return (data || []).map(a => ({
+      rbd: a.rbd,
+      cursoNombre: a.curso_nombre,
+      nombre: a.nombre,
+      horasSugeridas: a.horas_sugeridas
+    }));
   },
 
   crearAsignaturaDinamica: async (asignatura: AsignaturaDinamica): Promise<void> => {
-    const { error } = await supabase.from('asignaturas_dinamicas').upsert(asignatura);
+    const dbAsig = {
+      rbd: asignatura.rbd,
+      curso_nombre: asignatura.cursoNombre,
+      nombre: asignatura.nombre,
+      horas_sugeridas: asignatura.horasSugeridas
+    };
+    const { error } = await supabase.from('asignaturas_dinamicas').upsert(dbAsig);
+    // Always update local storage
+    const list = dbLocal.asignaturasDinamicas;
+    const index = list.findIndex(a => a.rbd === asignatura.rbd && a.cursoNombre === asignatura.cursoNombre && a.nombre === asignatura.nombre);
+    if (index >= 0) {
+      list[index] = asignatura;
+    } else {
+      list.push(asignatura);
+    }
+    dbLocal.asignaturasDinamicas = list;
     if (error) {
-      console.warn("⚠️ Error en Supabase, creando asignatura dinámica en local:", error);
-      const list = dbLocal.asignaturasDinamicas;
-      if (!list.some(a => a.rbd === asignatura.rbd && a.cursoNombre === asignatura.cursoNombre && a.nombre === asignatura.nombre)) {
-        list.push(asignatura);
-        dbLocal.asignaturasDinamicas = list;
-      }
+      console.warn("⚠️ Error en Supabase, creando asignatura dinámica:", error);
     }
   },
 
@@ -1265,13 +1300,26 @@ export const api = {
   getTodosLosCursosDinamicos: async (): Promise<CursoDinamico[]> => {
     const { data, error } = await supabase.from('cursos_dinamicos').select('*');
     if (error) return handleFallback(error, dbLocal.cursosDinamicos, 'cursos_dinamicos');
-    return data || [];
+    return (data || []).map(c => ({
+      rbd: c.rbd,
+      nombre: c.nombre,
+      nivel: c.nivel,
+      regimen: c.regimen,
+      horasPIE: c.horas_pie,
+      profesor_jefe_run: c.profesor_jefe_run,
+      concentracion_prioritarios: c.concentracion_prioritarios
+    }));
   },
 
   getTodasLasAsignaturasDinamicas: async (): Promise<AsignaturaDinamica[]> => {
     const { data, error } = await supabase.from('asignaturas_dinamicas').select('*');
     if (error) return handleFallback(error, dbLocal.asignaturasDinamicas, 'asignaturas_dinamicas');
-    return data || [];
+    return (data || []).map(a => ({
+      rbd: a.rbd,
+      cursoNombre: a.curso_nombre,
+      nombre: a.nombre,
+      horasSugeridas: a.horas_sugeridas
+    }));
   },
 
   getTodosLosCargosPersonalizados: async (): Promise<CargoPersonalizado[]> => {
