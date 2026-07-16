@@ -2966,6 +2966,7 @@ export default function EscuelaDashboard() {
                         <th className="p-3">Estamento</th>
                         <th className="p-3">Cargo / Función</th>
                         <th className="p-3">Título Profesional</th>
+                        <th className="p-3 text-center">Calidad Jurídica</th>
                         <th className="p-3 text-center">Horas Contrato</th>
                         <th className="p-3 text-center">Aula</th>
                         <th className="p-3 text-center">PIE</th>
@@ -3031,6 +3032,15 @@ export default function EscuelaDashboard() {
                               </td>
                               <td className="p-3 text-slate-700 font-medium">{f.cargo || '--'}</td>
                               <td className="p-3 text-slate-500 font-medium">{f.titulo || 'No registrado'}</td>
+                              <td className="p-3 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  c.calidad_juridica === 'Titular' || c.calidad_juridica === 'Indefinido'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-250/60'
+                                    : 'bg-amber-100 text-amber-800 border border-amber-250/60'
+                                }`}>
+                                  {c.calidad_juridica || 'A contrata'}
+                                </span>
+                              </td>
                               <td className="p-3 text-center font-bold text-slate-800">{c.horas_totales} hrs</td>
                               <td className="p-3 text-center font-bold text-slep-blue">{pedagogicas} hrs</td>
                               <td className="p-3 text-center text-blue-600 font-bold">{pieHrs} hrs</td>
