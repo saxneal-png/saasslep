@@ -22,7 +22,7 @@ import {
   CursoDinamico,
   AsignaturaDinamica
 } from '@/lib/types';
-import { validarCargaDocente, conciliarFuncionario, calcularCargaDocente } from '@/lib/rulesEngine';
+import { validarCargaDocente, conciliarFuncionario, calcularCargaDocente, calcularDesgloseContrato } from '@/lib/rulesEngine';
 
 export default function SostenedorDashboard() {
   const router = useRouter();
@@ -2250,50 +2250,113 @@ export default function SostenedorDashboard() {
                     </div>
 
                     {/* Ley 20.903 indicators */}
-                    {editingFuncionario.estamento === 'Docente' && leyCalculo && (
-                      <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold text-slate-800">Proporcionalidad Horaria Aula / Ley 20.903</span>
-                          {leyCalculo.leyEspecialAplicada ? (
-                            <span className="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-[9px] uppercase tracking-wider border border-amber-200">
-                              Concentración {'>'} 80% (60/40 Ratio) 🌟
-                            </span>
-                          ) : (
-                            <span className="bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded text-[9px]">
-                              Estándar (65/35 Ratio)
-                            </span>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-3 gap-2.5 text-center">
-                          <div className="bg-slate-50 border p-2 rounded-lg">
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">Lectivas Aula Max.</p>
-                            <p className="text-sm font-black text-slate-800 mt-0.5">{leyCalculo.horasLectivasMaximas} hrs</p>
+                    {editingFuncionario.estamento === 'Docente' && (() => {
+                      const tempContForIndicators: Contrato = {
+                        id: relatedCont?.id || 'indicator-temp',
+                        funcionario_run: editingFuncionario.run,
+                        rbd: relatedCont?.rbd || '',
+                        calidad_juridica: relatedCont?.calidad_juridica || 'A contrata',
+                        funcion_principal: editFuncCargo || relatedCont?.funcion_principal || 'Docente',
+                        estado: 'Activo',
+                        horas_totales: editContHoras,
+                        horas_aula: relatedCont?.horas_aula,
+                        es_uniprofesional: relatedCont?.es_uniprofesional || false,
+                        horas_directivas: relatedCont?.horas_directivas || 0,
+                        horas_tecnico_pedagogicas: relatedCont?.horas_tecnico_pedagogicas || 0
+                      };
+
+                      const desglose = calcularDesgloseContrato(tempContForIndicators, cursosDinamicos, teacherAsigs, [], undefined, editFuncCargo);
+
+                      const pedagogicasAsignadas = teacherAsigs.reduce((sum, a) => sum + a.horas, 0); 
+                      const dirHrs = tempContForIndicators.horas_directivas || 0;
+                      const tecHrs = tempContForIndicators.horas_tecnico_pedagogicas || 0;
+                      const otrasFuncionesHrs = cargosPersonalizados
+                        .filter(cp => cp.funcionario_run === editingFuncionario.run)
+                        .reduce((sum, cp) => sum + cp.horas, 0);
+
+                      const docenciaAsignadaCrono = parseFloat((pedagogicasAsignadas * (desglose.duracionMinutos / 60)).toFixed(2));
+                      
+                      let recreoAsignadoCrono = 0;
+                      if (desglose.duracionMinutos === 45) {
+                        recreoAsignadoCrono = parseFloat((pedagogicasAsignadas * (3 / 38)).toFixed(2));
+                      } else if (desglose.esParvularia && desglose.duracionMinutos === 60) {
+                        recreoAsignadoCrono = 0;
+                      } else {
+                        recreoAsignadoCrono = parseFloat((pedagogicasAsignadas * (5 / 60)).toFixed(2));
+                      }
+
+                      const ratioHNL = desglose.esExcepcion ? 0.40 / 0.60 : 0.35 / 0.65;
+                      const scalingFactor = desglose.esParvularia && desglose.duracionMinutos === 60 ? 4 / 3 : 1;
+                      const noLectivasTotalesRequeridas = parseFloat((pedagogicasAsignadas * scalingFactor * ratioHNL).toFixed(2));
+
+                      const totalHorasUsadas = parseFloat((docenciaAsignadaCrono + recreoAsignadoCrono + noLectivasTotalesRequeridas + desglose.horasCronologicasAdicionales + dirHrs + tecHrs + otrasFuncionesHrs).toFixed(2));
+                      
+                      const vacantesHrs = Math.max(0, editContHoras - totalHorasUsadas);
+                      const cumpleLey = desglose.horasAula >= pedagogicasAsignadas;
+
+                      return (
+                        <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm space-y-4">
+                          <div className="flex justify-between items-center border-b pb-2 border-slate-100">
+                            <span className="font-bold text-slate-800">Proporcionalidad Horaria Aula / Ley 20.903</span>
+                            {desglose.esExcepcion ? (
+                              <span className="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-[9px] uppercase tracking-wider border border-amber-200 animate-pulse">
+                                Carga Horaria Mixta Activa (IVM {'>'} 80% en Primer Ciclo) 🌟
+                              </span>
+                            ) : (
+                              <span className="bg-slate-100 text-slate-650 font-bold px-2 py-0.5 rounded text-[9px]">
+                                Estándar 65/35 (Proporción General)
+                              </span>
+                            )}
                           </div>
-                          <div className="bg-slate-50 border p-2 rounded-lg">
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">No Lectivas Min.</p>
-                            <p className="text-sm font-black text-slate-800 mt-0.5">{leyCalculo.horasNoLectivasMinimas} hrs</p>
+
+                          {/* Consolidated Resumen */}
+                          <div className="border border-slate-200/60 rounded-xl p-3 bg-blue-50/10 space-y-2">
+                            <p className="font-bold text-slate-700 text-[11px] border-b pb-1">📊 Resumen de Jornada y Conciliación</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-center text-xs">
+                              <div className="bg-white p-2 rounded border">
+                                <span className="block text-[8px] uppercase text-slate-400 font-semibold">Total Aula (Ped)</span>
+                                <strong className="text-indigo-700">{pedagogicasAsignadas} hrs</strong>
+                              </div>
+                              <div className="bg-white p-2 rounded border">
+                                <span className="block text-[8px] uppercase text-slate-400 font-semibold">Aula Disp. (Ped)</span>
+                                <strong className="text-indigo-650">{desglose.horasAula} hrs</strong>
+                              </div>
+                              <div className="bg-white p-2 rounded border">
+                                <span className="block text-[8px] uppercase text-slate-400 font-semibold">Recreo (Crono)</span>
+                                <strong className="text-pink-700">{recreoAsignadoCrono.toFixed(2)} hrs</strong>
+                              </div>
+                              <div className="bg-white p-2 rounded border">
+                                <span className="block text-[8px] uppercase text-slate-400 font-semibold">Planif. / HNL</span>
+                                <strong className="text-slate-700">{noLectivasTotalesRequeridas.toFixed(2)} hrs</strong>
+                              </div>
+                              <div className="bg-white p-2 rounded border">
+                                <span className="block text-[8px] uppercase text-slate-400 font-semibold">Horas Usadas</span>
+                                <strong className="text-slate-800">{totalHorasUsadas.toFixed(2)} / {editContHoras} hrs</strong>
+                              </div>
+                              <div className={`p-2 rounded border font-bold ${vacantesHrs > 0.05 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`}>
+                                <span className="block text-[8px] uppercase text-slate-450 font-semibold">Horas Vacantes</span>
+                                <strong>{vacantesHrs.toFixed(2)} hrs</strong>
+                              </div>
+                            </div>
                           </div>
-                          <div className="bg-slate-50 border p-2 rounded-lg">
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">Lectivas Aula Asig.</p>
-                            <p className="text-sm font-black text-slate-800 mt-0.5">{leyCalculo.horasLectivasAsignadas} hrs</p>
-                          </div>
-                        </div>
-                        <div className={`p-3 rounded-lg border text-[11px] font-semibold flex items-center justify-between ${
-                          leyCalculo.cumpleLey20903 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900'
-                        }`}>
-                          <span>
-                            {leyCalculo.cumpleLey20903 
-                              ? '✓ Cumple con la reglamentación legal de docencia de aula.' 
-                              : `⚠️ Exceso detectado: Se asignan ${leyCalculo.horasLectivasAsignadas} hrs de aula frente al máximo legal de ${leyCalculo.horasLectivasMaximas} hrs.`}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            leyCalculo.cumpleLey20903 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+
+                          <div className={`p-3 rounded-lg border text-[11px] font-semibold flex items-center justify-between ${
+                            cumpleLey ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900'
                           }`}>
-                            {leyCalculo.cumpleLey20903 ? 'CUMPLE' : 'EXCEDIDO'}
-                          </span>
+                            <span>
+                              {cumpleLey 
+                                ? '✓ Cumple con la proporción legal de aula y planificación.' 
+                                : `⚠️ Exceso detectado: Las horas de clase asignadas (${pedagogicasAsignadas} hrs) superan el máximo de aula permitido por el contrato (${desglose.horasAula} hrs).`}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              cumpleLey ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {cumpleLey ? 'CUMPLE' : 'EXCEDIDO'}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Course Assignments List */}
                     {editingFuncionario.estamento === 'Docente' && teacherAsigs.length > 0 && (
