@@ -1361,6 +1361,54 @@ export default function EscuelaDashboard() {
     }, 0);
   };
 
+  // Segmented funding helpers to split by Titular vs Contrata and Indefinido vs Plazo Fijo
+  const getFinsSumByQuality = (
+    estamento: EstamentoType,
+    origen: OrigenFondo,
+    isTitularOrIndefinido: boolean
+  ) => {
+    return contratos.filter(c => {
+      const isDoc = getEstamento(c) === 'Docente';
+      const isMatchingEstamento = isDoc ? estamento === 'Docente' : estamento === 'Asistente de la Educación';
+      if (!isMatchingEstamento) return false;
+      
+      if (isDoc) {
+        return isTitularOrIndefinido ? c.calidad_juridica === 'Titular' : c.calidad_juridica !== 'Titular';
+      } else {
+        return isTitularOrIndefinido ? c.calidad_juridica === 'Indefinido' : c.calidad_juridica !== 'Indefinido';
+      }
+    }).reduce((sum, c) => {
+      const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+      return sum + fins.filter(f => f.origen_fondo === origen).reduce((s, f) => s + f.horas, 0);
+    }, 0);
+  };
+
+  const getFinsOtrasSumByQuality = (
+    estamento: EstamentoType,
+    isTitularOrIndefinido: boolean
+  ) => {
+    return contratos.filter(c => {
+      const isDoc = getEstamento(c) === 'Docente';
+      const isMatchingEstamento = isDoc ? estamento === 'Docente' : estamento === 'Asistente de la Educación';
+      if (!isMatchingEstamento) return false;
+      
+      if (isDoc) {
+        return isTitularOrIndefinido ? c.calidad_juridica === 'Titular' : c.calidad_juridica !== 'Titular';
+      } else {
+        return isTitularOrIndefinido ? c.calidad_juridica === 'Indefinido' : c.calidad_juridica !== 'Indefinido';
+      }
+    }).reduce((sum, c) => {
+      const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+      return sum + fins.filter(f => 
+        f.origen_fondo !== 'Subvención Regular' && 
+        f.origen_fondo !== 'SEP' && 
+        f.origen_fondo !== 'PIE' && 
+        f.origen_fondo !== 'Pro-retención' && 
+        f.origen_fondo !== 'Liceos Bicentenarios'
+      ).reduce((s, f) => s + f.horas, 0);
+    }, 0);
+  };
+
   // Docente Hours by Funding Source
   const horasSEP = getFinsSum('Docente', 'SEP');
   const horasPIE = getFinsSum('Docente', 'PIE');
@@ -2627,22 +2675,34 @@ export default function EscuelaDashboard() {
                 {/* Detailed Summary Table */}
                 <div className="border rounded-xl overflow-hidden text-xs">
                   <table className="w-full text-left">
-                    <thead className="bg-slate-50 font-bold border-b">
+                    <thead className="bg-slate-50 font-bold border-b text-[11px]">
                       <tr>
-                        <th className="p-3 pl-4">Indicador / Resumen</th>
-                        <th className="p-3 text-center">Profesores (Docentes)</th>
-                        <th className="p-3 text-center">Asistentes de la Educación</th>
-                        <th className="p-3 text-center">Total Contratado</th>
+                        <th className="p-3 pl-4 text-slate-800" rowSpan={2}>Indicador / Resumen</th>
+                        <th className="p-2 text-center text-slate-700 border-b border-r border-slate-200" colSpan={2}>Profesores (Docentes)</th>
+                        <th className="p-2 text-center text-slate-700 border-b border-r border-slate-200" colSpan={2}>Asistentes de la Educación</th>
+                        <th className="p-3 text-center text-slate-800" rowSpan={2}>Total Contratado</th>
+                      </tr>
+                      <tr className="bg-slate-50/80 text-[10px] text-slate-500 font-semibold border-b">
+                        <th className="p-2 text-center border-r border-slate-200">Titular</th>
+                        <th className="p-2 text-center border-r border-slate-200 font-medium">A Contrata</th>
+                        <th className="p-2 text-center border-r border-slate-200">Indefinido</th>
+                        <th className="p-2 text-center border-r border-slate-200 font-medium">Plazo Fijo</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y text-slate-700">
                       <tr>
                         <td className="p-3 pl-4 font-semibold text-slate-900">Total Personas</td>
                         <td className="p-3 text-center font-bold text-slep-blue">
-                          {funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run)).length}
+                          {funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run && c.calidad_juridica === 'Titular')).length}
+                        </td>
+                        <td className="p-3 text-center font-medium text-slate-600">
+                          {funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run && c.calidad_juridica !== 'Titular')).length}
                         </td>
                         <td className="p-3 text-center font-bold text-slate-600">
-                          {funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run)).length}
+                          {funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run && c.calidad_juridica === 'Indefinido')).length}
+                        </td>
+                        <td className="p-3 text-center font-medium text-slate-500">
+                          {funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run && c.calidad_juridica !== 'Indefinido')).length}
                         </td>
                         <td className="p-3 text-center font-bold text-slate-900">
                           {contratos.length}
@@ -2650,55 +2710,64 @@ export default function EscuelaDashboard() {
                       </tr>
                       <tr>
                         <td className="p-3 pl-4 font-semibold text-slate-900">Total Horas Contrato</td>
-                        <td className="p-3 text-center font-semibold">
-                          {contratos.filter(c => {
-                            const f = funcionarios.find(func => func.run === c.funcionario_run);
-                            return f?.estamento === 'Docente';
-                          }).reduce((sum, c) => sum + c.horas_totales, 0)} hrs
+                        <td className="p-3 text-center font-semibold text-slep-blue">
+                          {contratos.filter(c => getEstamento(c) === 'Docente' && c.calidad_juridica === 'Titular').reduce((sum, c) => sum + c.horas_totales, 0)} hrs
                         </td>
-                        <td className="p-3 text-center font-semibold">
-                          {contratos.filter(c => {
-                            const f = funcionarios.find(func => func.run === c.funcionario_run);
-                            return f?.estamento === 'Asistente de la Educación';
-                          }).reduce((sum, c) => sum + c.horas_totales, 0)} hrs
+                        <td className="p-3 text-center font-medium text-slate-600">
+                          {contratos.filter(c => getEstamento(c) === 'Docente' && c.calidad_juridica !== 'Titular').reduce((sum, c) => sum + c.horas_totales, 0)} hrs
+                        </td>
+                        <td className="p-3 text-center font-semibold text-slate-600">
+                          {contratos.filter(c => getEstamento(c) === 'Asistente de la Educación' && c.calidad_juridica === 'Indefinido').reduce((sum, c) => sum + c.horas_totales, 0)} hrs
+                        </td>
+                        <td className="p-3 text-center font-medium text-slate-500">
+                          {contratos.filter(c => getEstamento(c) === 'Asistente de la Educación' && c.calidad_juridica !== 'Indefinido').reduce((sum, c) => sum + c.horas_totales, 0)} hrs
                         </td>
                         <td className="p-3 text-center font-bold text-slate-900">
                           {contratos.reduce((sum, c) => sum + c.horas_totales, 0)} hrs
                         </td>
                       </tr>
                       {(() => {
-                        const docConts = contratos.filter(c => {
-                          const f = funcionarios.find(func => func.run === c.funcionario_run);
-                          return f?.estamento === 'Docente';
-                        });
-                        const docContsIds = docConts.map(c => c.id);
-                        const docPedagogicas = asignaciones.filter(a => docContsIds.includes(a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
-                        const docTotalHrs = docConts.reduce((sum, c) => sum + c.horas_totales, 0);
-                        const docNoPedagogicas = Math.max(0, docTotalHrs - docPedagogicas);
+                        const docConts = contratos.filter(c => getEstamento(c) === 'Docente');
+                        const docTitConts = docConts.filter(c => c.calidad_juridica === 'Titular');
+                        const docConConts = docConts.filter(c => c.calidad_juridica !== 'Titular');
 
-                        const asisConts = contratos.filter(c => {
-                          const f = funcionarios.find(func => func.run === c.funcionario_run);
-                          return f?.estamento === 'Asistente de la Educación';
-                        });
-                        const asisTotalHrs = asisConts.reduce((sum, c) => sum + c.horas_totales, 0);
-                        const asisPedagogicas = 0;
-                        const asisNoPedagogicas = asisTotalHrs;
+                        const asisConts = contratos.filter(c => getEstamento(c) === 'Asistente de la Educación');
+                        const asisIndConts = asisConts.filter(c => c.calidad_juridica === 'Indefinido');
+                        const asisPfConts = asisConts.filter(c => c.calidad_juridica !== 'Indefinido');
 
-                        const totalPedagogicas = docPedagogicas;
-                        const totalNoPedagogicas = docNoPedagogicas + asisNoPedagogicas;
+                        const docTitTotalHrs = docTitConts.reduce((sum, c) => sum + c.horas_totales, 0);
+                        const docConTotalHrs = docConConts.reduce((sum, c) => sum + c.horas_totales, 0);
+                        const asisIndTotalHrs = asisIndConts.reduce((sum, c) => sum + c.horas_totales, 0);
+                        const asisPfTotalHrs = asisPfConts.reduce((sum, c) => sum + c.horas_totales, 0);
+
+                        const docTitPedagogicas = asignaciones.filter(a => docTitConts.some(c => c.id === a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
+                        const docConPedagogicas = asignaciones.filter(a => docConConts.some(c => c.id === a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
+                        const asisIndPedagogicas = 0;
+                        const asisPfPedagogicas = 0;
+                        const totalPedagogicas = docTitPedagogicas + docConPedagogicas;
+
+                        const docTitNoPedagogicas = Math.max(0, docTitTotalHrs - docTitPedagogicas);
+                        const docConNoPedagogicas = Math.max(0, docConTotalHrs - docConPedagogicas);
+                        const asisIndNoPedagogicas = asisIndTotalHrs;
+                        const asisPfNoPedagogicas = asisPfTotalHrs;
+                        const totalNoPedagogicas = docTitNoPedagogicas + docConNoPedagogicas + asisIndNoPedagogicas + asisPfNoPedagogicas;
 
                         return (
                           <>
                             <tr className="bg-slate-50/40">
                               <td className="p-3 pl-4 font-semibold text-slate-900">Horas Pedagógicas (Aula)</td>
-                              <td className="p-3 text-center text-slate-600 font-semibold">{docPedagogicas} hrs</td>
-                              <td className="p-3 text-center text-slate-600 font-semibold">{asisPedagogicas} hrs</td>
+                              <td className="p-3 text-center text-slate-650 font-semibold">{docTitPedagogicas} hrs</td>
+                              <td className="p-3 text-center text-slate-650 font-semibold">{docConPedagogicas} hrs</td>
+                              <td className="p-3 text-center text-slate-650 font-semibold">{asisIndPedagogicas} hrs</td>
+                              <td className="p-3 text-center text-slate-650 font-semibold">{asisPfPedagogicas} hrs</td>
                               <td className="p-3 text-center font-bold text-slep-blue">{totalPedagogicas} hrs</td>
                             </tr>
                             <tr className="bg-slate-50/40">
                               <td className="p-3 pl-4 font-semibold text-slate-900">Horas No Pedagógicas (Planif./Cargos)</td>
-                              <td className="p-3 text-center text-slate-600 font-semibold">{docNoPedagogicas.toFixed(1)} hrs</td>
-                              <td className="p-3 text-center text-slate-600 font-semibold">{asisNoPedagogicas} hrs</td>
+                              <td className="p-3 text-center text-slate-650 font-semibold">{docTitNoPedagogicas.toFixed(1)} hrs</td>
+                              <td className="p-3 text-center text-slate-650 font-semibold">{docConNoPedagogicas.toFixed(1)} hrs</td>
+                              <td className="p-3 text-center text-slate-650 font-semibold">{asisIndNoPedagogicas} hrs</td>
+                              <td className="p-3 text-center text-slate-650 font-semibold">{asisPfNoPedagogicas} hrs</td>
                               <td className="p-3 text-center font-bold text-slate-800">{totalNoPedagogicas.toFixed(1)} hrs</td>
                             </tr>
                           </>
@@ -2706,48 +2775,60 @@ export default function EscuelaDashboard() {
                       })()}
                       <tr>
                         <td className="p-3 pl-4 font-semibold text-slate-900">Horas Subvención Regular</td>
-                        <td className="p-3 text-center font-medium">{getFinsSum('Docente', 'Subvención Regular')} hrs</td>
-                        <td className="p-3 text-center font-medium">{getFinsSum('Asistente de la Educación', 'Subvención Regular')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Docente', 'Subvención Regular', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Docente', 'Subvención Regular', false)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Asistente de la Educación', 'Subvención Regular', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Asistente de la Educación', 'Subvención Regular', false)} hrs</td>
                         <td className="p-3 text-center font-bold text-slate-900">
                           {getFinsSum('Docente', 'Subvención Regular') + getFinsSum('Asistente de la Educación', 'Subvención Regular')} hrs
                         </td>
                       </tr>
                       <tr>
                         <td className="p-3 pl-4 font-semibold text-slate-900">Horas SEP</td>
-                        <td className="p-3 text-center font-medium">{getFinsSum('Docente', 'SEP')} hrs</td>
-                        <td className="p-3 text-center font-medium">{getFinsSum('Asistente de la Educación', 'SEP')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Docente', 'SEP', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Docente', 'SEP', false)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Asistente de la Educación', 'SEP', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Asistente de la Educación', 'SEP', false)} hrs</td>
                         <td className="p-3 text-center font-bold text-slate-900">
                           {getFinsSum('Docente', 'SEP') + getFinsSum('Asistente de la Educación', 'SEP')} hrs
                         </td>
                       </tr>
                       <tr>
                         <td className="p-3 pl-4 font-semibold text-slate-900">Horas PIE</td>
-                        <td className="p-3 text-center font-medium">{getFinsSum('Docente', 'PIE')} hrs</td>
-                        <td className="p-3 text-center font-medium">{getFinsSum('Asistente de la Educación', 'PIE')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Docente', 'PIE', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Docente', 'PIE', false)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Asistente de la Educación', 'PIE', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Asistente de la Educación', 'PIE', false)} hrs</td>
                         <td className="p-3 text-center font-bold text-slate-900">
                           {getFinsSum('Docente', 'PIE') + getFinsSum('Asistente de la Educación', 'PIE')} hrs
                         </td>
                       </tr>
                       <tr>
                         <td className="p-3 pl-4 font-semibold text-slate-900">Horas Proretención</td>
-                        <td className="p-3 text-center font-medium">{getFinsSum('Docente', 'Pro-retención')} hrs</td>
-                        <td className="p-3 text-center font-medium">{getFinsSum('Asistente de la Educación', 'Pro-retención')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Docente', 'Pro-retención', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Docente', 'Pro-retención', false)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Asistente de la Educación', 'Pro-retención', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Asistente de la Educación', 'Pro-retención', false)} hrs</td>
                         <td className="p-3 text-center font-bold text-slate-900">
                           {getFinsSum('Docente', 'Pro-retención') + getFinsSum('Asistente de la Educación', 'Pro-retención')} hrs
                         </td>
                       </tr>
                       <tr>
                         <td className="p-3 pl-4 font-semibold text-slate-900">Horas Liceos Bicentenarios</td>
-                        <td className="p-3 text-center font-medium">{getFinsSum('Docente', 'Liceos Bicentenarios')} hrs</td>
-                        <td className="p-3 text-center font-medium">{getFinsSum('Asistente de la Educación', 'Liceos Bicentenarios')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Docente', 'Liceos Bicentenarios', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Docente', 'Liceos Bicentenarios', false)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Asistente de la Educación', 'Liceos Bicentenarios', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsSumByQuality('Asistente de la Educación', 'Liceos Bicentenarios', false)} hrs</td>
                         <td className="p-3 text-center font-bold text-slate-900">
                           {getFinsSum('Docente', 'Liceos Bicentenarios') + getFinsSum('Asistente de la Educación', 'Liceos Bicentenarios')} hrs
                         </td>
                       </tr>
                       <tr>
                         <td className="p-3 pl-4 font-semibold text-slate-900">Otras Horas/Fondos</td>
-                        <td className="p-3 text-center font-medium">{getFinsOtrasSum('Docente')} hrs</td>
-                        <td className="p-3 text-center font-medium">{getFinsOtrasSum('Asistente de la Educación')} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsOtrasSumByQuality('Docente', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsOtrasSumByQuality('Docente', false)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsOtrasSumByQuality('Asistente de la Educación', true)} hrs</td>
+                        <td className="p-3 text-center font-medium">{getFinsOtrasSumByQuality('Asistente de la Educación', false)} hrs</td>
                         <td className="p-3 text-center font-bold text-slate-900">
                           {getFinsOtrasSum('Docente') + getFinsOtrasSum('Asistente de la Educación')} hrs
                         </td>
@@ -4192,21 +4273,29 @@ export default function EscuelaDashboard() {
                         {/* Consolidated Resumen */}
                         <div className="border border-slate-200/60 rounded-xl p-3 bg-blue-50/10 space-y-2">
                           <p className="font-bold text-slate-700 text-[11px] border-b pb-1">📊 Resumen de Jornada y Conciliación</p>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-center text-xs">
                             <div className="bg-white p-2 rounded border">
-                              <span className="block text-[8px] uppercase text-slate-400">Total Aula</span>
+                              <span className="block text-[8px] uppercase text-slate-400 font-semibold">Total Aula</span>
                               <strong className="text-indigo-700">{pedagogicas} hrs</strong>
                             </div>
                             <div className="bg-white p-2 rounded border">
-                              <span className="block text-[8px] uppercase text-slate-400">Planif. Total</span>
+                              <span className="block text-[8px] uppercase text-slate-400 font-semibold">Aula Disponible</span>
+                              <strong className="text-indigo-650">{leyCalculo ? leyCalculo.horasLectivasMaximas : 0} hrs</strong>
+                            </div>
+                            <div className="bg-white p-2 rounded border">
+                              <span className="block text-[8px] uppercase text-slate-400 font-semibold">Recreo Crono.</span>
+                              <strong className="text-pink-700">{((pedagogicas * 4) / 45).toFixed(2)} hrs</strong>
+                            </div>
+                            <div className="bg-white p-2 rounded border">
+                              <span className="block text-[8px] uppercase text-slate-400 font-semibold">Planif. Total</span>
                               <strong className="text-slate-700">{noLectivasTotalesRequeridas} hrs</strong>
                             </div>
                             <div className="bg-white p-2 rounded border">
-                              <span className="block text-[8px] uppercase text-slate-400">Docencia Total</span>
+                              <span className="block text-[8px] uppercase text-slate-400 font-semibold">Docencia Total</span>
                               <strong className="text-slate-800">{totalLectivaNoLectivaUsada} / {horasEfectivas} hrs</strong>
                             </div>
                             <div className={`p-2 rounded border font-bold ${vacantesHrs > 0.05 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`}>
-                              <span className="block text-[8px] uppercase text-slate-450">Horas Vacantes</span>
+                              <span className="block text-[8px] uppercase text-slate-450 font-semibold">Horas Vacantes</span>
                               <strong>{vacantesHrs.toFixed(1)} hrs</strong>
                             </div>
                           </div>
