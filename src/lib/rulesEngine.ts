@@ -415,65 +415,68 @@ export function calcularDesgloseContrato(
 
   const contratoAsigs = asignaciones.filter(a => a.contrato_id === contrato.id);
   const sumAsigHoras = contratoAsigs.reduce((sum, a) => sum + a.horas, 0);
-  const horasAula = contrato.horas_aula !== undefined && contrato.horas_aula !== null
-    ? contrato.horas_aula
-    : sumAsigHoras;
-
-  let sumColabAsigs = 0;
-  let esParvularia = false;
-  let esExcepcion = false;
 
   const cargoClean = String(funcionarioCargo || contrato.funcion_principal || '').trim().toUpperCase();
-  if (cargoClean.includes('PARVULO') || cargoClean.includes('PARVULARIA') || cargoClean.includes('EDUCADORA DE PARVULOS')) {
-    esParvularia = true;
-  }
+  const config = getDecretoConfig(contrato, cargoClean, contratoAsigs[0]?.curso);
+
+  let esParvularia = config.esParvularia;
+  let esExcepcion = false;
 
   if (contratoAsigs.length > 0) {
     contratoAsigs.forEach(a => {
-      const { lectivasProp, noLectivasProp, esParvularia: parv, esExcepcion: ex } = obtenerRatioPorCurso(contrato.rbd, a.curso, cursosDinamicos);
+      const { esParvularia: parv, esExcepcion: ex } = obtenerRatioPorCurso(contrato.rbd, a.curso, cursosDinamicos);
       if (parv) esParvularia = true;
       if (ex) esExcepcion = true;
-      sumColabAsigs += a.horas * (noLectivasProp / lectivasProp);
     });
   }
 
-  let ratioNoLectivas = 35 / 65; // default standard
-  if (contratoAsigs.length > 0 && sumAsigHoras > 0) {
-    ratioNoLectivas = sumColabAsigs / sumAsigHoras;
+  const ratioLectivo = esExcepcion ? 0.60 : 0.65;
+
+  let horasAula = contrato.horas_aula;
+  let horasTotales = contrato.horas_totales;
+
+  if (horasAula !== undefined && horasAula !== null && horasAula > 0) {
+    if (horasTotales === 0 || contrato.horas_aula !== undefined) {
+      if (config.esParvularia && config.duracionLectivaMinutos === 60) {
+        horasTotales = Math.round(horasAula / ratioLectivo);
+      } else {
+        const factorLectivasHC = config.duracionLectivaMinutos / 60;
+        horasTotales = Math.round((horasAula * factorLectivasHC) / ratioLectivo);
+      }
+    }
+  } else {
+    if (horasTotales > 0) {
+      if (config.esParvularia && config.duracionLectivaMinutos === 60) {
+        horasAula = Math.floor(horasTotales * ratioLectivo);
+      } else {
+        const factorLectivasHC = config.duracionLectivaMinutos / 60;
+        horasAula = Math.floor((horasTotales * ratioLectivo) / factorLectivasHC);
+      }
+    } else {
+      horasAula = sumAsigHoras;
+    }
   }
 
-  // Use the refined helper to get decreto config details
-  const config = getDecretoConfig(contrato, cargoClean, contratoAsigs[0]?.curso);
-  
-  // Conversion de Aula: factor real de duracion de la hora lectiva
   const docenciaAulaCronologica = parseFloat((horasAula * (config.duracionLectivaMinutos / 60)).toFixed(2));
   
-  // Calculo de Recreo: only for 45-min Standard/Language (or scaled proportionally for others)
   let recreoCalculado = 0;
   if (config.duracionLectivaMinutos === 45) {
     recreoCalculado = parseFloat((horasAula * (3 / 38)).toFixed(2));
-  } else if (config.esParvularia) {
-    // NT1 and NT2 continuous: display calculated proportion (e.g. 15 min per 60 min)
-    recreoCalculado = parseFloat((docenciaAulaCronologica * (15 / 60)).toFixed(2));
+  } else if (config.esParvularia && config.duracionLectivaMinutos === 60) {
+    recreoCalculado = 0; 
   } else {
-    // Other duraciones (30 or 40 min)
     recreoCalculado = parseFloat((horasAula * (5 / 60)).toFixed(2));
   }
 
   const bloquePresencialTotal = parseFloat((docenciaAulaCronologica + recreoCalculado).toFixed(2));
 
-  // Determine if employee participates in PIE (financiamiento or calidad_juridica)
+  let horasColaborativas = parseFloat((horasTotales - docenciaAulaCronologica - recreoCalculado).toFixed(2));
+  if (horasColaborativas < 0) horasColaborativas = 0;
+
   const esPIE = contrato.calidad_juridica.includes('PIE') || 
                 String(contrato.funcion_principal).toUpperCase().includes('PIE');
 
-  // Coordination hours PIE: sum 3 hrs to docencia efectora and check cap
   const docenciaEfectivaPIE = esPIE ? docenciaAulaCronologica + 3 : docenciaAulaCronologica;
-
-  // HNL calculation
-  // Apply scaling factor for Parvularia standard (60 min vs 45 min)
-  const scalingFactor = config.esParvularia && config.duracionLectivaMinutos === 60 ? 4 / 3 : 1;
-  const ratio = esExcepcion ? 0.40 / 0.60 : 0.35 / 0.65;
-  const horasColaborativas = parseFloat((horasAula * scalingFactor * ratio).toFixed(2));
 
   const cronList = (contrato.horas_cronologicas_adicionales || []).length > 0
     ? (contrato.horas_cronologicas_adicionales || [])
@@ -486,11 +489,6 @@ export function calcularDesgloseContrato(
   }
   const horasTecnicoPedagogicas = contrato.horas_tecnico_pedagogicas || 0;
 
-  const horasTotales = parseFloat((horasAula + horasColaborativas + horasCronAdic + horasDirectivas + horasTecnicoPedagogicas).toFixed(2));
-
-  // Tope maximo Docencia:
-  // Standard or Parvularia: 28.5 hrs (scaled for contracts lower than 44)
-  // Vulnerabilidad (Excepcion 60/40): 26.25 hrs (scaled for contracts lower than 44)
   const baseTope = esExcepcion ? 26.25 : 28.5;
   const topeMaximoDocencia = parseFloat((baseTope * (horasTotales / 44)).toFixed(2));
 
