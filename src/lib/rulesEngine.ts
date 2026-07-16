@@ -304,6 +304,25 @@ export function obtenerRatioPorCurso(
   return { lectivasProp: 65, noLectivasProp: 35, esParvularia, esExcepcion: false };
 }
 
+/**
+ * Calculate non‑lective (colaborativas) hours from aula hours using the appropriate ratio.
+ * Returns 0 for Parvularia (continuous hours).
+ */
+export function calcularHorasNoLectivas(
+  horasAula: number,
+  nivel: string,
+  concentracionPrioritarios: number,
+  esParvularia: boolean
+): number {
+  // For Parvularia, pedagogical hour is 60 min instead of 45 min. Apply scaling factor before ratio.
+  const scalingFactor = esParvularia ? 4 / 3 : 1;
+  const adjustedHorasAula = horasAula * scalingFactor;
+  const esBasico1a4 = /1[°o]|2[°o]|3[°o]|4[°o]/.test(nivel) && /bás|bas|primaria/.test(nivel);
+  const usarExcepcion = esBasico1a4 && concentracionPrioritarios >= 80;
+  const ratio = usarExcepcion ? 0.40 / 0.60 : 0.35 / 0.65;
+  return Number((adjustedHorasAula * ratio).toFixed(2));
+}
+
 export interface DesgloseContrato {
   horasAula: number;
   horasColaborativas: number;
