@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { api, dbLocal, supabase } from '@/lib/supabase';
 import { validarCargaDocente } from '@/lib/rulesEngine';
+import { exportarTablaAExcel, exportarTablaAPdf } from '@/lib/exportUtils';
 import { 
   Establecimiento, 
   Contrato, 
@@ -32,6 +33,7 @@ export default function EscuelaDashboard() {
   const router = useRouter();
   const [selectedRbd, setSelectedRbd] = useState<string>('10202');
   const [colegio, setColegio] = useState<Establecimiento | null>(null);
+  const [sortCriteria, setSortCriteria] = useState<string>('nombre-az');
 
   // Active School State
   const [contratos, setContratos] = useState<Contrato[]>([]);
@@ -83,6 +85,7 @@ export default function EscuelaDashboard() {
   const [selectedCursoNorm, setSelectedCursoNorm] = useState(NOMENCLATURA_CURSOS[0]);
   const [cursoSufijo, setCursoSufijo] = useState('A');
   const [selectedPlanIndex, setSelectedPlanIndex] = useState(0);
+  const [newCursoConcentracion, setNewCursoConcentracion] = useState<number>(0);
 
   // Massive delete selections
   const [selectedDocentes, setSelectedDocentes] = useState<string[]>([]);
@@ -499,11 +502,14 @@ export default function EscuelaDashboard() {
       return;
     }
 
+    const esDe1a4Basico = selectedCursoNorm.includes('1°') || selectedCursoNorm.includes('2°') || selectedCursoNorm.includes('3°') || selectedCursoNorm.includes('4°');
     const nuevoCurso: CursoDinamico = {
       rbd: selectedRbd,
       nombre: fullCursoNombre,
       nivel: plan.nivel,
-      regimen: plan.regimen
+      regimen: plan.regimen,
+      // @ts-ignore
+      concentracion_prioritarios: esDe1a4Basico ? newCursoConcentracion : 0
     };
 
     await api.crearCursoDinamico(nuevoCurso);
@@ -864,8 +870,63 @@ export default function EscuelaDashboard() {
   };
 
   const handleExecuteExport = () => {
-    const activeCols = exportModal.columns.filter(c => c.checked).map(c => c.label);
-    alert(`📥 Descargando reporte de la pestaña "${exportModal.tab.toUpperCase()}" (${colegio?.nombre || 'Establecimiento'}) en formato ${exportModal.format.toUpperCase()}...\n\nColumnas seleccionadas:\n- ${activeCols.join('\n- ')}`);
+    const checkedCols = exportModal.columns.filter(c => c.checked);
+    const labels = checkedCols.map(c => c.label);
+    const keys = checkedCols.map(c => c.key);
+
+    let dataToExport: any[] = [];
+
+    if (exportModal.tab === 'docentes') {
+      dataToExport = schoolDocentes.map(f => {
+        const c = contratos.find(x => normalizarRun(x.funcionario_run) === normalizarRun(f.run));
+        return {
+          run: f.run,
+          nombre: f.nombre,
+          cargo: f.cargo || 'No registrado',
+          horas: c ? c.horas_totales : 0,
+          estado: c ? c.estado : 'Inactivo'
+        };
+      });
+    } else if (exportModal.tab === 'asistentes') {
+      dataToExport = schoolAsistentes.map(f => {
+        const c = contratos.find(x => normalizarRun(x.funcionario_run) === normalizarRun(f.run));
+        return {
+          run: f.run,
+          nombre: f.nombre,
+          cargo: f.cargo || 'No registrado',
+          horas: c ? c.horas_totales : 0,
+          estado: c ? c.estado : 'Inactivo'
+        };
+      });
+    } else if (exportModal.tab === 'cursos') {
+      dataToExport = cursosDinamicos.map(c => {
+        const plan = planesEstudio.find(p => p.nivel === c.nivel && p.regimen === c.regimen);
+        return {
+          nombre: c.nombre,
+          nivel: c.nivel,
+          regimen: c.regimen,
+          horas: plan ? plan.horasObligatorias : 0
+        };
+      });
+    } else if (exportModal.tab === 'dotacion') {
+      dataToExport = funcionarios.map(f => {
+        const c = contratos.find(x => normalizarRun(x.funcionario_run) === normalizarRun(f.run));
+        return {
+          run: f.run,
+          nombre: f.nombre,
+          estamento: f.estamento || 'No registrado',
+          cargo: f.cargo || 'No registrado',
+          horas: c ? c.horas_totales : 0
+        };
+      });
+    }
+
+    if (exportModal.format === 'xlsx') {
+      exportarTablaAExcel(dataToExport, `reporte_${exportModal.tab}`, labels, keys);
+    } else {
+      exportarTablaAPdf(dataToExport, labels, keys, `Reporte ${exportModal.tab.toUpperCase()} - ${colegio?.nombre || 'Establecimiento'}`);
+    }
+
     setExportModal({ ...exportModal, isOpen: false });
   };
 
@@ -889,8 +950,34 @@ export default function EscuelaDashboard() {
     loadAsigs();
   }, [selectedCursoPlan, selectedRbd, planMineduc]);
 
-  const schoolDocentes = funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run));
-  const schoolAsistentes = funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run));
+  const schoolDocentesRaw = funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run));
+  const schoolAsistentesRaw = funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run));
+
+  const sortFuncs = (list: Funcionario[]) => {
+    return [...list].sort((a, b) => {
+      if (sortCriteria === 'nombre-az') {
+        return a.nombre.localeCompare(b.nombre);
+      }
+      if (sortCriteria === 'nombre-za') {
+        return b.nombre.localeCompare(a.nombre);
+      }
+      if (sortCriteria === 'horas-max' || sortCriteria === 'horas-min') {
+        const runA = normalizarRun(a.run);
+        const runB = normalizarRun(b.run);
+        const horasA = contratos
+          .filter(c => normalizarRun(c.funcionario_run) === runA)
+          .reduce((sum, c) => sum + (Number(c.horas_totales) || 0), 0);
+        const horasB = contratos
+          .filter(c => normalizarRun(c.funcionario_run) === runB)
+          .reduce((sum, c) => sum + (Number(c.horas_totales) || 0), 0);
+        return sortCriteria === 'horas-max' ? horasB - horasA : horasA - horasB;
+      }
+      return 0;
+    });
+  };
+
+  const schoolDocentes = sortFuncs(schoolDocentesRaw);
+  const schoolAsistentes = sortFuncs(schoolAsistentesRaw);
 
   const printFuncionarioDetail = (funcionario: Funcionario, contrato: Contrato | undefined, financiamientos: { origen: OrigenFondo; horas: number }[], leyCalculo: any, teacherAsigs: AsignacionAula[]) => {
     const printWindow = window.open('', '_blank');
@@ -1659,6 +1746,16 @@ export default function EscuelaDashboard() {
                         🗑️ Desvincular Seleccionados ({selectedDocentes.length})
                       </button>
                     )}
+                    <select
+                      className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 font-bold"
+                      value={sortCriteria}
+                      onChange={(e) => setSortCriteria(e.target.value)}
+                    >
+                      <option value="nombre-az">🔤 Ordenar: Nombre (A-Z)</option>
+                      <option value="nombre-za">🔤 Ordenar: Nombre (Z-A)</option>
+                      <option value="horas-max">⏳ Ordenar: Mayor Carga Horaria</option>
+                      <option value="horas-min">⏳ Ordenar: Menor Carga Horaria</option>
+                    </select>
                     <button
                       onClick={() => setShowDocenteActionsDropdown(!showDocenteActionsDropdown)}
                       className="bg-slep-blue hover:bg-slep-blue-hover text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5 cursor-pointer"
@@ -1758,7 +1855,7 @@ export default function EscuelaDashboard() {
                               {(() => {
                                 if (hasCont && hasCont.estado === 'Activo') {
                                   const teacherAsigs = asignaciones.filter(a => a.contrato_id === hasCont.id);
-                                  const leyCalculo = colegio ? validarCargaDocente(hasCont, colegio, teacherAsigs, cargosPersonalizados) : null;
+                                  const leyCalculo = colegio ? validarCargaDocente(hasCont, colegio, teacherAsigs, cargosPersonalizados, cursosDinamicos) : null;
                                   if (leyCalculo && !leyCalculo.cumpleLey20903) {
                                     return (
                                       <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[9px] font-black border border-rose-300 ml-2 animate-pulse whitespace-nowrap" title={`Exceso detectado en proporción de aula. Se asignan ${leyCalculo.horasLectivasAsignadas} hrs vs max legal de ${leyCalculo.horasLectivasMaximas} hrs.`}>
@@ -1902,7 +1999,7 @@ export default function EscuelaDashboard() {
                       .filter(c => normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)) && funcionarios.find(func => func.run === c.funcionario_run)?.estamento === 'Docente')
                       .filter(c => {
                         const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
-                        const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs, cargosPersonalizados) : null;
+                        const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs, cargosPersonalizados, cursosDinamicos) : null;
                         return metrics ? !metrics.cumpleLey20903 : false;
                       });
 
@@ -1917,7 +2014,7 @@ export default function EscuelaDashboard() {
                     return docentesAlertados.map(c => {
                       const f = funcionarios.find(func => func.run === c.funcionario_run);
                       const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
-                      const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs, cargosPersonalizados) : null;
+                      const metrics = colegio ? validarCargaDocente(c, colegio, teacherAsigs, cargosPersonalizados, cursosDinamicos) : null;
                       if (!metrics) return null;
                       
                       return (
@@ -1954,6 +2051,16 @@ export default function EscuelaDashboard() {
                         🗑️ Desvincular Seleccionados ({selectedAsistentes.length})
                       </button>
                     )}
+                    <select
+                      className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 font-bold"
+                      value={sortCriteria}
+                      onChange={(e) => setSortCriteria(e.target.value)}
+                    >
+                      <option value="nombre-az">🔤 Ordenar: Nombre (A-Z)</option>
+                      <option value="nombre-za">🔤 Ordenar: Nombre (Z-A)</option>
+                      <option value="horas-max">⏳ Ordenar: Mayor Carga Horaria</option>
+                      <option value="horas-min">⏳ Ordenar: Menor Carga Horaria</option>
+                    </select>
                     <button
                       onClick={() => setShowAsistenteActionsDropdown(!showAsistenteActionsDropdown)}
                       className="bg-slep-blue hover:bg-slep-blue-hover text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5 cursor-pointer"
@@ -2202,6 +2309,11 @@ export default function EscuelaDashboard() {
                               <span className="text-xl group-hover:scale-110 transition-transform">🏫</span>
                               <span className={`transition-colors ${horasInsuficientes ? 'text-rose-800' : 'text-slate-800 group-hover:text-white'}`}>{c.nombre}</span>
                               <span className={`text-[9px] font-normal ${horasInsuficientes ? 'text-rose-600' : 'text-slate-400 group-hover:text-white/80'}`}>{c.nivel}</span>
+                              {c.concentracion_prioritarios !== undefined && Number(c.concentracion_prioritarios) >= 80 && (
+                                <span className="text-[8px] bg-amber-500 text-white font-bold px-1.5 py-0.5 rounded uppercase mt-0.5" title={`Alta concentración de alumnos prioritarios (${c.concentracion_prioritarios}%). Ley 20.903: Carga lectiva máxima del 60%.`}>
+                                  ✨ Ratio 60/40
+                                </span>
+                              )}
                               {horasInsuficientes ? (
                                 <span className="text-[8px] bg-red-600 text-white font-black px-1.5 py-0.5 rounded tracking-wide animate-pulse uppercase mt-1">
                                   ⚠️ Faltan {baseOblig - assignedHrs} hrs
@@ -2307,6 +2419,20 @@ export default function EscuelaDashboard() {
                         })}
                       </select>
                     </div>
+
+                    {(selectedCursoNorm.includes('1°') || selectedCursoNorm.includes('2°') || selectedCursoNorm.includes('3°') || selectedCursoNorm.includes('4°')) && (
+                      <div>
+                        <label className="block font-bold text-slate-500 mb-1">Concentración Alumnos Prioritarios (%)</label>
+                        <input 
+                          type="number"
+                          min="0"
+                          max="100"
+                          className="w-full p-2 bg-white border rounded font-bold"
+                          value={newCursoConcentracion}
+                          onChange={(e) => setNewCursoConcentracion(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                        />
+                      </div>
+                    )}
 
                     <div className="flex items-end">
                       <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2 rounded text-xs shadow">
@@ -3682,7 +3808,7 @@ export default function EscuelaDashboard() {
             horas_directivas: editContHorasDirectivas || 0,
             horas_tecnico_pedagogicas: editContHorasTecPed || 0
           } : undefined;
-          const leyCalculo = colegio && tempCont ? validarCargaDocente(tempCont, colegio, teacherAsigs, cargosPersonalizados) : null;
+          const leyCalculo = colegio && tempCont ? validarCargaDocente(tempCont, colegio, teacherAsigs, cargosPersonalizados, cursosDinamicos) : null;
 
           return (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
@@ -4293,7 +4419,7 @@ export default function EscuelaDashboard() {
                     const thisCourseAsigs = editCursoAsignaciones.filter(a => a.contrato_id === cont.id);
                     const tempAsigs = [...otherCourseAsigs, ...thisCourseAsigs];
 
-                    const metrics = colegio ? validarCargaDocente(cont, colegio, tempAsigs, cargosPersonalizados) : null;
+                    const metrics = colegio ? validarCargaDocente(cont, colegio, tempAsigs, cargosPersonalizados, cursosDinamicos) : null;
                     if (metrics && !metrics.cumpleLey20903) {
                       return {
                         nombre: func.nombre,

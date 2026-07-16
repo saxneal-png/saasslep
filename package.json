@@ -11,6 +11,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
     "caniuse-lite": "^1.0.30001799",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.17.0",
     "next": "16.2.9",
     "papaparse": "^5.5.3",

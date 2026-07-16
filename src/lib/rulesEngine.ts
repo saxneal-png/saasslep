@@ -291,11 +291,15 @@ export function validarCargaDocente(
   contrato: Contrato,
   establecimiento: Establecimiento,
   asignaciones: AsignacionAula[],
-  cargos: CargoPersonalizado[] = []
+  cargos: CargoPersonalizado[] = [],
+  cursosDinamicos: any[] = []
 ): ResultadoProporcionHoraria {
   // If replacement, it inherits the same, but let's check its own capacity.
   // If Licencia Médica, the contract's teaching workload is logically frozen (does not count towards this teacher).
   
+  // Helper to normalize RBD
+  const normRbd = (val: any) => String(val || '').trim().replace(/^0+/, '');
+
   // 1. Calculate assigned hours per level category
   const asignacionesEspeciales = asignaciones.filter(a => {
     const cName = (a.curso || '').toLowerCase();
@@ -303,7 +307,24 @@ export function validarCargaDocente(
                    cName.includes('1o') || cName.includes('2o') || cName.includes('3o') || cName.includes('4o');
     const isBasico = cName.includes('bás') || cName.includes('bas') || cName.includes('primaria');
     const isMedio = cName.includes('med') || cName.includes('sec');
-    return is1To4 && isBasico && !isMedio;
+    
+    // Check if the specific course has high concentration >= 80 in cursosDinamicos
+    const cursoInfo = cursosDinamicos.find(
+      c => c.nombre === a.curso && normRbd(c.rbd) === normRbd(contrato.rbd)
+    );
+    
+    let esAltaConcentracion = false;
+    if (cursoInfo) {
+      const level = (cursoInfo.nivel || '').toLowerCase();
+      const level1To4 = level.includes('1°') || level.includes('2°') || level.includes('3°') || level.includes('4°') ||
+                        level.includes('primero') || level.includes('segundo') || level.includes('tercero') || level.includes('cuarto');
+      const conc = cursoInfo.concentracion_prioritarios || 0;
+      if (level1To4 && conc >= 80) {
+        esAltaConcentracion = true;
+      }
+    }
+    
+    return is1To4 && isBasico && !isMedio && (establecimiento.ivm >= 80 || esAltaConcentracion);
   });
 
   const hrsEspeciales = asignacionesEspeciales.reduce((sum, a) => sum + a.horas, 0);
@@ -318,7 +339,7 @@ export function validarCargaDocente(
   // The contract hours that can be split under Ley 20.903 are the total minus directivas, técnicas, and custom cargo hours
   const horasEfectivasContrato = Math.max(0, contrato.horas_totales - (contrato.horas_directivas || 0) - (contrato.horas_tecnico_pedagogicas || 0) - horasCargo);
 
-  const esEspecialEscuela = establecimiento.ivm > 80;
+  const esEspecialEscuela = establecimiento.ivm >= 80 || hrsEspeciales > 0;
   
   // Calculate weighted proportion (combination of 60/40 and 65/35 depending on courses)
   const proporcionLectiva = esEspecialEscuela

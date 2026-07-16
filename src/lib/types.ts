@@ -98,6 +98,7 @@ export interface CursoDinamico {
   regimen: 'JEC' | 'No JEC';
   horasPIE?: number;
   profesor_jefe_run?: string;
+  concentracion_prioritarios?: number;
 }
 
 export interface AsignaturaDinamica {

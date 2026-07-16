@@ -15,10 +15,12 @@ import {
   CARGOS_DOCENTES_LIST,
   ReemplazoDetalle,
   Establecimiento,
-  FinanciamientoContrato
+  FinanciamientoContrato,
+  CursoDinamico
 } from '@/lib/types';
 import { normalizarRun, normalizarRbd } from '@/lib/csvParser';
 import { calcularHaberBaseEUS, validarCargaDocente } from '@/lib/rulesEngine';
+import { exportarTablaAExcel, exportarTablaAPdf } from '@/lib/exportUtils';
 
 export default function RRHHPage() {
   const router = useRouter();
@@ -30,6 +32,7 @@ export default function RRHHPage() {
   const [comunas, setComunas] = useState<string[]>([]);
   const [escuelas, setEscuelas] = useState<Establecimiento[]>([]);
   const [financiamientos, setFinanciamientos] = useState<FinanciamientoContrato[]>([]);
+  const [cursosDinamicos, setCursosDinamicos] = useState<CursoDinamico[]>([]);
 
   // Search/Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -145,8 +148,59 @@ export default function RRHHPage() {
   };
 
   const handleExecuteExport = () => {
-    const activeCols = exportModal.columns.filter(c => c.checked).map(c => c.label);
-    alert(`📥 Descargando reporte de la pestaña "${exportModal.tab.toUpperCase()}" (Gestión de Personas SLEP) en formato ${exportModal.format.toUpperCase()}...\n\nColumnas seleccionadas:\n- ${activeCols.join('\n- ')}`);
+    const checkedCols = exportModal.columns.filter(c => c.checked);
+    const labels = checkedCols.map(c => c.label);
+    const keys = checkedCols.map(c => c.key);
+
+    let dataToExport: any[] = [];
+
+    if (exportModal.tab === 'fichas') {
+      dataToExport = sortedFuncionarios.map(f => {
+        const related = contratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run));
+        const firstCont = related[0];
+        const sumHoras = related.reduce((sum, c) => sum + (c.horas_totales || 0), 0);
+        return {
+          run: f.run,
+          nombre: f.nombre,
+          estamento: f.estamento || 'No registrado',
+          cargo: f.cargo || 'No registrado',
+          rbd: firstCont ? firstCont.rbd : 'Sin establecimiento',
+          horas: sumHoras,
+          estado: firstCont ? firstCont.estado : 'Inactivo'
+        };
+      });
+    } else if (exportModal.tab === 'licencias') {
+      dataToExport = reemplazosList.map(r => {
+        const cont = contratos.find(c => c.id === r.contrato_titular_id);
+        const func = cont ? funcionarios.find(f => f.run === cont.funcionario_run) : null;
+        const reempFunc = funcionarios.find(f => f.run === r.reemplazo_run);
+        return {
+          nombre: func ? func.nombre : (cont ? cont.funcionario_run : 'No registrado'),
+          run: cont ? cont.funcionario_run : 'No registrado',
+          horas: r.horas,
+          rbd: r.rbd,
+          cobertura: reempFunc ? `${reempFunc.nombre} (${r.horas} hrs)` : 'Sin Reemplazo'
+        };
+      });
+    } else if (exportModal.tab === 'banco') {
+      // get replacements pool
+      dataToExport = funcionarios.filter(f => f.cargo?.toLowerCase().includes('reemplazo') || f.run.startsWith('pool_') || !contratos.some(c => c.funcionario_run === f.run)).map(f => {
+        return {
+          run: f.run,
+          nombre: f.nombre,
+          titulo: f.titulo || 'No registrado',
+          email: f.email || 'No registrado',
+          telefono: f.telefono || 'No registrado'
+        };
+      });
+    }
+
+    if (exportModal.format === 'xlsx') {
+      exportarTablaAExcel(dataToExport, `reporte_${exportModal.tab}`, labels, keys);
+    } else {
+      exportarTablaAPdf(dataToExport, labels, keys, `Reporte ${exportModal.tab.toUpperCase()} - Servicio Local`);
+    }
+
     setExportModal({ ...exportModal, isOpen: false });
   };
 
@@ -183,14 +237,15 @@ export default function RRHHPage() {
 
   async function loadData() {
     await api.pullCloudSync();
-    const [funcs, conts, tasks, coms, ests, reemps, fins] = await Promise.all([
+    const [funcs, conts, tasks, coms, ests, reemps, fins, cursos] = await Promise.all([
       api.getFuncionarios(),
       api.getContratos(),
       api.getTareasReemplazo(),
       api.getComunas(),
       api.getEstablecimientos(),
       api.getReemplazosLicencias(),
-      api.getFinanciamientos()
+      api.getFinanciamientos(),
+      api.getTodosLosCursosDinamicos()
     ]);
     setFuncionarios(funcs);
     setContratos(conts);
@@ -199,6 +254,7 @@ export default function RRHHPage() {
     setEscuelas(ests);
     setReemplazosList(reemps);
     setFinanciamientos(fins);
+    setCursosDinamicos(cursos);
     if (ests.length > 0) {
       setRbd(ests[0].rbd);
     }
@@ -1167,7 +1223,7 @@ export default function RRHHPage() {
                                   } else if (cont.estado === 'Activo') {
                                     const esc = escuelas.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(cont.rbd)));
                                     const asigs = dbLocal.asignacionesAula.filter(a => a.contrato_id === cont.id);
-                                    const leyCalculo = esc ? validarCargaDocente(cont, esc, asigs, []) : null;
+                                    const leyCalculo = esc ? validarCargaDocente(cont, esc, asigs, [], cursosDinamicos) : null;
                                     if (leyCalculo && !leyCalculo.cumpleLey20903) {
                                       return (
                                         <span className="bg-rose-105 text-rose-700 px-2 py-0.5 rounded text-[9px] font-black border border-rose-300 ml-2 animate-pulse whitespace-nowrap" title={`Exceso detectado en proporción de aula (Ley 20.903).`}>

@@ -40,6 +40,7 @@ export default function SostenedorDashboard() {
   const [cargosPersonalizados, setCargosPersonalizados] = useState<CargoPersonalizado[]>([]);
   const [comunasList, setComunasList] = useState<string[]>([]);
   const [newComunaName, setNewComunaName] = useState('');
+  const [cursosDinamicos, setCursosDinamicos] = useState<CursoDinamico[]>([]);
 
   // Editing Funcionario modal state
   const [editingFuncionario, setEditingFuncionario] = useState<Funcionario | null>(null);
@@ -252,7 +253,8 @@ export default function SostenedorDashboard() {
       sups,
       plans,
       coms,
-      fins
+      fins,
+      cursos
     ] = await Promise.all([
       api.getEstablecimientos(),
       api.getContratos(),
@@ -262,7 +264,8 @@ export default function SostenedorDashboard() {
       api.getSupervisores(),
       api.getPlanesEstudio(),
       api.getComunas(),
-      api.getFinanciamientos()
+      api.getFinanciamientos(),
+      api.getTodosLosCursosDinamicos()
     ]);
 
     // Fetch dyn elements
@@ -277,6 +280,7 @@ export default function SostenedorDashboard() {
     setTutelas(tuts);
     setSupervisores(sups);
     setPlanesEstudio(plans);
+    setCursosDinamicos(cursos);
     
     setAsignaciones(asigs);
     setCargosPersonalizados(cargs);
@@ -2109,7 +2113,7 @@ export default function SostenedorDashboard() {
             const teacherAsigs = asignaciones.filter(a => a.contrato_id === relatedCont?.id);
             const leyCalculo = relatedCont && relatedCont.rbd ? (() => {
               const esc = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(relatedCont.rbd)));
-              return esc ? validarCargaDocente(relatedCont, esc, teacherAsigs, cargosPersonalizados) : null;
+              return esc ? validarCargaDocente(relatedCont, esc, teacherAsigs, cargosPersonalizados, cursosDinamicos) : null;
             })() : null;
 
             return (
