@@ -2969,8 +2969,10 @@ export default function EscuelaDashboard() {
                         <th className="p-3 text-center">Calidad Jurídica</th>
                         <th className="p-3 text-center">Horas Contrato</th>
                         <th className="p-3 text-center">Aula</th>
-                        <th className="p-3 text-center">PIE</th>
-                        <th className="p-3 text-center">SEP</th>
+                        <th className="p-3 text-center">PIE Tit/Ind</th>
+                        <th className="p-3 text-center">PIE Con/Plz</th>
+                        <th className="p-3 text-center">SEP Tit/Ind</th>
+                        <th className="p-3 text-center">SEP Con/Plz</th>
                         <th className="p-3 text-center">Directivas</th>
                         <th className="p-3 text-center">Técnicas</th>
                         <th className="p-3 text-center">Otras Func.</th>
@@ -3043,8 +3045,30 @@ export default function EscuelaDashboard() {
                               </td>
                               <td className="p-3 text-center font-bold text-slate-800">{c.horas_totales} hrs</td>
                               <td className="p-3 text-center font-bold text-slep-blue">{pedagogicas} hrs</td>
-                              <td className="p-3 text-center text-blue-600 font-bold">{pieHrs} hrs</td>
-                              <td className="p-3 text-center text-emerald-600 font-bold">{sepHrs} hrs</td>
+                              {(() => {
+                                const isTitularOrIndefinido = c.calidad_juridica === 'Titular' || c.calidad_juridica === 'Indefinido';
+                                const pieTit = isTitularOrIndefinido ? pieHrs : 0;
+                                const pieCon = !isTitularOrIndefinido ? pieHrs : 0;
+                                const sepTit = isTitularOrIndefinido ? sepHrs : 0;
+                                const sepCon = !isTitularOrIndefinido ? sepHrs : 0;
+
+                                return (
+                                  <>
+                                    <td className="p-3 text-center">
+                                      {pieTit > 0 ? <span className="text-blue-600 font-bold">{pieTit} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                                    </td>
+                                    <td className="p-3 text-center">
+                                      {pieCon > 0 ? <span className="text-blue-600 font-bold">{pieCon} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                                    </td>
+                                    <td className="p-3 text-center">
+                                      {sepTit > 0 ? <span className="text-emerald-600 font-bold">{sepTit} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                                    </td>
+                                    <td className="p-3 text-center">
+                                      {sepCon > 0 ? <span className="text-emerald-600 font-bold">{sepCon} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                                    </td>
+                                  </>
+                                );
+                              })()}
                               <td className="p-3 text-center text-slate-500">{dirHrs} hrs</td>
                               <td className="p-3 text-center text-slate-500">{tecHrs} hrs</td>
                               <td className="p-3 text-center text-purple-650">{otrasFuncionesHrs} hrs</td>
