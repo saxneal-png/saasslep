@@ -19,7 +19,7 @@ import {
   CursoDinamico
 } from '@/lib/types';
 import { normalizarRun, normalizarRbd } from '@/lib/csvParser';
-import { calcularHaberBaseEUS, validarCargaDocente } from '@/lib/rulesEngine';
+import { calcularHaberBaseEUS, validarCargaDocente, calcularDesgloseContrato, obtenerRatioPorCurso } from '@/lib/rulesEngine';
 import { exportarTablaAExcel, exportarTablaAPdf } from '@/lib/exportUtils';
 
 export default function RRHHPage() {
@@ -34,9 +34,17 @@ export default function RRHHPage() {
   const [financiamientos, setFinanciamientos] = useState<FinanciamientoContrato[]>([]);
   const [cursosDinamicos, setCursosDinamicos] = useState<CursoDinamico[]>([]);
 
+  // Consolidado pre-calculado y paginacion
+  const [consolidadoData, setConsolidadoData] = useState<any[]>([]);
+  const [currentPage, setCurrentPage] = useState<number>(0);
+  const [pageSize, setPageSize] = useState<number>(20);
+  const [totalRecords, setTotalRecords] = useState<number>(0);
+
   // Search/Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEstamento, setFilterEstamento] = useState<'all' | 'P01' | 'P02'>('all');
+  const [filterRbd, setFilterRbd] = useState<string>('all');
+  const [sortOrder, setSortOrder] = useState<string>('nombre-az');
 
   // New Staff State
   const [run, setRun] = useState('');
@@ -56,6 +64,16 @@ export default function RRHHPage() {
   const [funcionPrincipal, setFuncionPrincipal] = useState('DOCENTE DE AULA');
   const [horasContrato, setHorasContrato] = useState(44);
   const [titulo, setTitulo] = useState('');
+
+  // Bilateral contract entry mode and SLEP hours breakdown
+  const [inputMode, setInputMode] = useState<'aula-primero' | 'contrato-primero'>('aula-primero');
+  const [horasAulaInput, setHorasAulaInput] = useState<number>(30);
+  const [esUniprofesionalInput, setEsUniprofesionalInput] = useState<boolean>(false);
+  const [horasDirectivasInput, setHorasDirectivasInput] = useState<number>(0);
+  const [horasTecPedInput, setHorasTecPedInput] = useState<number>(0);
+  const [cronoHoursInput, setCronoHoursInput] = useState<{ id: string; tipo: string; horas: number }[]>([]);
+  const [newCronoType, setNewCronoType] = useState<string>('Trabajo Colaborativo');
+  const [newCronoHours, setNewCronoHours] = useState<number>(2);
 
   // Licencias Medicas State
   const [selectedLicenciaRun, setSelectedLicenciaRun] = useState('');
@@ -235,6 +253,97 @@ export default function RRHHPage() {
     };
   }, []);
 
+  const fetchConsolidadoPaginado = async () => {
+    try {
+      let query = supabase.from('v_consolidado_personal').select('*', { count: 'exact' });
+      
+      if (searchTerm) {
+        query = query.or(`nombre_funcionario.ilike.%${searchTerm}%,funcionario_run.ilike.%${searchTerm}%`);
+      }
+      
+      if (filterEstamento === 'P01') {
+        query = query.eq('grupo_estamento', 'P01_Administrativo');
+      } else if (filterEstamento === 'P02') {
+        query = query.eq('grupo_estamento', 'P02_Educacion');
+      }
+      
+      if (filterRbd !== 'all') {
+        query = query.eq('rbd', filterRbd);
+      }
+      
+      if (sortOrder === 'nombre-az') {
+        query = query.order('nombre_funcionario', { ascending: true });
+      } else if (sortOrder === 'nombre-za') {
+        query = query.order('nombre_funcionario', { ascending: false });
+      } else if (sortOrder === 'horas-max') {
+        query = query.order('horas_totales', { ascending: false });
+      } else if (sortOrder === 'horas-min') {
+        query = query.order('horas_totales', { ascending: true });
+      }
+
+      const from = currentPage * pageSize;
+      const to = from + pageSize - 1;
+      const { data, count, error } = await query.range(from, to);
+
+      if (error) throw error;
+      
+      setConsolidadoData(data || []);
+      setTotalRecords(count || 0);
+    } catch (err) {
+      console.warn("⚠️ Fallback: computing consolidado data locally", err);
+      const filtered = funcionarios.filter(f => {
+        const matchesSearch = f.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || f.run.includes(searchTerm);
+        const esP02 = f.grupo_estamento === 'P02_Educacion' || f.estamento === 'Docente' || f.estamento === 'Asistente de la Educación';
+        const esP01 = f.grupo_estamento === 'P01_Administrativo';
+        const matchesRbd = filterRbd === 'all' || contratos.some(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run) && normalizarRbd(String(c.rbd)) === normalizarRbd(String(filterRbd)));
+
+        if (!matchesRbd) return false;
+        if (filterEstamento === 'P01') return matchesSearch && esP01;
+        if (filterEstamento === 'P02') return matchesSearch && esP02;
+        return matchesSearch;
+      });
+
+      const sorted = [...filtered].sort((a, b) => {
+        if (sortOrder === 'nombre-az') return a.nombre.localeCompare(b.nombre);
+        if (sortOrder === 'nombre-za') return b.nombre.localeCompare(a.nombre);
+        
+        const runA = normalizarRun(a.run);
+        const runB = normalizarRun(b.run);
+        const hrsA = contratos.filter(c => normalizarRun(c.funcionario_run) === runA).reduce((sum, c) => sum + (c.horas_totales || 0), 0);
+        const hrsB = contratos.filter(c => normalizarRun(c.funcionario_run) === runB).reduce((sum, c) => sum + (c.horas_totales || 0), 0);
+        
+        return sortOrder === 'horas-max' ? hrsB - hrsA : hrsA - hrsB;
+      });
+
+      setTotalRecords(sorted.length);
+      
+      const from = currentPage * pageSize;
+      const to = from + pageSize;
+      const sliced = sorted.slice(from, to).map(f => {
+        const related = contratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run));
+        const primaryCont = related[0];
+        const sumHoras = related.reduce((sum, c) => sum + (c.horas_totales || 0), 0);
+        return {
+          run: f.run,
+          nombre_funcionario: f.nombre,
+          estamento: f.estamento || (f.grupo_estamento === 'P01_Administrativo' ? 'Administrativo' : 'Educación'),
+          grupo_estamento: f.grupo_estamento,
+          cargo: f.cargo || primaryCont?.funcion_principal || 'No registrado',
+          rbd: primaryCont ? primaryCont.rbd : 'Sin RBD',
+          horas_totales: sumHoras,
+          grado_eus: f.grado_eus
+        };
+      });
+      setConsolidadoData(sliced);
+    }
+  };
+
+  useEffect(() => {
+    if (authorized) {
+      fetchConsolidadoPaginado();
+    }
+  }, [searchTerm, filterEstamento, filterRbd, sortOrder, currentPage, pageSize, funcionarios, contratos, authorized]);
+
   async function loadData() {
     await api.pullCloudSync();
     const [funcs, conts, tasks, coms, ests, reemps, fins, cursos] = await Promise.all([
@@ -269,9 +378,45 @@ export default function RRHHPage() {
     }
     const cleanRun = normalizarRun(run);
 
-    if (funcionarios.some(f => f.run === cleanRun)) {
+    if (funcionarios.some(f => normalizarRun(f.run) === cleanRun)) {
       alert('⚠️ Este funcionario ya se encuentra registrado.');
       return;
+    }
+
+    // Determine hours based on mode
+    let calculatedTotal = 0;
+    let calculatedAula = 0;
+    let calculatedColab = 0;
+
+    if (estamento === 'P02_Educacion') {
+      if (inputMode === 'aula-primero') {
+        calculatedAula = horasAulaInput;
+        calculatedColab = parseFloat((horasAulaInput * (35 / 65)).toFixed(2));
+        const sumCrono = cronoHoursInput.reduce((s, h) => s + h.horas, 0);
+        const dirHrs = esUniprofesionalInput ? Math.min(10, horasDirectivasInput) : (horasDirectivasInput || 0);
+        calculatedTotal = parseFloat((calculatedAula + calculatedColab + sumCrono + dirHrs + horasTecPedInput).toFixed(2));
+      } else {
+        // contrato-primero
+        calculatedTotal = horasContrato;
+        calculatedAula = parseFloat((horasContrato * 0.65).toFixed(2));
+        calculatedColab = parseFloat((horasContrato * 0.35).toFixed(2));
+      }
+    } else {
+      calculatedTotal = 44;
+    }
+
+    // Proactively align subventionLines total with calculated total
+    const sumFins = subventionLines.reduce((s, l) => s + l.horas, 0);
+    if (estamento === 'P02_Educacion' && sumFins !== calculatedTotal) {
+      if (subventionLines.length > 0) {
+        subventionLines[0].horas = parseFloat((calculatedTotal - subventionLines.slice(1).reduce((s, l) => s + l.horas, 0)).toFixed(2));
+        if (subventionLines[0].horas < 0) {
+          subventionLines[0].horas = calculatedTotal;
+          subventionLines.splice(1); // clear others if negative descalce
+        }
+      } else {
+        subventionLines.push({ origen_fondo: 'Subvención Regular', calidad_juridica: calidadP02, horas: calculatedTotal });
+      }
     }
 
     const nuevoFuncionario: Funcionario = {
@@ -287,17 +432,16 @@ export default function RRHHPage() {
       estamento: estamento === 'P02_Educacion' ? 'Docente' : undefined
     };
 
-    // Save funcionario
-    dbLocal.funcionarios = [...dbLocal.funcionarios, nuevoFuncionario];
+    try {
+      // Proactively upsert funcionario
+      await api.upsertFuncionario(nuevoFuncionario);
 
-    // If P02, create a contract linked to the selected school
-    if (estamento === 'P02_Educacion') {
-      if (subventionLines.length > 0) {
-        // Create multiple contracts if there are different Calidades/Subventions, or group by Calidad
-        // Let's create one contract per unique Calidad Jurídica for this teacher at this school, with the sum of hours
+      // If P02, create a contract linked to the selected school
+      if (estamento === 'P02_Educacion') {
         const calidadesUnicas = Array.from(new Set(subventionLines.map(sl => sl.calidad_juridica)));
         
-        calidadesUnicas.forEach((cal, cIdx) => {
+        for (let cIdx = 0; cIdx < calidadesUnicas.length; cIdx++) {
+          const cal = calidadesUnicas[cIdx];
           const linesForCal = subventionLines.filter(l => l.calidad_juridica === cal);
           const totalHorasCal = linesForCal.reduce((sum, l) => sum + l.horas, 0);
           
@@ -308,62 +452,57 @@ export default function RRHHPage() {
             calidad_juridica: cal,
             funcion_principal: funcionPrincipal,
             estado: 'Activo',
-            horas_totales: totalHorasCal
+            horas_totales: totalHorasCal,
+            horas_aula: calidadesUnicas.length === 1 ? calculatedAula : parseFloat((totalHorasCal * 0.65).toFixed(2)),
+            horas_colaborativas: calidadesUnicas.length === 1 ? calculatedColab : parseFloat((totalHorasCal * 0.35).toFixed(2)),
+            es_uniprofesional: esUniprofesionalInput,
+            horas_directivas: horasDirectivasInput,
+            horas_tecnico_pedagogicas: horasTecPedInput
           };
-          dbLocal.contratos = [...dbLocal.contratos, nuevoContrato];
 
-          // Associate financing records to this contract
-          const newFins = linesForCal.map((l, lIdx) => ({
-            id: `fin-${nuevoContrato.id}-${lIdx}`,
+          const newFins = linesForCal.map((l) => ({
+            id: `${nuevoContrato.id}-${l.origen_fondo}`,
             contrato_id: nuevoContrato.id,
             origen_fondo: l.origen_fondo,
             horas: l.horas
           }));
-          dbLocal.financiamientoContratos = [...dbLocal.financiamientoContratos, ...newFins];
-        });
-      } else {
-        const nuevoContrato: Contrato = {
-          id: `rrhh-cont-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-${rbd}`,
-          funcionario_run: cleanRun,
-          rbd,
-          calidad_juridica: calidadP02,
-          funcion_principal: funcionPrincipal,
-          estado: 'Activo',
-          horas_totales: horasContrato
-        };
-        dbLocal.contratos = [...dbLocal.contratos, nuevoContrato];
 
-        dbLocal.financiamientoContratos = [
-          ...dbLocal.financiamientoContratos,
-          {
-            id: `fin-${nuevoContrato.id}-1`,
+          const contractCrono = cronoHoursInput.map((ch, chIdx) => ({
+            id: `crono-${nuevoContrato.id}-${chIdx}`,
             contrato_id: nuevoContrato.id,
-            origen_fondo: 'Subvención Regular' as OrigenFondo,
-            horas: horasContrato
-          }
-        ];
-      }
-    } else {
-      // P01 Central Office Contract
-      const nuevoContrato: Contrato = {
-        id: `rrhh-cont-p01-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-central`,
-        funcionario_run: cleanRun,
-        rbd: '99999', // Central Level code
-        calidad_juridica: calidadP01 === 'Planta' ? 'Titular' : 'A contrata',
-        funcion_principal: escalafonP01,
-        estado: 'Activo',
-        horas_totales: 44
-      };
-      dbLocal.contratos = [...dbLocal.contratos, nuevoContrato];
-    }
+            tipo: ch.tipo,
+            horas: ch.horas
+          }));
 
-    setRun('');
-    setNombre('');
-    setEmail('');
-    setTelefono('');
-    setTitulo('');
-    await loadData();
-    alert('✅ Contratación tramitada con éxito.');
+          await api.upsertContratoCompleto(nuevoContrato, newFins, contractCrono);
+        }
+      } else {
+        // P01 Central Office Contract
+        const nuevoContrato: Contrato = {
+          id: `rrhh-cont-p01-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-central`,
+          funcionario_run: cleanRun,
+          rbd: '99999', // Central Level code
+          calidad_juridica: calidadP01 === 'Planta' ? 'Titular' : 'A contrata',
+          funcion_principal: escalafonP01,
+          estado: 'Activo',
+          horas_totales: 44,
+          horas_aula: 0,
+          horas_colaborativas: 0
+        };
+        await api.upsertContratoCompleto(nuevoContrato, []);
+      }
+
+      setRun('');
+      setNombre('');
+      setEmail('');
+      setTelefono('');
+      setTitulo('');
+      setCronoHoursInput([]);
+      await loadData();
+      alert('✅ Contratación tramitada con éxito.');
+    } catch (err: any) {
+      alert(`❌ Error al registrar contratación: ${err.message}`);
+    }
   };
 
   // Submit license medical
@@ -649,9 +788,6 @@ export default function RRHHPage() {
   };
 
   // Filter staff
-  const [filterRbd, setFilterRbd] = useState<string>('all');
-  const [sortOrder, setSortOrder] = useState<string>('nombre-az');
-
   const filteredFuncionarios = funcionarios.filter(f => {
     const matchesSearch = f.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || f.run.includes(searchTerm);
     const esP02 = f.grupo_estamento === 'P02_Educacion' || f.estamento === 'Docente' || f.estamento === 'Asistente de la Educación';
@@ -979,84 +1115,344 @@ export default function RRHHPage() {
                           </div>
                         </div>
 
-                        <div className="md:col-span-2 bg-white p-3 rounded-lg border border-amber-200 space-y-2">
-                          <p className="font-bold text-slate-700 text-[11px] flex items-center justify-between border-b pb-1">
-                            <span>Distribución por Calidad Jurídica y Fondos</span>
-                            <span className="text-slep-blue font-extrabold text-[10px]">
-                              Total: {subventionLines.reduce((sum, l) => sum + l.horas, 0)} Horas
-                            </span>
-                          </p>
-                          <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
-                            {subventionLines.map((line, idx) => (
-                              <div key={idx} className="flex gap-2 items-center text-[10px]">
-                                <select
-                                  value={line.origen_fondo}
-                                  onChange={(e) => {
-                                    const next = [...subventionLines];
-                                    next[idx].origen_fondo = e.target.value as OrigenFondo;
-                                    setSubventionLines(next);
-                                  }}
-                                  className="p-1 border rounded bg-slate-50 font-semibold"
-                                >
-                                  <option value="Subvención Regular">Subvención Regular</option>
-                                  <option value="SEP">SEP</option>
-                                  <option value="PIE">PIE</option>
-                                  <option value="Reforzamiento">Reforzamiento</option>
-                                  <option value="Pro-retención">Pro-retención</option>
-                                  <option value="Liceos Bicentenarios">Liceos Bicentenarios</option>
-                                  <option value="Otro">Otro</option>
-                                </select>
+                        {/* Bilateral Toggle and Hours Breakdown Panel */}
+                        <div className="col-span-full bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                          <div className="flex justify-between items-center border-b pb-2">
+                            <span className="font-extrabold text-slate-700 text-xs uppercase tracking-wide">📐 Configuración de Carga Horaria SLEP</span>
+                            <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => setInputMode('aula-primero')}
+                                className={`px-3 py-1 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer ${
+                                  inputMode === 'aula-primero' 
+                                    ? 'bg-white text-slep-blue shadow-sm' 
+                                    : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                              >
+                                Aula Primero (Lectivas)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setInputMode('contrato-primero')}
+                                className={`px-3 py-1 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer ${
+                                  inputMode === 'contrato-primero' 
+                                    ? 'bg-white text-slep-blue shadow-sm' 
+                                    : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                              >
+                                Contrato Primero (Total)
+                              </button>
+                            </div>
+                          </div>
 
-                                <select
-                                  value={line.calidad_juridica}
-                                  onChange={(e) => {
-                                    const next = [...subventionLines];
-                                    next[idx].calidad_juridica = e.target.value as CalidadJuridica;
-                                    setSubventionLines(next);
-                                  }}
-                                  className="p-1 border rounded bg-slate-50 font-semibold"
-                                >
-                                  <option value="Titular">Titular</option>
-                                  <option value="A contrata">A contrata</option>
-                                  <option value="Plazo fijo">Plazo fijo</option>
-                                  <option value="Indefinido">Indefinido</option>
-                                  <option value="Reemplazo">Reemplazo</option>
-                                  <option value="Habilitación especial">Habilitación especial</option>
-                                </select>
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            {inputMode === 'aula-primero' ? (
+                              <div className="space-y-3 col-span-2">
+                                <div>
+                                  <label className="block text-slate-600 font-bold mb-1 text-[11px]">Horas Aula (Lectivas en Sala)</label>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={44}
+                                    className="w-full p-2 border rounded font-black text-slate-800 bg-amber-50/20"
+                                    value={horasAulaInput}
+                                    onChange={(e) => setHorasAulaInput(Number(e.target.value) || 0)}
+                                  />
+                                  <span className="text-[10px] text-slate-400 font-medium">No lectivas (Trabajo Colaborativo) calculadas automáticamente (Ratio 65/35).</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-3 col-span-2">
+                                <div>
+                                  <label className="block text-slate-600 font-bold mb-1 text-[11px]">Total Horas Contrato</label>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={44}
+                                    className="w-full p-2 border rounded font-black text-slate-800 bg-amber-50/20"
+                                    value={horasContrato}
+                                    onChange={(e) => setHorasContrato(Number(e.target.value) || 0)}
+                                  />
+                                  <span className="text-[10px] text-slate-400 font-medium font-semibold text-slep-blue">Se distribuirá proporcionalmente en 65% Lectivas / 35% No Lectivas.</span>
+                                </div>
+                              </div>
+                            )}
 
+                            <div className="space-y-3 col-span-2 border-l pl-4 border-slate-100">
+                              <div className="flex items-center gap-2 pt-1">
+                                <input
+                                  type="checkbox"
+                                  id="es_uniprofesional"
+                                  className="h-4 w-4 text-slep-blue border-slate-300 rounded cursor-pointer"
+                                  checked={esUniprofesionalInput}
+                                  onChange={(e) => setEsUniprofesionalInput(e.target.checked)}
+                                />
+                                <label htmlFor="es_uniprofesional" className="text-slate-600 font-bold text-[11px] cursor-pointer">
+                                  Doble Rol / Uniprofesional (hasta 10 hrs Directivas independientes)
+                                </label>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-slate-600 font-bold mb-1 text-[10px]">Horas Directivas</label>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={esUniprofesionalInput ? 10 : 44}
+                                    className="w-full p-1.5 border rounded font-bold text-slate-800 text-center"
+                                    value={horasDirectivasInput}
+                                    onChange={(e) => setHorasDirectivasInput(Number(e.target.value) || 0)}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-slate-600 font-bold mb-1 text-[10px]">Horas UTP / Técnico Pedag.</label>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={44}
+                                    className="w-full p-1.5 border rounded font-bold text-slate-800 text-center"
+                                    value={horasTecPedInput}
+                                    onChange={(e) => setHorasTecPedInput(Number(e.target.value) || 0)}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Additional Chronological Hours Panel */}
+                          {inputMode === 'aula-primero' && (
+                            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs space-y-3">
+                              <p className="font-extrabold text-slate-700 text-[11px]">💼 Horas Cronológicas Adicionales</p>
+                              
+                              <div className="flex gap-2 items-center">
+                                <select
+                                  value={newCronoType}
+                                  onChange={(e) => setNewCronoType(e.target.value)}
+                                  className="p-1.5 border rounded bg-white font-semibold text-slate-700"
+                                >
+                                  <option value="Trabajo Colaborativo">Trabajo Colaborativo</option>
+                                  <option value="Técnicas">Técnicas</option>
+                                  <option value="Apoyo UTP">Apoyo UTP</option>
+                                  <option value="Taller Extracurricular">Taller Extracurricular</option>
+                                  <option value="Reforzamiento Pedagógico">Reforzamiento Pedagógico</option>
+                                </select>
+                                
                                 <input
                                   type="number"
+                                  min={1}
+                                  max={44}
                                   placeholder="Horas"
-                                  className="w-16 p-1 border rounded text-center font-bold"
-                                  value={line.horas}
-                                  onChange={(e) => {
-                                    const next = [...subventionLines];
-                                    next[idx].horas = parseInt(e.target.value) || 0;
-                                    setSubventionLines(next);
-                                  }}
+                                  className="w-20 p-1.5 border rounded text-center font-bold"
+                                  value={newCronoHours}
+                                  onChange={(e) => setNewCronoHours(Number(e.target.value) || 0)}
                                 />
 
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setSubventionLines(subventionLines.filter((_, lIdx) => lIdx !== idx));
+                                    if (newCronoHours <= 0) return;
+                                    setCronoHoursInput([
+                                      ...cronoHoursInput,
+                                      { id: `crono-new-${Date.now()}`, tipo: newCronoType, horas: newCronoHours }
+                                    ]);
+                                    setNewCronoHours(2);
                                   }}
-                                  className="text-red-500 hover:text-red-700 font-bold ml-1"
+                                  className="bg-slep-blue text-white px-3 py-1.5 rounded font-black hover:bg-slep-blue-hover cursor-pointer text-[10px]"
                                 >
-                                  ✕
+                                  ➕ Agregar
                                 </button>
                               </div>
-                            ))}
+
+                              {cronoHoursInput.length > 0 ? (
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                  {cronoHoursInput.map(item => (
+                                    <span key={item.id} className="bg-amber-100/70 border border-amber-300 text-amber-900 px-2 py-1 rounded-md flex items-center gap-1.5 font-semibold text-[10px]">
+                                      {item.tipo}: <strong>{item.horas} hrs</strong>
+                                      <button
+                                        type="button"
+                                        onClick={() => setCronoHoursInput(cronoHoursInput.filter(h => h.id !== item.id))}
+                                        className="text-red-600 hover:text-red-800 font-extrabold cursor-pointer"
+                                      >
+                                        ✕
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-[10px] text-slate-400 italic">No se han registrado horas cronológicas adicionales.</p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Preview Desglose */}
+                          <div className="bg-slep-blue/5 border border-slep-blue/20 rounded-xl p-3 text-xs space-y-2">
+                            <p className="font-black text-slep-blue uppercase tracking-wider text-[10px]">📊 Vista Previa de Desglose de Contrato Calculado</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+                              <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
+                                <span className="block text-[8px] uppercase text-slate-400 font-bold">Horas Aula</span>
+                                <strong className="text-slate-800 text-xs font-mono">
+                                  {inputMode === 'aula-primero' ? horasAulaInput : parseFloat((horasContrato * 0.65).toFixed(2))} hrs
+                                </strong>
+                              </div>
+                              <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
+                                <span className="block text-[8px] uppercase text-slate-400 font-bold">Colaborativas</span>
+                                <strong className="text-slate-800 text-xs font-mono">
+                                  {inputMode === 'aula-primero' ? parseFloat((horasAulaInput * (35 / 65)).toFixed(2)) : parseFloat((horasContrato * 0.35).toFixed(2))} hrs
+                                </strong>
+                              </div>
+                              <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
+                                <span className="block text-[8px] uppercase text-slate-400 font-bold">Cronológicas Adic.</span>
+                                <strong className="text-slate-800 text-xs font-mono">
+                                  {inputMode === 'aula-primero' ? cronoHoursInput.reduce((s, h) => s + h.horas, 0) : 0} hrs
+                                </strong>
+                              </div>
+                              <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
+                                <span className="block text-[8px] uppercase text-slate-400 font-bold">Directivas / UTP</span>
+                                <strong className="text-slate-800 text-xs font-mono">
+                                  {((esUniprofesionalInput ? Math.min(10, horasDirectivasInput) : horasDirectivasInput) + horasTecPedInput).toFixed(1)} hrs
+                                </strong>
+                              </div>
+                              <div className="bg-slep-gold/10 p-2 rounded-lg border border-slep-gold shadow-sm col-span-2 sm:col-span-1">
+                                <span className="block text-[8px] uppercase text-slep-blue font-black">Total Contrato</span>
+                                <strong className="text-slep-blue-dark text-sm font-black font-mono">
+                                  {(() => {
+                                    if (inputMode === 'aula-primero') {
+                                      const colab = parseFloat((horasAulaInput * (35 / 65)).toFixed(2));
+                                      const sumCrono = cronoHoursInput.reduce((s, h) => s + h.horas, 0);
+                                      const dirHrs = esUniprofesionalInput ? Math.min(10, horasDirectivasInput) : horasDirectivasInput;
+                                      return parseFloat((horasAulaInput + colab + sumCrono + dirHrs + horasTecPedInput).toFixed(2));
+                                    } else {
+                                      return horasContrato;
+                                    }
+                                  })()} hrs
+                                </strong>
+                              </div>
+                            </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSubventionLines([...subventionLines, { origen_fondo: 'Subvención Regular', calidad_juridica: 'A contrata', horas: 10 }]);
-                            }}
-                            className="text-[10px] text-slep-blue font-bold hover:underline flex items-center gap-1"
-                          >
-                            ➕ Agregar Línea de Financiamiento/Calidad
-                          </button>
+
+                          {/* Subvention line editor linked with the calculated hours */}
+                          <div className="bg-amber-50/30 p-3 rounded-lg border border-amber-200 space-y-2">
+                            <p className="font-extrabold text-slate-700 text-[11px] flex justify-between items-center border-b pb-1">
+                              <span>Distribución del Financiamiento (Subvenciones)</span>
+                              <span className={`text-[10px] font-black ${
+                                (() => {
+                                  const totalCalc = inputMode === 'aula-primero' 
+                                    ? parseFloat((horasAulaInput + parseFloat((horasAulaInput * (35 / 65)).toFixed(2)) + cronoHoursInput.reduce((s, h) => s + h.horas, 0) + (esUniprofesionalInput ? Math.min(10, horasDirectivasInput) : horasDirectivasInput) + horasTecPedInput).toFixed(2)) 
+                                    : horasContrato;
+                                  const totalFin = subventionLines.reduce((s, l) => s + l.horas, 0);
+                                  return totalCalc === totalFin ? 'text-emerald-700' : 'text-rose-700 animate-pulse';
+                                })()
+                              }`}>
+                                Financiado: {subventionLines.reduce((sum, l) => sum + l.horas, 0)} hrs de {(() => {
+                                  if (inputMode === 'aula-primero') {
+                                    const colab = parseFloat((horasAulaInput * (35 / 65)).toFixed(2));
+                                    const sumCrono = cronoHoursInput.reduce((s, h) => s + h.horas, 0);
+                                    const dirHrs = esUniprofesionalInput ? Math.min(10, horasDirectivasInput) : horasDirectivasInput;
+                                    return parseFloat((horasAulaInput + colab + sumCrono + dirHrs + horasTecPedInput).toFixed(2));
+                                  } else {
+                                    return horasContrato;
+                                  }
+                                })()} hrs requeridas
+                              </span>
+                            </p>
+
+                            <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
+                              {subventionLines.map((line, idx) => (
+                                <div key={idx} className="flex gap-2 items-center text-[10px]">
+                                  <select
+                                    value={line.origen_fondo}
+                                    onChange={(e) => {
+                                      const next = [...subventionLines];
+                                      next[idx].origen_fondo = e.target.value as OrigenFondo;
+                                      setSubventionLines(next);
+                                    }}
+                                    className="p-1 border rounded bg-white font-semibold text-slate-700 cursor-pointer"
+                                  >
+                                    <option value="Subvención Regular">Subvención Regular</option>
+                                    <option value="SEP">SEP</option>
+                                    <option value="PIE">PIE</option>
+                                    <option value="Reforzamiento">Reforzamiento</option>
+                                    <option value="Pro-retención">Pro-retención</option>
+                                    <option value="Liceos Bicentenarios">Liceos Bicentenarios</option>
+                                    <option value="Otro">Otro</option>
+                                  </select>
+
+                                  <select
+                                    value={line.calidad_juridica}
+                                    onChange={(e) => {
+                                      const next = [...subventionLines];
+                                      next[idx].calidad_juridica = e.target.value as CalidadJuridica;
+                                      setSubventionLines(next);
+                                    }}
+                                    className="p-1 border rounded bg-white font-semibold text-slate-700 cursor-pointer"
+                                  >
+                                    <option value="Titular">Titular</option>
+                                    <option value="A contrata">A contrata</option>
+                                    <option value="Plazo fijo">Plazo fijo</option>
+                                    <option value="Indefinido">Indefinido</option>
+                                    <option value="Reemplazo">Reemplazo</option>
+                                    <option value="Habilitación especial">Habilitación especial</option>
+                                  </select>
+
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="Horas"
+                                    className="w-20 p-1 border rounded text-center font-bold"
+                                    value={line.horas}
+                                    onChange={(e) => {
+                                      const next = [...subventionLines];
+                                      next[idx].horas = parseFloat(e.target.value) || 0;
+                                      setSubventionLines(next);
+                                    }}
+                                  />
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSubventionLines(subventionLines.filter((_, lIdx) => lIdx !== idx));
+                                    }}
+                                    className="text-red-500 hover:text-red-700 font-bold ml-1 cursor-pointer"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="flex gap-4 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSubventionLines([...subventionLines, { origen_fondo: 'Subvención Regular', calidad_juridica: 'A contrata', horas: 10 }]);
+                                }}
+                                className="text-[10px] text-slep-blue font-extrabold hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                ➕ Agregar Línea
+                              </button>
+                              
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const totalCalc = inputMode === 'aula-primero' 
+                                    ? parseFloat((horasAulaInput + parseFloat((horasAulaInput * (35 / 65)).toFixed(2)) + cronoHoursInput.reduce((s, h) => s + h.horas, 0) + (esUniprofesionalInput ? Math.min(10, horasDirectivasInput) : horasDirectivasInput) + horasTecPedInput).toFixed(2)) 
+                                    : horasContrato;
+                                  if (subventionLines.length > 0) {
+                                    const next = [...subventionLines];
+                                    const sumOthers = next.slice(1).reduce((s, l) => s + l.horas, 0);
+                                    next[0].horas = parseFloat((totalCalc - sumOthers).toFixed(2));
+                                    if (next[0].horas < 0) next[0].horas = totalCalc;
+                                    setSubventionLines(next);
+                                  } else {
+                                    setSubventionLines([{ origen_fondo: 'Subvención Regular', calidad_juridica: calidadP02, horas: totalCalc }]);
+                                  }
+                                }}
+                                className="text-[10px] text-amber-700 font-extrabold hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                ⚙️ Alinear Financiamiento Automáticamente
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1151,12 +1547,12 @@ export default function RRHHPage() {
                             type="checkbox" 
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedFuncs(sortedFuncionarios.map(f => f.run));
+                                setSelectedFuncs(consolidadoData.map(f => f.run || f.funcionario_run));
                               } else {
                                 setSelectedFuncs([]);
                               }
                             }}
-                            checked={selectedFuncs.length === sortedFuncionarios.length && sortedFuncionarios.length > 0}
+                            checked={selectedFuncs.length === consolidadoData.length && consolidadoData.length > 0}
                           />
                         </th>
                         <th className="p-3">Funcionario</th>
@@ -1168,16 +1564,11 @@ export default function RRHHPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {sortedFuncionarios.map(f => {
-                        // Normalize RUN for matching (handle format differences)
-                        const normalRun = normalizarRun(f.run);
-                        // Get ALL contracts for this teacher (a teacher can have multiple RBDs)
+                      {consolidadoData.map(f => {
+                        const normalRun = normalizarRun(f.run || f.funcionario_run);
                         const funcConts = contratos.filter(c => normalizarRun(c.funcionario_run) === normalRun);
-                        // Primary contract for display (first active, or just first)
                         const cont = funcConts.find(c => c.estado === 'Activo') || funcConts[0];
-                        // Total hours across all contracts
-                        const totalHoras = funcConts.reduce((sum, c) => sum + (Number(c.horas_totales) || 0), 0);
-                        // Resolve school name: prefer joined Supabase data, fallback to local lookup
+                        const totalHoras = f.horas_totales !== undefined ? f.horas_totales : funcConts.reduce((sum, c) => sum + (Number(c.horas_totales) || 0), 0);
                         const escuelaNombre = cont
                           ? (cont.establecimientos?.nombre
                             || escuelas.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(cont.rbd)))?.nombre
@@ -1186,27 +1577,37 @@ export default function RRHHPage() {
                         const isP01 = f.grupo_estamento === 'P01_Administrativo';
                         const haberEst = isP01 ? calcularHaberBaseEUS(f.grado_eus || 12) : (totalHoras > 0 ? totalHoras * 18500 * 4 : 0);
 
+                        // Fallback object representing the official funcionario
+                        const officialFunc = funcionarios.find(x => normalizarRun(x.run) === normalRun) || {
+                          run: f.run || f.funcionario_run,
+                          nombre: f.nombre_funcionario || f.nombre,
+                          grupo_estamento: f.grupo_estamento,
+                          cargo: f.cargo,
+                          grado_eus: f.grado_eus
+                        };
+
                         return (
-                          <tr key={f.run} className="hover:bg-slate-50">
+                          <tr key={normalRun} className="hover:bg-slate-50">
                             <td className="p-3 pl-4 text-center">
                               <input 
                                 type="checkbox"
-                                checked={selectedFuncs.includes(f.run)}
+                                checked={selectedFuncs.includes(f.run || f.funcionario_run)}
                                 onChange={(e) => {
+                                  const fRun = f.run || f.funcionario_run;
                                   if (e.target.checked) {
-                                    setSelectedFuncs([...selectedFuncs, f.run]);
+                                    setSelectedFuncs([...selectedFuncs, fRun]);
                                   } else {
-                                    setSelectedFuncs(selectedFuncs.filter(run => run !== f.run));
+                                    setSelectedFuncs(selectedFuncs.filter(run => run !== fRun));
                                   }
                                 }}
                               />
                             </td>
                             <td className="p-3">
                               <button
-                                onClick={() => setViewingFuncionario(f)}
-                                className="font-bold text-slate-800 underline hover:text-slep-blue text-left"
+                                onClick={() => setViewingFuncionario(officialFunc)}
+                                className="font-bold text-slate-800 underline hover:text-slep-blue text-left cursor-pointer"
                               >
-                                {f.nombre}
+                                {f.nombre_funcionario || f.nombre}
                               </button>
                               {(() => {
                                 if (cont) {
@@ -1235,7 +1636,32 @@ export default function RRHHPage() {
                                 }
                                 return null;
                               })()}
-                              <p className="text-[10px] font-mono text-slate-400 mt-0.5">{f.run}</p>
+                              <p className="text-[10px] font-mono text-slate-400 mt-0.5">{f.run || f.funcionario_run}</p>
+                              {(() => {
+                                const calidades = Array.from(new Set(funcConts.map(c => c.calidad_juridica).filter(Boolean)));
+                                const esReemplazo = funcConts.some(c => c.estado === 'Reemplazo' || c.calidad_juridica?.toLowerCase().includes('reemplazo') || c.vinculo_titular_id);
+                                const esLicencia = funcConts.some(c => c.estado === 'Licencia Médica');
+                                if (calidades.length === 0 && !esReemplazo && !esLicencia) return null;
+                                return (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {calidades.map(cal => (
+                                      <span key={cal} className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[8px] font-extrabold border border-slate-205 uppercase tracking-wide">
+                                        {cal}
+                                      </span>
+                                    ))}
+                                    {esReemplazo && (
+                                      <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[8px] font-black border border-blue-200 uppercase tracking-wide">
+                                        🔄 Reemplazo
+                                      </span>
+                                    )}
+                                    {esLicencia && (
+                                      <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[8px] font-black border border-amber-200 uppercase tracking-wide">
+                                        💊 Licencia
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="p-3">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -1249,13 +1675,13 @@ export default function RRHHPage() {
                             <td className="p-3">
                               {isP01 ? (
                                 <div className="text-[10px] text-slate-600 font-medium">
-                                  <p>Escalafón: <span className="font-bold">{f.escalafon_p01}</span></p>
-                                  <p>EUS Grado: <span className="font-bold">{f.grado_eus}</span> ({f.calidad_juridica_p01})</p>
+                                  <p>Escalafón: <span className="font-bold">{f.escalafon_p01 || 'Administrativo'}</span></p>
+                                  <p>EUS Grado: <span className="font-bold">{f.grado_eus}</span> ({f.calidad_juridica_p01 || 'Planta'})</p>
                                 </div>
                               ) : (
                                 <div className="text-[10px] text-slate-600">
                                   <p>Título: <span className="font-semibold text-slate-800">{f.titulo || 'No registrado'}</span></p>
-                                  <p>Cargo: <span className="font-semibold">{f.cargo || cont?.funcion_principal || f.estamento || 'Funcionario'}</span></p>
+                                  <p>Cargo: <span className="font-semibold">{f.cargo || cont?.funcion_principal || f.estamento || 'Docente'}</span></p>
                                 </div>
                               )}
                             </td>
@@ -1283,7 +1709,7 @@ export default function RRHHPage() {
                           </tr>
                         );
                       })}
-                      {sortedFuncionarios.length === 0 && (
+                      {consolidadoData.length === 0 && (
                         <tr>
                           <td colSpan={7} className="p-4 text-center text-slate-400 italic">
                             No hay funcionarios contratados bajo este filtro.
@@ -1292,6 +1718,30 @@ export default function RRHHPage() {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Pagination footer */}
+                <div className="flex flex-col sm:flex-row justify-between items-center pt-4 border-t border-slate-100 mt-2 gap-4 text-slate-500 font-medium text-xs">
+                  <span>Mostrando {consolidadoData.length} de {totalRecords} funcionarios</span>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+                      disabled={currentPage === 0}
+                      className="px-3 py-1.5 border border-slate-200 rounded bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-bold cursor-pointer"
+                    >
+                      Anterior
+                    </button>
+                    <span className="px-3 py-1.5 bg-slate-100 rounded text-slate-750 font-black">
+                      Página {currentPage + 1} de {Math.ceil(totalRecords / pageSize) || 1}
+                    </span>
+                    <button 
+                      onClick={() => setCurrentPage(prev => (prev + 1) * pageSize < totalRecords ? prev + 1 : prev)}
+                      disabled={(currentPage + 1) * pageSize >= totalRecords}
+                      className="px-3 py-1.5 border border-slate-200 rounded bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-bold cursor-pointer"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -2152,7 +2602,7 @@ export default function RRHHPage() {
                 </h4>
 
                 {(() => {
-                  const relatedConts = contratos.filter(c => c.funcionario_run === viewingFuncionario.run);
+                  const relatedConts = contratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(viewingFuncionario.run));
                   if (relatedConts.length === 0) {
                     return <p className="italic text-slate-400">No tiene contratos vigentes registrados.</p>;
                   }
@@ -2162,6 +2612,19 @@ export default function RRHHPage() {
                         const asigs = dbLocal.asignacionesAula.filter(a => a.contrato_id === c.id);
                         const fins = financiamientos.filter(f => f.contrato_id === c.id);
                         const esc = escuelas.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(c.rbd)));
+                        
+                        // Calculate hours breakdown using our rulesEngine
+                        const desglose = calcularDesgloseContrato(
+                          c, 
+                          cursosDinamicos, 
+                          asigs, 
+                          (dbLocal as any).horasCronologicasAdicionales || [],
+                          viewingFuncionario.estamento,
+                          viewingFuncionario.cargo
+                        );
+
+                        const cronoItems = ((dbLocal as any).horasCronologicasAdicionales || []).filter((h: any) => h.contrato_id === c.id);
+
                         return (
                           <div key={c.id} className="border border-slate-200 rounded-xl p-4 space-y-3 bg-white hover:shadow-sm transition-shadow">
                             <div className="flex justify-between items-start">
@@ -2173,12 +2636,51 @@ export default function RRHHPage() {
                                   Calidad: {c.calidad_juridica} • Función: {c.funcion_principal} • Estado: <span className={`font-bold uppercase ${
                                     c.estado === 'Licencia Médica' ? 'text-red-600' : c.estado === 'Reemplazo' ? 'text-blue-600' : 'text-green-600'
                                   }`}>{c.estado}</span>
+                                  {c.es_uniprofesional && <span className="ml-2 bg-purple-100 text-purple-800 font-extrabold px-1.5 py-0.5 rounded text-[8px]">Doble Rol / Uniprofesional</span>}
                                 </p>
                               </div>
                               <span className="bg-slep-blue/10 text-slep-blue font-black px-2 py-0.5 rounded text-[10px]">
-                                {c.horas_totales} Horas
+                                {desglose.horasTotales} Horas
                               </span>
                             </div>
+
+                            {/* SLEP Hourly Breakdown Card */}
+                            {c.rbd !== '99999' && (
+                              <div className="bg-slate-50 rounded-xl p-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs border border-slate-150">
+                                <div>
+                                  <span className="block text-[8px] uppercase text-slate-400 font-bold">Horas Aula</span>
+                                  <strong className="text-slate-800 text-xs font-mono">{desglose.horasAula} hrs</strong>
+                                </div>
+                                <div>
+                                  <span className="block text-[8px] uppercase text-slate-400 font-bold">Colaborativas (No Lect)</span>
+                                  <strong className="text-slate-800 text-xs font-mono">{desglose.horasColaborativas} hrs</strong>
+                                  {desglose.esExcepcion && <span className="block text-[8px] font-bold text-amber-600 mt-0.5">🌟 Excepción 60/40</span>}
+                                  {desglose.esParvularia && <span className="block text-[8px] font-bold text-indigo-600 mt-0.5">👶 Parvularia: Continua (sin recreo)</span>}
+                                </div>
+                                <div>
+                                  <span className="block text-[8px] uppercase text-slate-400 font-bold">Adicionales</span>
+                                  <strong className="text-slate-800 text-xs font-mono">{desglose.horasCronologicasAdicionales} hrs</strong>
+                                </div>
+                                <div>
+                                  <span className="block text-[8px] uppercase text-slate-400 font-bold">Directivas / UTP</span>
+                                  <strong className="text-slate-800 text-xs font-mono">{(desglose.horasDirectivas + desglose.horasTecnicoPedagogicas).toFixed(1)} hrs</strong>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Additional Chronological Details list */}
+                            {cronoItems.length > 0 && (
+                              <div className="pt-2 border-t border-slate-100">
+                                <p className="text-[9px] uppercase font-bold text-slate-400">Detalle de Horas Cronológicas Adicionales</p>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {cronoItems.map((ch: any) => (
+                                    <span key={ch.id} className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded text-[10px] font-medium border border-amber-200">
+                                      💼 {ch.tipo}: <span className="font-bold">{ch.horas} hrs</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
 
                             {/* Funding sources */}
                             {fins.length > 0 && (
@@ -2200,16 +2702,21 @@ export default function RRHHPage() {
                                 <p className="text-[9px] uppercase font-bold text-slate-400 mb-1">Cursos y Asignaturas Asignadas</p>
                                 {asigs.length > 0 ? (
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
-                                    {asigs.map(a => (
-                                      <div key={a.id} className="bg-slate-50 p-2 rounded border border-slate-150 flex justify-between items-center text-[10px]">
-                                        <div>
-                                          <span className="font-bold text-slate-700">{a.curso}</span>
-                                          <span className="text-slate-400 mx-1">•</span>
-                                          <span className="text-slate-600 font-medium">{a.asignatura}</span>
+                                    {asigs.map(a => {
+                                      const { esParvularia: isParv, esExcepcion: isEx } = obtenerRatioPorCurso(c.rbd, a.curso, cursosDinamicos);
+                                      return (
+                                        <div key={a.id} className="bg-slate-50 p-2 rounded border border-slate-150 flex justify-between items-center text-[10px]">
+                                          <div>
+                                            <span className="font-bold text-slate-700">{a.curso}</span>
+                                            {isParv && <span className="ml-1 bg-indigo-50 text-indigo-700 font-extrabold px-1 rounded text-[8px]">Párvulo</span>}
+                                            {isEx && <span className="ml-1 bg-amber-50 text-amber-700 font-extrabold px-1 rounded text-[8px]">60/40</span>}
+                                            <span className="text-slate-400 mx-1">•</span>
+                                            <span className="text-slate-600 font-medium">{a.asignatura}</span>
+                                          </div>
+                                          <span className="font-bold text-slate-800">{a.horas} hrs</span>
                                         </div>
-                                        <span className="font-bold text-slate-800">{a.horas} hrs</span>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 ) : (
                                   <p className="italic text-[10px] text-slate-400">No hay asignaciones de aula registradas para este contrato.</p>

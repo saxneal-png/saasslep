@@ -32,6 +32,13 @@ export interface Funcionario {
   fecha_ingreso_establecimiento?: string;
 }
 
+export interface HorasCronologicasAdicionales {
+  id: string; // UUID
+  contrato_id: string;
+  tipo: string; // e.g. "Trabajo Colaborativo", "Técnicas", "Apoyo UTP", "Otros"
+  horas: number;
+}
+
 export interface Contrato {
   id: string; // UUID
   funcionario_run: string;
@@ -49,9 +56,12 @@ export interface Contrato {
   legislacion_laboral?: LegislacionLaboral;
   horas_directivas?: number;
   horas_aula?: number;
+  horas_colaborativas?: number;
+  es_uniprofesional?: boolean;
   horas_tecnico_pedagogicas?: number;
   fecha_inicio_licencia?: string;
   fecha_termino_licencia?: string;
+  horas_cronologicas_adicionales?: HorasCronologicasAdicionales[];
 }
 
 export type OrigenFondo = 'Subvención Regular' | 'SEP' | 'PIE' | 'Reforzamiento' | 'Pro-retención' | 'Liceos Bicentenarios' | 'Otro';

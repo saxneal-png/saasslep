@@ -1,4 +1,4 @@
-import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado, RegistroRemuneracion, Funcionario } from './types';
+import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado, RegistroRemuneracion, Funcionario, CursoDinamico, HorasCronologicasAdicionales } from './types';
 
 export interface PlanEstudioNivel {
   nivel: string;
@@ -252,6 +252,135 @@ export interface ResultadoProporcionHoraria {
   proporcionNoLectiva: number; // percentage (e.g. 40 or 35)
 }
 
+export function obtenerRatioPorCurso(
+  rbd: string,
+  cursoNombre: string,
+  cursosDinamicos: CursoDinamico[] = []
+): {
+  lectivasProp: number;
+  noLectivasProp: number;
+  esParvularia: boolean;
+  esExcepcion: boolean;
+} {
+  const rbdNorm = (val: any) => String(val || '').trim().replace(/^0+/, '');
+  const cleanCurso = String(cursoNombre || '').toLowerCase();
+  
+  const esParvularia = cleanCurso.includes('parvulo') || 
+                       cleanCurso.includes('parvularia') || 
+                       cleanCurso.includes('kínder') || 
+                       cleanCurso.includes('kinder') || 
+                       cleanCurso.includes('pre-kínder') || 
+                       cleanCurso.includes('prekinder') || 
+                       cleanCurso.includes('transición') || 
+                       cleanCurso.includes('transicion') || 
+                       cleanCurso.includes('nt1') || 
+                       cleanCurso.includes('nt2');
+
+  const cursoInfo = cursosDinamicos.find(
+    c => rbdNorm(c.rbd) === rbdNorm(rbd) && String(c.nombre || '').toLowerCase() === cleanCurso
+  );
+
+  let esExcepcion = false;
+  if (cursoInfo) {
+    const level = String(cursoInfo.nivel || '').toLowerCase();
+    const is1To4 = level.includes('1°') || level.includes('2°') || level.includes('3°') || level.includes('4°') ||
+                   level.includes('1o') || level.includes('2o') || level.includes('3o') || level.includes('4o') ||
+                   level.includes('primero') || level.includes('segundo') || level.includes('tercero') || level.includes('cuarto') ||
+                   cleanCurso.includes('1°') || cleanCurso.includes('2°') || cleanCurso.includes('3°') || cleanCurso.includes('4°') ||
+                   cleanCurso.includes('1o') || cleanCurso.includes('2o') || cleanCurso.includes('3o') || cleanCurso.includes('4o');
+    const isBasico = level.includes('bás') || level.includes('bas') || level.includes('primaria') ||
+                     cleanCurso.includes('bás') || cleanCurso.includes('bas');
+    const isMedio = level.includes('med') || level.includes('sec') || cleanCurso.includes('med');
+    
+    const prioritarios = cursoInfo.concentracion_prioritarios ?? 0;
+    if (is1To4 && isBasico && !isMedio && prioritarios >= 80) {
+      esExcepcion = true;
+    }
+  }
+
+  if (esExcepcion) {
+    return { lectivasProp: 60, noLectivasProp: 40, esParvularia, esExcepcion: true };
+  }
+  return { lectivasProp: 65, noLectivasProp: 35, esParvularia, esExcepcion: false };
+}
+
+export interface DesgloseContrato {
+  horasAula: number;
+  horasColaborativas: number;
+  horasCronologicasAdicionales: number;
+  horasDirectivas: number;
+  horasTecnicoPedagogicas: number;
+  horasTotales: number;
+  esParvularia: boolean;
+  esExcepcion: boolean;
+}
+
+export function calcularDesgloseContrato(
+  contrato: Contrato,
+  cursosDinamicos: CursoDinamico[] = [],
+  asignaciones: AsignacionAula[] = [],
+  horasCronologicasList: HorasCronologicasAdicionales[] = [],
+  funcionarioEstamento?: string,
+  funcionarioCargo?: string
+): DesgloseContrato {
+  const rbdNorm = (val: any) => String(val || '').trim().replace(/^0+/, '');
+
+  const contratoAsigs = asignaciones.filter(a => a.contrato_id === contrato.id);
+  const sumAsigHoras = contratoAsigs.reduce((sum, a) => sum + a.horas, 0);
+  const horasAula = contrato.horas_aula !== undefined && contrato.horas_aula !== null
+    ? contrato.horas_aula
+    : sumAsigHoras;
+
+  let sumColabAsigs = 0;
+  let esParvularia = false;
+  let esExcepcion = false;
+
+  const cargoClean = String(funcionarioCargo || contrato.funcion_principal || '').trim().toUpperCase();
+  if (cargoClean.includes('PARVULO') || cargoClean.includes('PARVULARIA') || cargoClean.includes('EDUCADORA DE PARVULOS')) {
+    esParvularia = true;
+  }
+
+  if (contratoAsigs.length > 0) {
+    contratoAsigs.forEach(a => {
+      const { lectivasProp, noLectivasProp, esParvularia: parv, esExcepcion: ex } = obtenerRatioPorCurso(contrato.rbd, a.curso, cursosDinamicos);
+      if (parv) esParvularia = true;
+      if (ex) esExcepcion = true;
+      sumColabAsigs += a.horas * (noLectivasProp / lectivasProp);
+    });
+  }
+
+  let ratioNoLectivas = 35 / 65; // default standard
+  if (contratoAsigs.length > 0 && sumAsigHoras > 0) {
+    ratioNoLectivas = sumColabAsigs / sumAsigHoras;
+  }
+
+  const horasColaborativas = parseFloat((horasAula * ratioNoLectivas).toFixed(2));
+
+  const cronList = (contrato.horas_cronologicas_adicionales || []).length > 0
+    ? (contrato.horas_cronologicas_adicionales || [])
+    : horasCronologicasList.filter(h => h.contrato_id === contrato.id);
+  const horasCronAdic = cronList.reduce((sum, h) => sum + h.horas, 0);
+
+  let horasDirectivas = contrato.horas_directivas || 0;
+  if (contrato.es_uniprofesional) {
+    horasDirectivas = Math.min(10, horasDirectivas);
+  }
+  const horasTecnicoPedagogicas = contrato.horas_tecnico_pedagogicas || 0;
+
+  const horasTotales = parseFloat((horasAula + horasColaborativas + horasCronAdic + horasDirectivas + horasTecnicoPedagogicas).toFixed(2));
+
+  return {
+    horasAula,
+    horasColaborativas,
+    horasCronologicasAdicionales: horasCronAdic,
+    horasDirectivas,
+    horasTecnicoPedagogicas,
+    horasTotales,
+    esParvularia,
+    esExcepcion
+  };
+}
+
 /**
  * Calculates the legal teaching/non-teaching hour distribution based on Ley 20.903
  */
@@ -260,14 +389,11 @@ export function calcularLey20903(
   ivmEstablecimiento: number,
   esEnseBajoIvmEspecial: boolean // 1° a 4° Básico
 ): ResultadoProporcionHoraria {
-  // Check if school has IVM > 80% and we are in 1° to 4° Básico -> Proporcion is 60% classroom (lectiva), 40% non-classroom (no lectiva)
-  // Otherwise it is 65% classroom (lectiva), 35% non-classroom (no lectiva)
   const esEspecial = ivmEstablecimiento > 80 && esEnseBajoIvmEspecial;
   
   const proporcionLectiva = esEspecial ? 60 : 65;
   const proporcionNoLectiva = esEspecial ? 40 : 35;
 
-  // Mathematically compute exact hours (with float support)
   const horasLectivasMaximas = parseFloat(((horasContrato * proporcionLectiva) / 100).toFixed(2));
   const horasNoLectivasMinimas = parseFloat(((horasContrato * proporcionNoLectiva) / 100).toFixed(2));
 
@@ -275,7 +401,7 @@ export function calcularLey20903(
     horasContrato,
     horasLectivasMaximas,
     horasNoLectivasMinimas,
-    horasLectivasAsignadas: 0, // Filled subsequently
+    horasLectivasAsignadas: 0,
     horasDisponibles: horasContrato,
     leyEspecialAplicada: esEspecial,
     cumpleLey20903: true,
@@ -292,93 +418,50 @@ export function validarCargaDocente(
   establecimiento: Establecimiento,
   asignaciones: AsignacionAula[],
   cargos: CargoPersonalizado[] = [],
-  cursosDinamicos: any[] = []
+  cursosDinamicos: CursoDinamico[] = [],
+  horasCronologicasList: HorasCronologicasAdicionales[] = []
 ): ResultadoProporcionHoraria {
-  // If replacement, it inherits the same, but let's check its own capacity.
-  // If Licencia Médica, the contract's teaching workload is logically frozen (does not count towards this teacher).
+  const desglose = calcularDesgloseContrato(contrato, cursosDinamicos, asignaciones, horasCronologicasList);
   
-  // Helper to normalize RBD
-  const normRbd = (val: any) => String(val || '').trim().replace(/^0+/, '');
+  const horasLectivasAsignadas = contrato.estado === 'Licencia Médica' 
+    ? 0 
+    : asignaciones.filter(a => a.contrato_id === contrato.id).reduce((sum, a) => sum + a.horas, 0);
 
-  // 1. Calculate assigned hours per level category
-  const asignacionesEspeciales = asignaciones.filter(a => {
-    const cName = (a.curso || '').toLowerCase();
-    const is1To4 = cName.includes('1°') || cName.includes('2°') || cName.includes('3°') || cName.includes('4°') ||
-                   cName.includes('1o') || cName.includes('2o') || cName.includes('3o') || cName.includes('4o');
-    const isBasico = cName.includes('bás') || cName.includes('bas') || cName.includes('primaria');
-    const isMedio = cName.includes('med') || cName.includes('sec');
-    
-    // Check if the specific course has high concentration >= 80 in cursosDinamicos
-    const cursoInfo = cursosDinamicos.find(
-      c => c.nombre === a.curso && normRbd(c.rbd) === normRbd(contrato.rbd)
-    );
-    
-    let esAltaConcentracion = false;
-    if (cursoInfo) {
-      const level = (cursoInfo.nivel || '').toLowerCase();
-      const level1To4 = level.includes('1°') || level.includes('2°') || level.includes('3°') || level.includes('4°') ||
-                        level.includes('primero') || level.includes('segundo') || level.includes('tercero') || level.includes('cuarto');
-      const conc = cursoInfo.concentracion_prioritarios || 0;
-      if (level1To4 && conc >= 80) {
-        esAltaConcentracion = true;
-      }
-    }
-    
-    return is1To4 && isBasico && !isMedio && (establecimiento.ivm >= 80 || esAltaConcentracion);
-  });
+  const horasLectivasMaximas = desglose.horasAula;
+  const horasNoLectivasMinimas = desglose.horasColaborativas;
 
-  const hrsEspeciales = asignacionesEspeciales.reduce((sum, a) => sum + a.horas, 0);
-  const totalAsignadas = asignaciones.reduce((sum, a) => sum + a.horas, 0);
-  const propEspecial = totalAsignadas > 0 ? hrsEspeciales / totalAsignadas : 0;
+  const horasDisponibles = parseFloat((horasLectivasMaximas - horasLectivasAsignadas).toFixed(2));
+  const cumpleLey20903 = horasLectivasAsignadas <= horasLectivasMaximas + 0.01;
 
-  // Calculate non-pedagogical hours from custom cargos assigned to this teacher
-  const horasCargo = cargos
-    .filter(c => c.funcionario_run === contrato.funcionario_run)
-    .reduce((sum, c) => sum + c.horas, 0);
+  const totalAsignadas = asignaciones.filter(a => a.contrato_id === contrato.id).reduce((sum, a) => sum + a.horas, 0);
+  let proporcionLectiva = 65;
+  let proporcionNoLectiva = 35;
+  if (totalAsignadas > 0) {
+    let sumLectivaP = 0;
+    let sumNoLectivaP = 0;
+    asignaciones.filter(a => a.contrato_id === contrato.id).forEach(a => {
+      const { lectivasProp, noLectivasProp } = obtenerRatioPorCurso(contrato.rbd, a.curso, cursosDinamicos);
+      sumLectivaP += a.horas * lectivasProp;
+      sumNoLectivaP += a.horas * noLectivasProp;
+    });
+    proporcionLectiva = sumLectivaP / totalAsignadas;
+    proporcionNoLectiva = sumNoLectivaP / totalAsignadas;
+  } else if (desglose.esExcepcion) {
+    proporcionLectiva = 60;
+    proporcionNoLectiva = 40;
+  }
 
-  // The contract hours that can be split under Ley 20.903 are the total minus directivas, técnicas, and custom cargo hours
-  const horasEfectivasContrato = Math.max(0, contrato.horas_totales - (contrato.horas_directivas || 0) - (contrato.horas_tecnico_pedagogicas || 0) - horasCargo);
-
-  const esEspecialEscuela = establecimiento.ivm >= 80 || hrsEspeciales > 0;
-  
-  // Calculate weighted proportion (combination of 60/40 and 65/35 depending on courses)
-  const proporcionLectiva = esEspecialEscuela
-    ? parseFloat(((propEspecial * 60) + ((1 - propEspecial) * 65)).toFixed(2))
-    : 65;
-  const proporcionNoLectiva = esEspecialEscuela
-    ? parseFloat(((propEspecial * 40) + ((1 - propEspecial) * 35)).toFixed(2))
-    : 35;
-
-  const horasLectivasMaximas = parseFloat(((horasEfectivasContrato * proporcionLectiva) / 100).toFixed(2));
-  const horasNoLectivasMinimas = parseFloat(((horasEfectivasContrato * proporcionNoLectiva) / 100).toFixed(2));
-
-  const calculo: ResultadoProporcionHoraria = {
-    horasContrato: contrato.horas_totales,
+  return {
+    horasContrato: desglose.horasTotales,
     horasLectivasMaximas,
     horasNoLectivasMinimas,
-    horasLectivasAsignadas: 0,
-    horasDisponibles: contrato.horas_totales,
-    leyEspecialAplicada: esEspecialEscuela && propEspecial > 0,
-    cumpleLey20903: true,
+    horasLectivasAsignadas,
+    horasDisponibles,
+    leyEspecialAplicada: desglose.esExcepcion,
+    cumpleLey20903,
     proporcionLectiva,
     proporcionNoLectiva
   };
-
-  // If Licence, active teaching load is 0
-  const horasLectivasAsignadas = contrato.estado === 'Licencia Médica' 
-    ? 0 
-    : asignaciones.reduce((sum, a) => sum + a.horas, 0);
-
-  calculo.horasLectivasAsignadas = horasLectivasAsignadas;
-  // Available hours to assign in classrooms
-  calculo.horasDisponibles = parseFloat((calculo.horasLectivasMaximas - horasLectivasAsignadas).toFixed(2));
-  
-  // Validation check: cannot exceed max teaching hours and total assigned cannot exceed contract hours
-  const cumpleProporcion = calculo.horasLectivasAsignadas <= calculo.horasLectivasMaximas + 0.01;
-  const cumpleTotalContrato = (calculo.horasLectivasAsignadas + horasCargo) <= contrato.horas_totales + 0.01;
-  calculo.cumpleLey20903 = cumpleProporcion && cumpleTotalContrato;
-
-  return calculo;
 }
 
 export interface ReemplazoAuditoria {
@@ -386,7 +469,7 @@ export interface ReemplazoAuditoria {
   reemplazoContrato: Contrato;
   horasEspejo: number;
   horasAsignadas: number;
-  costoDuplicadoEstimado: number; // Simulated extra financial cost
+  costoDuplicadoEstimado: number;
 }
 
 /**
@@ -403,7 +486,6 @@ export function auditarReemplazo(
   const titular = contratos.find(c => c.id === contratoReemplazo.vinculo_titular_id);
   if (!titular) return null;
 
-  // Average cost per CLP per hour could be simulated (e.g. 18500 per hour)
   const costoHora = 18500;
   const horasEspejo = titular.horas_totales;
   
@@ -412,14 +494,13 @@ export function auditarReemplazo(
     reemplazoContrato: contratoReemplazo,
     horasEspejo,
     horasAsignadas: contratoReemplazo.horas_totales,
-    costoDuplicadoEstimado: contratoReemplazo.horas_totales * costoHora * 4 // Monthly cost (4 weeks approx)
+    costoDuplicadoEstimado: contratoReemplazo.horas_totales * costoHora * 4
   };
 }
 
 export function calcularHaberBaseEUS(grado: number): number {
   if (grado < 1 || grado > 24) return 0;
-  const baseGrado24 = 380000; // base minimum salary for grade 24
-  // Grado 1 is highest, Grado 24 is lowest. Exponential scale:
+  const baseGrado24 = 380000;
   return Math.round(baseGrado24 * Math.pow(1.075, 24 - grado));
 }
 
@@ -435,13 +516,13 @@ export function conciliarFuncionario(
   discrepancia: boolean;
   mensaje: string;
 } {
-  const contrs = contratos.filter(c => c.funcionario_run === runNormalizado);
+  const contrs = contratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(runNormalizado));
   const totalContratadas = contrs.reduce((sum, c) => sum + c.horas_totales, 0);
 
   const contrIds = contrs.map(c => c.id);
   const totalAula = asignaciones.filter(a => contrIds.includes(a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
 
-  const remuns = remuneraciones.filter(r => r.funcionario_run === runNormalizado);
+  const remuns = remuneraciones.filter(r => normalizarRun(r.funcionario_run) === normalizarRun(runNormalizado));
   const totalPagadas = remuns.reduce((sum, r) => sum + r.horas_pagadas, 0);
 
   const isLicencia = contrs.some(c => c.estado === 'Licencia Médica');
@@ -457,8 +538,6 @@ export function conciliarFuncionario(
       discrepancia = true;
       mensaje = `Sobrecarga de Aula: Registradas ${totalAula} hrs en aula vs Contratadas ${totalContratadas} hrs.`;
     } else {
-      // 1. Ley 20.903 Art 5 Cross-check
-      // If any of the pay records for this user has aplica_ley_20903_art5 === 'Sí'
       const aplicaArt5 = remuns.some(r => r.aplica_ley_20903_art5 === 'Sí');
       if (aplicaArt5) {
         const totalComplementaria = remuns.reduce((sum, r) => sum + (r.planilla_complementaria_ley_20903 || 0), 0);
@@ -468,7 +547,6 @@ export function conciliarFuncionario(
         }
       }
 
-      // 2. Leadership Allowance Checks
       if (!discrepancia) {
         const esDirector = contrs.some(c => c.funcion_principal.toLowerCase().includes('director'));
         const esUTP = contrs.some(c => c.funcion_principal.toLowerCase().includes('utp') || c.funcion_principal.toLowerCase().includes('pedagógica') || c.funcion_principal.toLowerCase().includes('pedagógico'));
@@ -503,57 +581,106 @@ export function conciliarFuncionario(
 }
 
 /**
- * Calculates teacher workload reconciliation (horas_no_destinadas = contrato - (aula + proporcion_no_lectiva))
+ * Calculates teacher workload reconciliation
  */
 export function calcularCargaDocente(
   funcionario: Funcionario,
   contratos: Contrato[],
   establecimientos: Establecimiento[],
-  asignaciones: AsignacionAula[]
+  asignaciones: AsignacionAula[],
+  cursosDinamicos: CursoDinamico[] = [],
+  horasCronologicasList: HorasCronologicasAdicionales[] = []
 ) {
-  // Find all contracts for this teacher
-  const teacherConts = contratos.filter(c => c.funcionario_run === funcionario.run);
+  const teacherConts = contratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(funcionario.run));
   if (teacherConts.length === 0) {
     return {
       horasContrato: 0,
       horasAula: 0,
       horasNoLectivas: 0,
-      horasNoDestinadas: 0
+      horasNoDestinadas: 0,
+      horasCronologicasAdicionales: 0
     };
   }
 
   let totalContrato = 0;
   let totalAula = 0;
   let totalNoLectiva = 0;
+  let totalCronologicas = 0;
 
   teacherConts.forEach(c => {
-    totalContrato += c.horas_totales;
-
-    // Find establishment to get IVM
-    const est = establecimientos.find(e => e.rbd === c.rbd);
-    const ivm = est ? est.ivm : 80;
-
-    // Find assignments for this contract
-    const teacherAsigs = asignaciones.filter(a => a.contrato_id === c.id);
-    const horasAula = teacherAsigs.reduce((sum, a) => sum + a.horas, 0);
-    totalAula += horasAula;
-
-    // Determine non-pedagogical proportion based on Ley 20903 rules
-    const tieneCursosIvmEspecial = teacherAsigs.some(a => 
-      a.curso.includes('1°') || a.curso.includes('2°') || a.curso.includes('3°') || a.curso.includes('4°')
-    );
-    const esEspecial = ivm > 80 && tieneCursosIvmEspecial;
-    const proporcionNoLectiva = esEspecial ? 40 : 35;
-    const noLectivaHours = parseFloat(((c.horas_totales * proporcionNoLectiva) / 100).toFixed(2));
-    totalNoLectiva += noLectivaHours;
+    const desglose = calcularDesgloseContrato(c, cursosDinamicos, asignaciones, horasCronologicasList, funcionario.estamento, funcionario.cargo);
+    totalContrato += desglose.horasTotales;
+    totalAula += desglose.horasAula;
+    totalNoLectiva += desglose.horasColaborativas;
+    totalCronologicas += desglose.horasCronologicasAdicionales;
   });
 
-  const horasNoDestinadas = parseFloat((totalContrato - (totalAula + totalNoLectiva)).toFixed(2));
+  const teacherAsigIds = teacherConts.map(c => c.id);
+  const totalAsignadasAula = asignaciones
+    .filter(a => teacherAsigIds.includes(a.contrato_id))
+    .reduce((sum, a) => sum + a.horas, 0);
+
+  const horasNoDestinadas = parseFloat((totalAula - totalAsignadasAula).toFixed(2));
 
   return {
     horasContrato: totalContrato,
     horasAula: totalAula,
     horasNoLectivas: totalNoLectiva,
-    horasNoDestinadas: horasNoDestinadas > 0 ? horasNoDestinadas : 0
+    horasNoDestinadas: horasNoDestinadas > 0 ? horasNoDestinadas : 0,
+    horasCronologicasAdicionales: totalCronologicas
   };
+}
+
+export function validarHardCap44Horas(
+  run: string,
+  contratos: Contrato[],
+  cursosDinamicos: CursoDinamico[] = [],
+  asignaciones: AsignacionAula[] = [],
+  horasCronologicasList: HorasCronologicasAdicionales[] = [],
+  contratoEditado?: Contrato,
+  horasCronologicasEditadas?: HorasCronologicasAdicionales[]
+): {
+  valido: boolean;
+  sumaTotal: number;
+  detalle: string;
+} {
+  const normRun = normalizarRun(run);
+  
+  let activeConts = contratos.filter(c => normalizarRun(c.funcionario_run) === normRun);
+  if (contratoEditado) {
+    activeConts = activeConts.filter(c => c.id !== contratoEditado.id);
+    activeConts.push(contratoEditado);
+  }
+
+  let sumaTotal = 0;
+  let detalle = '';
+
+  activeConts.forEach(c => {
+    let cronList = horasCronologicasList;
+    if (contratoEditado && c.id === contratoEditado.id && horasCronologicasEditadas) {
+      cronList = [
+        ...horasCronologicasList.filter(h => h.contrato_id !== c.id),
+        ...horasCronologicasEditadas
+      ];
+    }
+
+    const desglose = calcularDesgloseContrato(c, cursosDinamicos, asignaciones, cronList);
+    const sumContrato = desglose.horasAula + desglose.horasColaborativas + desglose.horasCronologicasAdicionales + desglose.horasDirectivas + desglose.horasTecnicoPedagogicas;
+    sumaTotal += sumContrato;
+    detalle += `RBD ${c.rbd}: Aula ${desglose.horasAula} + Colab ${desglose.horasColaborativas} + Crono ${desglose.horasCronologicasAdicionales} + Dir ${desglose.horasDirectivas} + UTP ${desglose.horasTecnicoPedagogicas} = ${sumContrato} hrs.\n`;
+  });
+
+  sumaTotal = parseFloat(sumaTotal.toFixed(2));
+  const valido = sumaTotal <= 44.001;
+
+  return {
+    valido,
+    sumaTotal,
+    detalle
+  };
+}
+
+export function normalizarRun(run: string): string {
+  if (!run) return '';
+  return run.trim().toUpperCase().replace(/\./g, '').replace(/[^0-9K]/g, '');
 }

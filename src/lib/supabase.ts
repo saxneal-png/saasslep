@@ -15,9 +15,11 @@ import {
   Supervisor,
   RegistroRemuneracion,
   TareaReemplazo,
-  ReemplazoDetalle
+  ReemplazoDetalle,
+  HorasCronologicasAdicionales
 } from './types';
 import { normalizarRbd } from './csvParser';
+import { validarHardCap44Horas, normalizarRun } from './rulesEngine';
 
 // Comunas in Diguillín/Valle Diguillín area
 const COMUNAS = ['Bulnes', 'Chillán Viejo', 'El Carmen', 'Pemuco', 'San Ignacio', 'Yungay', 'Quillón'];
@@ -369,6 +371,14 @@ class DatabaseLocal {
 
   set reemplazosLicencias(val: ReemplazoDetalle[]) {
     this.setStorageItem('reemplazos_licencias', val);
+  }
+
+  get horasCronologicasAdicionales(): HorasCronologicasAdicionales[] {
+    return this.getStorageItem('horas_cronologicas_adicionales', []);
+  }
+
+  set horasCronologicasAdicionales(val: HorasCronologicasAdicionales[]) {
+    this.setStorageItem('horas_cronologicas_adicionales', val);
   }
 }
 
@@ -730,7 +740,8 @@ export const api = {
       'id', 'funcionario_run', 'rbd', 'calidad_juridica', 'funcion_principal', 'estado',
       'horas_totales', 'vinculo_titular_id', 'dias_trabajados', 'dias_licencia_medica',
       'inasistencias', 'legislacion_laboral', 'horas_directivas', 'horas_aula',
-      'horas_tecnico_pedagogicas', 'fecha_inicio_licencia', 'fecha_termino_licencia'
+      'horas_colaborativas', 'es_uniprofesional', 'horas_tecnico_pedagogicas', 
+      'fecha_inicio_licencia', 'fecha_termino_licencia'
     ];
     const sanitize = (c: Contrato): any => {
       const out: any = {};
@@ -766,8 +777,14 @@ export const api = {
       }
     }
 
-    for (let i = 0; i < financiamientos.length; i += batchSize) {
-      const batch = financiamientos.slice(i, i + batchSize);
+    // Apply deterministic IDs based on ${contrato_id}-${origen_fondo}
+    const sanitizedFins = financiamientos.map(f => ({
+      ...f,
+      id: `${f.contrato_id}-${f.origen_fondo}`
+    }));
+
+    for (let i = 0; i < sanitizedFins.length; i += batchSize) {
+      const batch = sanitizedFins.slice(i, i + batchSize);
       if (batch.length > 0) {
         const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').upsert(batch, { onConflict: 'id' })));
         if (error) {
@@ -843,29 +860,104 @@ export const api = {
 
   upsertContratoCompleto: async (
     contrato: Contrato, 
-    financiamientos: FinanciamientoContrato[]
+    financiamientos: FinanciamientoContrato[],
+    horasCronologicas: HorasCronologicasAdicionales[] = []
   ): Promise<void> => {
-    const { error: cErr } = await supabase.from('contratos').upsert(contrato, { onConflict: 'id' });
+    // 1. Hard Cap 44-hour Integrity Validator
+    const run = contrato.funcionario_run;
+    let siblingConts: Contrato[] = [];
+    let allCursos: CursoDinamico[] = [];
+    let allAsigs: AsignacionAula[] = [];
+    let allCron: HorasCronologicasAdicionales[] = [];
+
+    try {
+      const { data: cData } = await supabase.from('contratos').select('*').eq('funcionario_run', run);
+      siblingConts = cData || [];
+      const contIds = siblingConts.map(c => c.id);
+      if (contIds.length > 0) {
+        const { data: aData } = await supabase.from('asignaciones_aula').select('*').in('contrato_id', contIds);
+        allAsigs = aData || [];
+        const { data: crData } = await supabase.from('horas_cronologicas_adicionales').select('*').in('contrato_id', contIds);
+        allCron = crData || [];
+      }
+      const { data: cuData } = await supabase.from('cursos_dinamicos').select('*');
+      allCursos = cuData || [];
+    } catch (e) {
+      siblingConts = dbLocal.contratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(run));
+      const contIds = siblingConts.map(c => c.id);
+      allAsigs = dbLocal.asignacionesAula.filter(a => contIds.includes(a.contrato_id));
+      allCron = dbLocal.horasCronologicasAdicionales.filter(h => contIds.includes(h.contrato_id));
+      allCursos = dbLocal.cursosDinamicos;
+    }
+
+    const validation = validarHardCap44Horas(
+      run,
+      siblingConts,
+      allCursos,
+      allAsigs,
+      allCron,
+      contrato,
+      horasCronologicas
+    );
+
+    if (!validation.valido) {
+      throw new Error(`Violación de Tope Laboral: El funcionario excede las 44 horas cronológicas permitidas en el Servicio Local.`);
+    }
+
+    // 2. Deterministic ID for financiamientos
+    const sanitizedFins = financiamientos.map(f => ({
+      ...f,
+      id: `${contrato.id}-${f.origen_fondo}`
+    }));
+
+    // Sanitized contract record for DB
+    const CONTRATO_DB_COLS = [
+      'id', 'funcionario_run', 'rbd', 'calidad_juridica', 'funcion_principal', 'estado',
+      'horas_totales', 'vinculo_titular_id', 'dias_trabajados', 'dias_licencia_medica',
+      'inasistencias', 'legislacion_laboral', 'horas_directivas', 'horas_aula',
+      'horas_colaborativas', 'es_uniprofesional', 'horas_tecnico_pedagogicas', 
+      'fecha_inicio_licencia', 'fecha_termino_licencia'
+    ];
+    const dbContrato: any = {};
+    CONTRATO_DB_COLS.forEach(col => {
+      if ((contrato as any)[col] !== undefined) dbContrato[col] = (contrato as any)[col];
+    });
+
+    const { error: cErr } = await supabase.from('contratos').upsert(dbContrato, { onConflict: 'id' });
     const { error: delErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contrato.id);
     let insErr = null;
-    if (financiamientos.length > 0) {
-      const { error } = await supabase.from('financiamientos').insert(financiamientos);
+    if (sanitizedFins.length > 0) {
+      const { error } = await supabase.from('financiamientos').insert(sanitizedFins);
       insErr = error;
     }
-    if (cErr || delErr || insErr) {
-      console.warn("⚠️ Error en Supabase, guardando contrato completo en local:", { cErr, delErr, insErr });
-      const contratos = dbLocal.contratos;
-      const cIndex = contratos.findIndex(c => c.id === contrato.id);
-      if (cIndex >= 0) {
-        contratos[cIndex] = contrato;
-      } else {
-        contratos.push(contrato);
-      }
-      dbLocal.contratos = contratos;
 
-      let finList = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== contrato.id);
-      finList.push(...financiamientos);
-      dbLocal.financiamientoContratos = finList;
+    const { error: delCrErr } = await supabase.from('horas_cronologicas_adicionales').delete().eq('contrato_id', contrato.id);
+    let insCrErr = null;
+    if (horasCronologicas.length > 0) {
+      const { error } = await supabase.from('horas_cronologicas_adicionales').insert(horasCronologicas);
+      insCrErr = error;
+    }
+
+    // Proactively sync local storage
+    const contratosList = dbLocal.contratos;
+    const cIndex = contratosList.findIndex(c => c.id === contrato.id);
+    if (cIndex >= 0) {
+      contratosList[cIndex] = contrato;
+    } else {
+      contratosList.push(contrato);
+    }
+    dbLocal.contratos = contratosList;
+
+    let finList = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== contrato.id);
+    finList.push(...sanitizedFins);
+    dbLocal.financiamientoContratos = finList;
+
+    let cronList = dbLocal.horasCronologicasAdicionales.filter(h => h.contrato_id !== contrato.id);
+    cronList.push(...horasCronologicas);
+    dbLocal.horasCronologicasAdicionales = cronList;
+
+    if (cErr || delErr || insErr || delCrErr || insCrErr) {
+      console.warn("⚠️ Error en Supabase, guardando contrato completo en local:", { cErr, delErr, insErr, delCrErr, insCrErr });
     }
   },
 
@@ -898,12 +990,16 @@ export const api = {
   deleteContrato: async (contratoId: string): Promise<void> => {
     const { error: aErr } = await supabase.from('asignaciones_aula').delete().eq('contrato_id', contratoId);
     const { error: fErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contratoId);
+    const { error: crErr } = await supabase.from('horas_cronologicas_adicionales').delete().eq('contrato_id', contratoId);
     const { error: cErr } = await supabase.from('contratos').delete().eq('id', contratoId);
-    if (aErr || fErr || cErr) {
-      console.warn("⚠️ Error en Supabase, eliminando contrato en local:", { aErr, fErr, cErr });
-      dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== contratoId);
-      dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== contratoId);
-      dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.contrato_id !== contratoId);
+    
+    dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== contratoId);
+    dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== contratoId);
+    dbLocal.horasCronologicasAdicionales = dbLocal.horasCronologicasAdicionales.filter(h => h.contrato_id !== contratoId);
+    dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.contrato_id !== contratoId);
+
+    if (aErr || fErr || crErr || cErr) {
+      console.warn("⚠️ Error en Supabase, eliminando contrato en local:", { aErr, fErr, crErr, cErr });
     }
   },
 
@@ -1386,6 +1482,28 @@ export const api = {
     const { data, error } = await supabase.from('cargos_personalizados').select('*');
     if (error) return handleFallback(error, dbLocal.cargosPersonalizados, 'cargos_personalizados');
     return data || [];
+  },
+
+  getHorasCronologicasAdicionales: async (contratoId?: string): Promise<HorasCronologicasAdicionales[]> => {
+    try {
+      let query = supabase.from('horas_cronologicas_adicionales').select('*');
+      if (contratoId) {
+        query = query.eq('contrato_id', contratoId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(row => ({
+        id: row.id,
+        contrato_id: row.contrato_id,
+        tipo: row.tipo,
+        horas: Number(row.horas)
+      }));
+    } catch (error) {
+      const fallback = contratoId 
+        ? dbLocal.horasCronologicasAdicionales.filter(h => h.contrato_id === contratoId)
+        : dbLocal.horasCronologicasAdicionales;
+      return handleFallback(error, fallback, 'horas_cronologicas_adicionales');
+    }
   },
 
   scheduleCloudSync: async (): Promise<void> => {},

@@ -37,6 +37,7 @@ export default function EscuelaDashboard() {
 
   // Active School State
   const [contratos, setContratos] = useState<Contrato[]>([]);
+  const [todosLosContratos, setTodosLosContratos] = useState<Contrato[]>([]);
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [asignaciones, setAsignaciones] = useState<AsignacionAula[]>([]);
   const [financiamientosEscuela, setFinanciamientosEscuela] = useState<FinanciamientoContrato[]>([]);
@@ -134,6 +135,11 @@ export default function EscuelaDashboard() {
   const [editContHorasDirectivas, setEditContHorasDirectivas] = useState<number | undefined>(undefined);
   const [editContHorasAula, setEditContHorasAula] = useState<number | undefined>(undefined);
   const [editContHorasTecPed, setEditContHorasTecPed] = useState<number | undefined>(undefined);
+  const [editContEsUniprofesional, setEditContEsUniprofesional] = useState<boolean>(false);
+  const [editContCronoHours, setEditContCronoHours] = useState<{ id: string; tipo: string; horas: number }[]>([]);
+  const [editContInputMode, setEditContInputMode] = useState<'aula-primero' | 'contrato-primero'>('aula-primero');
+  const [newEditCronoType, setNewEditCronoType] = useState<string>('Trabajo Colaborativo');
+  const [newEditCronoHours, setNewEditCronoHours] = useState<number>(2);
 
   const [editingCurso, setEditingCurso] = useState<CursoDinamico | null>(null);
   const [editCursoAsignaturas, setEditCursoAsignaturas] = useState<AsignaturaDinamica[]>([]);
@@ -228,7 +234,8 @@ export default function EscuelaDashboard() {
       customCargs,
       plans,
       tasks,
-      reemps
+      reemps,
+      allConts
     ] = await Promise.all([
       api.getEstablecimientoByRbd(selectedRbd),
       api.getContratos(selectedRbd),
@@ -239,11 +246,13 @@ export default function EscuelaDashboard() {
       api.getCargosPorEstablecimiento(selectedRbd),
       api.getPlanesEstudio(),
       api.getTareasReemplazo(),
-      api.getReemplazosLicencias()
+      api.getReemplazosLicencias(),
+      api.getContratos()
     ]);
 
     setColegio(est || null);
     setContratos(conts);
+    setTodosLosContratos(allConts);
     setFuncionarios(funcs);
     setAsignaciones(asigs);
     setAlertas(alts);
@@ -707,8 +716,18 @@ export default function EscuelaDashboard() {
     if (firstCont) {
       // Use the first contract for the general fields
       setEditContHorasDirectivas(firstCont.horas_directivas);
-      setEditContHorasAula(firstCont.horas_aula);
+      setEditContHorasAula(firstCont.horas_aula || 30);
       setEditContHorasTecPed(firstCont.horas_tecnico_pedagogicas);
+      setEditContEsUniprofesional(!!firstCont.es_uniprofesional);
+      setEditContInputMode(firstCont.horas_aula ? 'aula-primero' : 'contrato-primero');
+
+      // Fetch chronological hours
+      api.getHorasCronologicasAdicionales(firstCont.id).then(cronoList => {
+        setEditContCronoHours(cronoList.map(h => ({ id: h.id, tipo: h.tipo, horas: h.horas })));
+      }).catch(() => {
+        setEditContCronoHours([]);
+      });
+
       // Load financiamientos from ALL contracts, tagging each with its calidad
       const allFinsNested = await Promise.all(
         relatedContsForFuncionario.map(c => 
@@ -730,33 +749,65 @@ export default function EscuelaDashboard() {
       setEditContHorasDirectivas(undefined);
       setEditContHorasAula(undefined);
       setEditContHorasTecPed(undefined);
+      setEditContEsUniprofesional(false);
+      setEditContCronoHours([]);
       setEditContFins([]);
     }
   };
- 
+
   const handleSaveFuncionario = async () => {
     if (!editingFuncionario) return;
 
+    const cleanRun = normalizarRun(editingFuncionario.run);
+
+    // Calculate hours breakdown based on bilateral mode
+    let calculatedTotal = 0;
+    let calculatedAula = 0;
+    let calculatedColab = 0;
+
+    if (editContInputMode === 'aula-primero') {
+      calculatedAula = editContHorasAula || 0;
+      calculatedColab = parseFloat((calculatedAula * (35 / 65)).toFixed(2));
+      const sumCrono = editContCronoHours.reduce((s, h) => s + h.horas, 0);
+      const dirHrs = editContEsUniprofesional ? Math.min(10, editContHorasDirectivas || 0) : (editContHorasDirectivas || 0);
+      calculatedTotal = parseFloat((calculatedAula + calculatedColab + sumCrono + dirHrs + (editContHorasTecPed || 0)).toFixed(2));
+    } else {
+      calculatedTotal = editContHoras;
+      calculatedAula = parseFloat((editContHoras * 0.65).toFixed(2));
+      calculatedColab = parseFloat((editContHoras * 0.35).toFixed(2));
+    }
+
+    // Proactively align editContFins sum with calculatedTotal
+    const sumFins = editContFins.reduce((s, l) => s + l.horas, 0);
+    if (sumFins !== calculatedTotal) {
+      if (editContFins.length > 0) {
+        editContFins[0].horas = parseFloat((calculatedTotal - editContFins.slice(1).reduce((s, l) => s + l.horas, 0)).toFixed(2));
+        if (editContFins[0].horas < 0) {
+          editContFins[0].horas = calculatedTotal;
+          editContFins.splice(1);
+        }
+      } else {
+        editContFins.push({ origen: 'Subvención Regular' as OrigenFondo, calidad: 'A contrata' as CalidadJuridica, horas: calculatedTotal });
+      }
+      setEditContHoras(calculatedTotal);
+    }
+
     // --- VALIDATION: 44-hour SLEP-wide maximum ---
-    const cleanRun = editingFuncionario.run;
-    const totalHorasNuevo = editContFins.reduce((s, fn) => s + fn.horas, 0);
-    // Sum of hours in OTHER schools/RBDs for this funcionario
-    const horasEnOtrosColegios = contratos
-      .filter(c => c.funcionario_run === cleanRun && normalizarRbd(String(c.rbd)) !== normalizarRbd(String(selectedRbd)))
+    const horasEnOtrosColegios = todosLosContratos
+      .filter(c => normalizarRun(c.funcionario_run) === cleanRun && normalizarRbd(String(c.rbd)) !== normalizarRbd(String(selectedRbd)))
       .reduce((s, c) => s + c.horas_totales, 0);
-    const totalHorasSLEP = totalHorasNuevo + horasEnOtrosColegios;
+    const totalHorasSLEP = parseFloat((calculatedTotal + horasEnOtrosColegios).toFixed(2));
 
     if (totalHorasSLEP > 44) {
       const msg = horasEnOtrosColegios > 0
-        ? `⚠️ Límite SLEP superado\n\nEste funcionario tiene ${horasEnOtrosColegios} hrs en otros establecimientos del SLEP.\nAgregando ${totalHorasNuevo} hrs en este colegio = ${totalHorasSLEP} hrs totales.\n\nEl máximo permitido es 44 hrs en todo el SLEP.\n\nRevisa las horas asignadas y vuelve a intentar.`
-        : `⚠️ Límite de contrato superado\n\nLa suma de horas en este establecimiento es ${totalHorasNuevo} hrs, lo que supera el máximo legal de 44 hrs en el SLEP.\n\nRevisa las horas asignadas y vuelve a intentar.`;
+        ? `⚠️ Límite SLEP superado\n\nEste funcionario tiene ${horasEnOtrosColegios} hrs en otros establecimientos del SLEP.\nAgregando ${calculatedTotal} hrs en este colegio = ${totalHorasSLEP} hrs totales.\n\nEl máximo permitido es 44 hrs en todo el SLEP.\n\nRevisa las horas asignadas y vuelve a intentar.`
+        : `⚠️ Límite de contrato superado\n\nLa suma de horas en este establecimiento es ${calculatedTotal} hrs, lo que supera el máximo legal de 44 hrs en el SLEP.\n\nRevisa las horas asignadas y vuelve a intentar.`;
       alert(msg);
       return;
     }
 
-    // Optional soft warning at exactly 44
     if (totalHorasSLEP === 44 && horasEnOtrosColegios > 0) {
-      const confirmar = confirm(`ℹ️ Este funcionario llega exactamente a 44 hrs en el SLEP (${horasEnOtrosColegios} hrs en otros colegios + ${totalHorasNuevo} hrs aquí).\n\n¿Deseas continuar guardando?`);
+      const confirmar = confirm(`ℹ️ Este funcionario llega exactamente a 44 hrs en el SLEP (${horasEnOtrosColegios} hrs en otros colegios + ${calculatedTotal} hrs aquí).\n\n¿Deseas continuar guardando?`);
       if (!confirmar) return;
     }
 
@@ -772,50 +823,61 @@ export default function EscuelaDashboard() {
         fecha_ingreso_establecimiento: editFuncFechaEstablecimiento || undefined
       });
 
-      // 2. Update contract and finance sources in Supabase
       const relatedConts = contratos.filter(
-        c => c.funcionario_run === cleanRun && normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd))
+        c => normalizarRun(c.funcionario_run) === cleanRun && normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd))
       );
 
-      // Delete old contracts for this teacher in this RBD
-      for (const oldCont of relatedConts) {
-        await api.deleteContrato(oldCont.id);
+      // Determine qualities of the editContFins
+      const calidadesUnicas = Array.from(new Set(editContFins.map(sl => sl.calidad)));
+      const oldCont = relatedConts[0];
+
+      // Delete contracts whose quality is no longer present (avoids deleting active contracts that are being soft-updated)
+      const toDelete = relatedConts.filter(c => !calidadesUnicas.includes(c.calidad_juridica));
+      for (const oldC of toDelete) {
+        await api.deleteContrato(oldC.id);
       }
 
-      // Group financing lines by calidad and create one contract per calidad
-      if (editContFins.length > 0) {
-        const calidadesUnicas = Array.from(new Set(editContFins.map(sl => sl.calidad)));
-        const oldCont = relatedConts[0];
+      // Save/Update contracts
+      for (let cIdx = 0; cIdx < calidadesUnicas.length; cIdx++) {
+        const cal = calidadesUnicas[cIdx];
+        const linesForCal = editContFins.filter(l => l.calidad === cal);
+        const totalHorasCal = linesForCal.reduce((sum, l) => sum + l.horas, 0);
 
-        for (let cIdx = 0; cIdx < calidadesUnicas.length; cIdx++) {
-          const cal = calidadesUnicas[cIdx];
-          const linesForCal = editContFins.filter(l => l.calidad === cal);
-          const totalHorasCal = linesForCal.reduce((sum, l) => sum + l.horas, 0);
+        const existingMatch = relatedConts.find(c => c.calidad_juridica === cal);
+        const contractId = existingMatch?.id || `c-school-edit-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-${selectedRbd}-${cal.toLowerCase().replace(/[^a-z]/g, '')}-${cIdx}`;
 
-          const nuevoContrato: Contrato = {
-            id: `c-school-edit-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-${selectedRbd}-${cal.toLowerCase().replace(/[^a-z]/g, '')}-${cIdx}`,
-            funcionario_run: cleanRun,
-            rbd: selectedRbd,
-            calidad_juridica: cal,
-            funcion_principal: editFuncCargo || oldCont?.funcion_principal || 'Docente de Aula',
-            estado: oldCont?.estado || 'Activo',
-            horas_totales: totalHorasCal,
-            horas_directivas: oldCont?.horas_directivas,
-            horas_aula: oldCont?.horas_aula,
-            horas_tecnico_pedagogicas: oldCont?.horas_tecnico_pedagogicas,
-            fecha_inicio_licencia: oldCont?.fecha_inicio_licencia,
-            fecha_termino_licencia: oldCont?.fecha_termino_licencia
-          };
+        const nuevoContrato: Contrato = {
+          id: contractId,
+          funcionario_run: cleanRun,
+          rbd: selectedRbd,
+          calidad_juridica: cal,
+          funcion_principal: editFuncCargo || existingMatch?.funcion_principal || oldCont?.funcion_principal || 'Docente de Aula',
+          estado: existingMatch?.estado || oldCont?.estado || 'Activo',
+          horas_totales: totalHorasCal,
+          horas_aula: calidadesUnicas.length === 1 ? calculatedAula : parseFloat((totalHorasCal * 0.65).toFixed(2)),
+          horas_colaborativas: calidadesUnicas.length === 1 ? calculatedColab : parseFloat((totalHorasCal * 0.35).toFixed(2)),
+          es_uniprofesional: editContEsUniprofesional,
+          horas_directivas: editContHorasDirectivas || 0,
+          horas_tecnico_pedagogicas: editContHorasTecPed || 0,
+          fecha_inicio_licencia: existingMatch?.fecha_inicio_licencia || oldCont?.fecha_inicio_licencia,
+          fecha_termino_licencia: existingMatch?.fecha_termino_licencia || oldCont?.fecha_termino_licencia
+        };
 
-          const newFins = linesForCal.map((l, lIdx) => ({
-            id: `fin-edit-${nuevoContrato.id}-${lIdx}`,
-            contrato_id: nuevoContrato.id,
-            origen_fondo: l.origen,
-            horas: l.horas
-          }));
+        const newFins = linesForCal.map((l) => ({
+          id: `${nuevoContrato.id}-${l.origen}`,
+          contrato_id: nuevoContrato.id,
+          origen_fondo: l.origen,
+          horas: l.horas
+        }));
 
-          await api.upsertContratoCompleto(nuevoContrato, newFins);
-        }
+        const contractCrono = editContCronoHours.map((ch, chIdx) => ({
+          id: `crono-${nuevoContrato.id}-${chIdx}`,
+          contrato_id: nuevoContrato.id,
+          tipo: ch.tipo,
+          horas: ch.horas
+        }));
+
+        await api.upsertContratoCompleto(nuevoContrato, newFins, contractCrono);
       }
 
       setEditingFuncionario(null);
@@ -2031,6 +2093,32 @@ export default function EscuelaDashboard() {
                               >
                                 👤 {f.nombre}
                               </button>
+                              {(() => {
+                                const teacherConts = contratos.filter(c => c.funcionario_run === f.run);
+                                const calidades = Array.from(new Set(teacherConts.map(c => c.calidad_juridica).filter(Boolean)));
+                                const esReemplazo = teacherConts.some(c => c.estado === 'Reemplazo' || c.calidad_juridica?.toLowerCase().includes('reemplazo') || c.vinculo_titular_id);
+                                const esLicencia = teacherConts.some(c => c.estado === 'Licencia Médica');
+                                if (calidades.length === 0 && !esReemplazo && !esLicencia) return null;
+                                return (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {calidades.map(cal => (
+                                      <span key={cal} className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[8px] font-extrabold border border-slate-205 uppercase tracking-wide">
+                                        {cal}
+                                      </span>
+                                    ))}
+                                    {esReemplazo && (
+                                      <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[8px] font-black border border-blue-200 uppercase tracking-wide">
+                                        🔄 Reemplazo
+                                      </span>
+                                    )}
+                                    {esLicencia && (
+                                      <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[8px] font-black border border-amber-200 uppercase tracking-wide">
+                                        💊 Licencia
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                               {(() => {
                                 if (hasCont && hasCont.estado === 'Activo') {
                                   const teacherAsigs = asignaciones.filter(a => a.contrato_id === hasCont.id);
@@ -4236,7 +4324,7 @@ export default function EscuelaDashboard() {
                       <div className="flex items-center gap-2">
                         {(() => {
                           const totalEdit = editContFins.reduce((s, fn) => s + fn.horas, 0);
-                          const horasOtrosRbd = contratos
+                          const horasOtrosRbd = todosLosContratos
                             .filter(c => c.funcionario_run === editingFuncionario?.run && normalizarRbd(String(c.rbd)) !== normalizarRbd(String(selectedRbd)))
                             .reduce((s, c) => s + c.horas_totales, 0);
                           const totalSLEP = totalEdit + horasOtrosRbd;
@@ -4265,7 +4353,7 @@ export default function EscuelaDashboard() {
                         <span>La suma de horas supera el máximo de <strong>44 hrs</strong> permitidas en el SLEP. Reduce las horas antes de guardar.</span>
                       </div>
                     )}
-                    {editContFins.reduce((s, fn) => s + fn.horas, 0) + contratos.filter(c => c.funcionario_run === editingFuncionario?.run && normalizarRbd(String(c.rbd)) !== normalizarRbd(String(selectedRbd))).reduce((s, c) => s + c.horas_totales, 0) > 44 && editContFins.reduce((s, fn) => s + fn.horas, 0) <= 44 && (
+                    {editContFins.reduce((s, fn) => s + fn.horas, 0) + todosLosContratos.filter(c => c.funcionario_run === editingFuncionario?.run && normalizarRbd(String(c.rbd)) !== normalizarRbd(String(selectedRbd))).reduce((s, c) => s + c.horas_totales, 0) > 44 && editContFins.reduce((s, fn) => s + fn.horas, 0) <= 44 && (
                       <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-[11px] text-orange-800 font-semibold flex items-start gap-2">
                         <span className="text-base leading-none">⚠️</span>
                         <span>Sumando las horas de este colegio con las de otros establecimientos SLEP se superan las <strong>44 hrs</strong> máximas permitidas.</span>
@@ -4375,41 +4463,170 @@ export default function EscuelaDashboard() {
                     </div>
                   )}
 
-                  {/* Desglose de Horas en Contrato / Nómina (Ingesta) */}
-                  <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-3">
-                    <span className="font-bold text-slate-800">Desglose de Horas Declarado en Nómina (Ingesta)</span>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-slate-500 font-bold mb-1">Horas Directivas</label>
-                        <input 
-                          type="number"
-                          placeholder="Sin valor"
-                          className="w-full p-2 bg-white border rounded font-semibold text-slate-800 focus:outline-slep-blue text-center"
-                          value={editContHorasDirectivas !== undefined ? editContHorasDirectivas : ''}
-                          onChange={(e) => setEditContHorasDirectivas(e.target.value ? parseFloat(e.target.value) : undefined)}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-500 font-bold mb-1">Horas Aula</label>
-                        <input 
-                          type="number"
-                          placeholder="Sin valor"
-                          className="w-full p-2 bg-white border rounded font-semibold text-slate-800 focus:outline-slep-blue text-center"
-                          value={editContHorasAula !== undefined ? editContHorasAula : ''}
-                          onChange={(e) => setEditContHorasAula(e.target.value ? parseFloat(e.target.value) : undefined)}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-500 font-bold mb-1">Horas Téc. Pedagógicas</label>
-                        <input 
-                          type="number"
-                          placeholder="Sin valor"
-                          className="w-full p-2 bg-white border rounded font-semibold text-slate-800 focus:outline-slep-blue text-center"
-                          value={editContHorasTecPed !== undefined ? editContHorasTecPed : ''}
-                          onChange={(e) => setEditContHorasTecPed(e.target.value ? parseFloat(e.target.value) : undefined)}
-                        />
+                  {/* Bilateral Hours Config and Desglose Panel */}
+                  <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-4">
+                    <div className="flex justify-between items-center border-b pb-2">
+                      <span className="font-bold text-slate-800">Configuración de Carga Horaria (Bilateral)</span>
+                      <div className="flex bg-slate-200/50 rounded-lg p-0.5 border">
+                        <button
+                          type="button"
+                          onClick={() => setEditContInputMode('aula-primero')}
+                          className={`px-3 py-1 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer ${
+                            editContInputMode === 'aula-primero' 
+                              ? 'bg-white text-slep-blue shadow-sm' 
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          Aula Primero
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditContInputMode('contrato-primero')}
+                          className={`px-3 py-1 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer ${
+                            editContInputMode === 'contrato-primero' 
+                              ? 'bg-white text-slep-blue shadow-sm' 
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          Contrato Primero
+                        </button>
                       </div>
                     </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {editContInputMode === 'aula-primero' ? (
+                        <div className="space-y-2">
+                          <label className="block text-slate-500 font-bold mb-1">Horas Aula (Lectivas)</label>
+                          <input 
+                            type="number"
+                            min={0}
+                            max={44}
+                            className="w-full p-2 border rounded font-black text-slate-800 focus:outline-slep-blue text-center bg-amber-50/10"
+                            value={editContHorasAula !== undefined ? editContHorasAula : ''}
+                            onChange={(e) => setEditContHorasAula(e.target.value ? parseFloat(e.target.value) : undefined)}
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <label className="block text-slate-500 font-bold mb-1">Total Horas Contrato</label>
+                          <input 
+                            type="number"
+                            min={0}
+                            max={44}
+                            className="w-full p-2 border rounded font-black text-slate-800 focus:outline-slep-blue text-center bg-amber-50/10"
+                            value={editContHoras}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              setEditContHoras(val);
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      <div className="space-y-2 border-l pl-4 border-slate-200/60">
+                        <div className="flex items-center gap-2 pt-1 pb-2">
+                          <input 
+                            type="checkbox"
+                            id="edit_es_uniprofesional"
+                            className="h-4 w-4 text-slep-blue rounded border-slate-350 cursor-pointer"
+                            checked={editContEsUniprofesional}
+                            onChange={(e) => setEditContEsUniprofesional(e.target.checked)}
+                          />
+                          <label htmlFor="edit_es_uniprofesional" className="text-slate-600 font-bold text-[10px] cursor-pointer">
+                            Doble Rol (Directivas independientes hasta 10 hrs)
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-slate-500 font-bold mb-0.5 text-[9px] uppercase">Horas Directivas</label>
+                            <input 
+                              type="number"
+                              min={0}
+                              max={editContEsUniprofesional ? 10 : 44}
+                              className="w-full p-1.5 border rounded font-semibold text-slate-800 text-center"
+                              value={editContHorasDirectivas !== undefined ? editContHorasDirectivas : ''}
+                              onChange={(e) => setEditContHorasDirectivas(e.target.value ? parseFloat(e.target.value) : undefined)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-500 font-bold mb-0.5 text-[9px] uppercase">Horas UTP</label>
+                            <input 
+                              type="number"
+                              min={0}
+                              max={44}
+                              className="w-full p-1.5 border rounded font-semibold text-slate-800 text-center"
+                              value={editContHorasTecPed !== undefined ? editContHorasTecPed : ''}
+                              onChange={(e) => setEditContHorasTecPed(e.target.value ? parseFloat(e.target.value) : undefined)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Additional Chronological Hours Subform */}
+                    {editContInputMode === 'aula-primero' && (
+                      <div className="bg-white p-3 rounded-lg border text-xs space-y-2 shadow-sm">
+                        <p className="font-bold text-slate-700 text-[10px] uppercase">💼 Horas Cronológicas Adicionales</p>
+                        <div className="flex gap-2 items-center">
+                          <select
+                            value={newEditCronoType}
+                            onChange={(e) => setNewEditCronoType(e.target.value)}
+                            className="p-1 border rounded bg-slate-50 font-semibold text-slate-700 cursor-pointer"
+                          >
+                            <option value="Trabajo Colaborativo">Trabajo Colaborativo</option>
+                            <option value="Técnicas">Técnicas</option>
+                            <option value="Apoyo UTP">Apoyo UTP</option>
+                            <option value="Taller Extracurricular">Taller Extracurricular</option>
+                            <option value="Reforzamiento Pedagógico">Reforzamiento Pedagógico</option>
+                          </select>
+                          
+                          <input
+                            type="number"
+                            min={1}
+                            max={44}
+                            placeholder="Horas"
+                            className="w-16 p-1 border rounded text-center font-bold"
+                            value={newEditCronoHours}
+                            onChange={(e) => setNewEditCronoHours(Number(e.target.value) || 0)}
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (newEditCronoHours <= 0) return;
+                              setEditContCronoHours([
+                                ...editContCronoHours,
+                                { id: `crono-edit-${Date.now()}`, tipo: newEditCronoType, horas: newEditCronoHours }
+                              ]);
+                              setNewEditCronoHours(2);
+                            }}
+                            className="bg-slep-blue text-white px-3 py-1 rounded font-black hover:bg-slep-blue-hover cursor-pointer"
+                          >
+                            ➕ Agregar
+                          </button>
+                        </div>
+
+                        {editContCronoHours.length > 0 ? (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {editContCronoHours.map(item => (
+                              <span key={item.id} className="bg-amber-100/70 border border-amber-300 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1.5 font-semibold text-[10px]">
+                                {item.tipo}: <strong>{item.horas} hrs</strong>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditContCronoHours(editContCronoHours.filter(h => h.id !== item.id))}
+                                  className="text-red-600 hover:text-red-800 font-extrabold cursor-pointer"
+                                >
+                                  ✕
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-slate-400 italic">No se han registrado horas cronológicas adicionales.</p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Ley 20.903 indicators */}
@@ -4505,7 +4722,12 @@ export default function EscuelaDashboard() {
                             </div>
                             <div className="bg-white p-2 rounded border">
                               <span className="block text-[8px] uppercase text-slate-400 font-semibold">Recreo Crono.</span>
-                              <strong className="text-pink-700">{((pedagogicas * 4) / 45).toFixed(2)} hrs</strong>
+                              <strong className="text-pink-700">
+                                {(() => {
+                                  const esParv = String(editFuncCargo || '').toUpperCase().includes('PARVULO') || String(editFuncCargo || '').toUpperCase().includes('PARVULARIA') || String(editFuncCargo || '').toUpperCase().includes('EDUCADORA DE PARVULOS');
+                                  return esParv ? '0.00' : ((pedagogicas * 4) / 45).toFixed(2);
+                                })()} hrs
+                              </strong>
                             </div>
                             <div className="bg-white p-2 rounded border">
                               <span className="block text-[8px] uppercase text-slate-400 font-semibold">Planif. Total</span>
