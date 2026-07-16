@@ -1034,55 +1034,35 @@ export const api = {
   },
 
   crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
-    // Try first with detected or default column name for prioritarios concentration
-    const dbCurso: any = {
+    // ⚠️ concentracion_prioritarios does NOT exist as a DB column yet.
+    // It is stored only in localStorage until the column is added via SQL migration.
+    // See: ALTER TABLE cursos_dinamicos ADD COLUMN concentracion_prioritarios NUMERIC(5,2) DEFAULT 0;
+    const dbCurso = {
       rbd: curso.rbd,
       nombre: curso.nombre,
       nivel: curso.nivel,
       regimen: curso.regimen,
       horas_pie: curso.horasPIE ?? null,
       profesor_jefe_run: curso.profesor_jefe_run ?? null
+      // concentracion_prioritarios: intentionally omitted — column not in DB schema
     };
 
-    const colName = detectedCursoConcentracionCol || 'concentracion_prioritarios';
-    dbCurso[colName] = curso.concentracion_prioritarios ?? 0;
-
     const { error } = await supabase.from('cursos_dinamicos').upsert(dbCurso, { onConflict: 'rbd,nombre' });
-    
-    if (error) {
-      const errorMsg = error.message || '';
-      const isColError = error.code === '42703' || errorMsg.includes('concentracion') || errorMsg.includes('does not exist');
-      
-      if (isColError) {
-        console.warn("⚠️ Column 'concentracion_prioritarios' or similar not found in Supabase schema. Retrying insert without it.");
-        const cleanDbCurso = {
-          rbd: curso.rbd,
-          nombre: curso.nombre,
-          nivel: curso.nivel,
-          regimen: curso.regimen,
-          horas_pie: curso.horasPIE ?? null,
-          profesor_jefe_run: curso.profesor_jefe_run ?? null
-        };
-        const { error: retryError } = await supabase.from('cursos_dinamicos').upsert(cleanDbCurso, { onConflict: 'rbd,nombre' });
-        if (retryError) {
-          console.error("❌ Retry without concentration column failed:", retryError);
-          throw retryError;
-        }
-      } else {
-        console.error("❌ Error en Supabase al crear curso dinámico:", error);
-        throw error;
-      }
-    }
 
-    // Always update local storage so UI reflects the change immediately
+    // Always update localStorage immediately so UI reflects the change
     const list = dbLocal.cursosDinamicos;
     const index = list.findIndex(c => c.rbd === curso.rbd && c.nombre === curso.nombre);
     if (index >= 0) {
-      list[index] = curso;
+      list[index] = curso; // includes concentracion_prioritarios in localStorage
     } else {
       list.push(curso);
     }
     dbLocal.cursosDinamicos = list;
+
+    if (error) {
+      console.error("❌ Error en Supabase al crear curso dinámico:", error);
+      throw error;
+    }
   },
 
   eliminarCursoDinamico: async (rbd: string, nombre: string): Promise<void> => {
