@@ -4707,8 +4707,26 @@ export default function EscuelaDashboard() {
                       .reduce((sum, cp) => sum + cp.horas, 0);
                     const otrasHrsAsignadas = dirHrs + tecHrs + otrasFuncionesHrs;
 
-                    const noLectivasTotalesRequeridas = desglose.horasColaborativas; 
-                    const vacantesHrs = Math.max(0, editContHoras - desglose.horasTotales);
+                    // Calculation of indicators BASED ON ACTUAL CLASS ASSIGNMENTS
+                    const docenciaAsignadaCrono = parseFloat((pedagogicasAsignadas * (desglose.duracionMinutos / 60)).toFixed(2));
+                    
+                    let recreoAsignadoCrono = 0;
+                    if (desglose.duracionMinutos === 45) {
+                      recreoAsignadoCrono = parseFloat((pedagogicasAsignadas * (3 / 38)).toFixed(2));
+                    } else if (desglose.esParvularia && desglose.duracionMinutos === 60) {
+                      recreoAsignadoCrono = 0;
+                    } else {
+                      recreoAsignadoCrono = parseFloat((pedagogicasAsignadas * (5 / 60)).toFixed(2));
+                    }
+
+                    const ratioHNL = desglose.esExcepcion ? 0.40 / 0.60 : 0.35 / 0.65;
+                    const scalingFactor = desglose.esParvularia && desglose.duracionMinutos === 60 ? 4 / 3 : 1;
+                    const noLectivasTotalesRequeridas = parseFloat((pedagogicasAsignadas * scalingFactor * ratioHNL).toFixed(2));
+
+                    // Total crono used = assigned class + break + calculated HNL + directivas + tecnicas + adicionales
+                    const totalHorasUsadas = parseFloat((docenciaAsignadaCrono + recreoAsignadoCrono + noLectivasTotalesRequeridas + desglose.horasCronologicasAdicionales + dirHrs + tecHrs + otrasFuncionesHrs).toFixed(2));
+                    
+                    const vacantesHrs = Math.max(0, editContHoras - totalHorasUsadas);
                     const cumpleLey = desglose.horasAula >= pedagogicasAsignadas;
 
                     return (
@@ -4740,7 +4758,7 @@ export default function EscuelaDashboard() {
                             </div>
                             <div className="bg-white p-2 rounded border">
                               <span className="block text-[8px] uppercase text-slate-400 font-semibold">Recreo (Crono)</span>
-                              <strong className="text-pink-700">{desglose.recreoCalculado.toFixed(2)} hrs</strong>
+                              <strong className="text-pink-700">{recreoAsignadoCrono.toFixed(2)} hrs</strong>
                             </div>
                             <div className="bg-white p-2 rounded border">
                               <span className="block text-[8px] uppercase text-slate-400 font-semibold">Planif. / HNL</span>
@@ -4748,7 +4766,7 @@ export default function EscuelaDashboard() {
                             </div>
                             <div className="bg-white p-2 rounded border">
                               <span className="block text-[8px] uppercase text-slate-400 font-semibold">Horas Usadas</span>
-                              <strong className="text-slate-800">{desglose.horasTotales.toFixed(2)} / {editContHoras} hrs</strong>
+                              <strong className="text-slate-800">{totalHorasUsadas.toFixed(2)} / {editContHoras} hrs</strong>
                             </div>
                             <div className={`p-2 rounded border font-bold ${vacantesHrs > 0.05 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`}>
                               <span className="block text-[8px] uppercase text-slate-450 font-semibold">Horas Vacantes</span>
