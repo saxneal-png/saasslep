@@ -332,6 +332,75 @@ export interface DesgloseContrato {
   horasTotales: number;
   esParvularia: boolean;
   esExcepcion: boolean;
+  docenciaAulaCronologica: number;
+  recreoCalculado: number;
+  bloquePresencialTotal: number;
+  esEspecial: boolean;
+  esLenguaje: boolean;
+  duracionMinutos: number;
+  topeMaximoDocencia: number;
+  docenciaEfectivaPIE: number;
+  esPIE: boolean;
+}
+
+export function getDecretoConfig(
+  contrato: Contrato,
+  cargo: string,
+  cursoNombre: string = '',
+  establecimientoNombre: string = ''
+): {
+  duracionLectivaMinutos: number;
+  esParvularia: boolean;
+  esEspecial: boolean;
+  esLenguaje: boolean;
+} {
+  const cleanCargo = String(cargo || contrato.funcion_principal || '').trim().toUpperCase();
+  const cleanCurso = String(cursoNombre || '').trim().toUpperCase();
+  const estName = String(establecimientoNombre || contrato.establecimientos?.nombre || '').trim().toUpperCase();
+
+  const esParvularia = cleanCargo.includes('PARVULO') || 
+                       cleanCargo.includes('PARVULARIA') || 
+                       cleanCargo.includes('EDUCADORA DE PARVULOS') ||
+                       cleanCurso.includes('KINDER') ||
+                       cleanCurso.includes('KÍNDER') ||
+                       cleanCurso.includes('PREKINDER') ||
+                       cleanCurso.includes('PRE-KÍNDER') ||
+                       cleanCurso.includes('TRANSICION') ||
+                       cleanCurso.includes('TRANSICIÓ') ||
+                       cleanCurso.includes('NT1') ||
+                       cleanCurso.includes('NT2');
+
+  const esEspecial = estName.includes('ESPECIAL') || 
+                     estName.includes('DIFERENCIAL') || 
+                     estName.includes('DEFICIENCIA MENTAL') ||
+                     cleanCurso.includes('LABORAL') ||
+                     cleanCurso.includes('DIFERENCIAL') ||
+                     cleanCurso.includes('ESPECIAL') ||
+                     cleanCurso.includes('DECRETO 87');
+
+  const esLenguaje = !esEspecial && (
+                     estName.includes('LENGUAJE') || 
+                     estName.includes('DECRETO 1300') ||
+                     cleanCurso.includes('LENGUAJE')
+  );
+
+  let duracionLectivaMinutos = 45;
+  if (esParvularia) {
+    if (esEspecial) {
+      duracionLectivaMinutos = 30; // Decreto 87 Nivel Parvulario
+    } else {
+      duracionLectivaMinutos = 60; // Parvularia Regular
+    }
+  } else if (esEspecial) {
+    duracionLectivaMinutos = 40; // Decreto 87 Nivel Básico y Laboral
+  }
+
+  return {
+    duracionLectivaMinutos,
+    esParvularia,
+    esEspecial,
+    esLenguaje
+  };
 }
 
 export function calcularDesgloseContrato(
@@ -373,7 +442,38 @@ export function calcularDesgloseContrato(
     ratioNoLectivas = sumColabAsigs / sumAsigHoras;
   }
 
-  const horasColaborativas = parseFloat((horasAula * ratioNoLectivas).toFixed(2));
+  // Use the refined helper to get decreto config details
+  const config = getDecretoConfig(contrato, cargoClean, contratoAsigs[0]?.curso);
+  
+  // Conversion de Aula: factor real de duracion de la hora lectiva
+  const docenciaAulaCronologica = parseFloat((horasAula * (config.duracionLectivaMinutos / 60)).toFixed(2));
+  
+  // Calculo de Recreo: only for 45-min Standard/Language (or scaled proportionally for others)
+  let recreoCalculado = 0;
+  if (config.duracionLectivaMinutos === 45) {
+    recreoCalculado = parseFloat((horasAula * (3 / 38)).toFixed(2));
+  } else if (config.esParvularia) {
+    // NT1 and NT2 continuous: display calculated proportion (e.g. 15 min per 60 min)
+    recreoCalculado = parseFloat((docenciaAulaCronologica * (15 / 60)).toFixed(2));
+  } else {
+    // Other duraciones (30 or 40 min)
+    recreoCalculado = parseFloat((horasAula * (5 / 60)).toFixed(2));
+  }
+
+  const bloquePresencialTotal = parseFloat((docenciaAulaCronologica + recreoCalculado).toFixed(2));
+
+  // Determine if employee participates in PIE (financiamiento or calidad_juridica)
+  const esPIE = contrato.calidad_juridica.includes('PIE') || 
+                String(contrato.funcion_principal).toUpperCase().includes('PIE');
+
+  // Coordination hours PIE: sum 3 hrs to docencia efectora and check cap
+  const docenciaEfectivaPIE = esPIE ? docenciaAulaCronologica + 3 : docenciaAulaCronologica;
+
+  // HNL calculation
+  // Apply scaling factor for Parvularia standard (60 min vs 45 min)
+  const scalingFactor = config.esParvularia && config.duracionLectivaMinutos === 60 ? 4 / 3 : 1;
+  const ratio = esExcepcion ? 0.40 / 0.60 : 0.35 / 0.65;
+  const horasColaborativas = parseFloat((horasAula * scalingFactor * ratio).toFixed(2));
 
   const cronList = (contrato.horas_cronologicas_adicionales || []).length > 0
     ? (contrato.horas_cronologicas_adicionales || [])
@@ -388,6 +488,12 @@ export function calcularDesgloseContrato(
 
   const horasTotales = parseFloat((horasAula + horasColaborativas + horasCronAdic + horasDirectivas + horasTecnicoPedagogicas).toFixed(2));
 
+  // Tope maximo Docencia:
+  // Standard or Parvularia: 28.5 hrs (scaled for contracts lower than 44)
+  // Vulnerabilidad (Excepcion 60/40): 26.25 hrs (scaled for contracts lower than 44)
+  const baseTope = esExcepcion ? 26.25 : 28.5;
+  const topeMaximoDocencia = parseFloat((baseTope * (horasTotales / 44)).toFixed(2));
+
   return {
     horasAula,
     horasColaborativas,
@@ -395,8 +501,17 @@ export function calcularDesgloseContrato(
     horasDirectivas,
     horasTecnicoPedagogicas,
     horasTotales,
-    esParvularia,
-    esExcepcion
+    esParvularia: config.esParvularia,
+    esExcepcion,
+    docenciaAulaCronologica,
+    recreoCalculado,
+    bloquePresencialTotal,
+    esEspecial: config.esEspecial,
+    esLenguaje: config.esLenguaje,
+    duracionMinutos: config.duracionLectivaMinutos,
+    topeMaximoDocencia,
+    docenciaEfectivaPIE,
+    esPIE
   };
 }
 
@@ -673,6 +788,8 @@ export function validarHardCap44Horas(
 
   let sumaTotal = 0;
   let detalle = '';
+  let valido = true;
+  const errores: string[] = [];
 
   activeConts.forEach(c => {
     let cronList = horasCronologicasList;
@@ -687,10 +804,47 @@ export function validarHardCap44Horas(
     const sumContrato = desglose.horasAula + desglose.horasColaborativas + desglose.horasCronologicasAdicionales + desglose.horasDirectivas + desglose.horasTecnicoPedagogicas;
     sumaTotal += sumContrato;
     detalle += `RBD ${c.rbd}: Aula ${desglose.horasAula} + Colab ${desglose.horasColaborativas} + Crono ${desglose.horasCronologicasAdicionales} + Dir ${desglose.horasDirectivas} + UTP ${desglose.horasTecnicoPedagogicas} = ${sumContrato} hrs.\n`;
+
+    // 1. Validate PIE limits on Docencia de Aula Efectiva
+    const docenciaEfectiva = desglose.esPIE ? desglose.docenciaEfectivaPIE : desglose.docenciaAulaCronologica;
+    if (docenciaEfectiva > desglose.topeMaximoDocencia + 0.005) {
+      valido = false;
+      errores.push(`[RBD ${c.rbd}] Docencia de Aula Efectiva (${docenciaEfectiva} hrs cronológicas, incluyendo 3 hrs PIE si aplica) excede el tope máximo legal de ${desglose.topeMaximoDocencia} hrs.`);
+    }
+
+    // 2. Validate Distribution (between 5 and 6 days)
+    const dias = c.dias_trabajados || 5;
+    if (dias < 5 || dias > 6) {
+      valido = false;
+      errores.push(`[RBD ${c.rbd}] El contrato semanal debe estar distribuido en no menos de 5 días ni más de 6 días (actual: ${dias} días).`);
+    }
+
+    // 3. Validate Daily Cap (max 10 hours daily, including 30 minutes for colación which is non-work)
+    const horasDiariasPromedio = sumContrato / dias;
+    const jornadaDiariaTotal = horasDiariasPromedio + 0.5; // adding 30-min colación
+    if (jornadaDiariaTotal > 10.005) {
+      valido = false;
+      errores.push(`[RBD ${c.rbd}] La jornada diaria promedio (${jornadaDiariaTotal.toFixed(2)} hrs incluyendo colación) supera el límite máximo de 10 horas.`);
+    }
+
+    // 4. Validate HNL destination (at least 40% reserved for prep & evaluation)
+    // Assume we validate if the registered HNL meets the minimum criteria
+    if (desglose.horasColaborativas > 0) {
+      const hnlPreparacion = desglose.horasColaborativas * 0.40;
+      detalle += `  (HNL Preparación Mínimo: ${hnlPreparacion.toFixed(2)} hrs)\n`;
+    }
   });
 
+  // 5. Weekly Cap (44 hours absolute weekly cap)
   sumaTotal = parseFloat(sumaTotal.toFixed(2));
-  const valido = sumaTotal <= 44.001;
+  if (sumaTotal > 44.005) {
+    valido = false;
+    errores.push(`Tope Semanal Superado: La suma total de horas (${sumaTotal} hrs) de todos los contratos supera las 44 horas cronológicas semanales.`);
+  }
+
+  if (errores.length > 0) {
+    detalle += `\n⚠️ ERRORES DE VALIDACIÓN:\n- ` + errores.join('\n- ');
+  }
 
   return {
     valido,

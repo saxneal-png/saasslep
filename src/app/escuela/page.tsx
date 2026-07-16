@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { api, dbLocal, supabase } from '@/lib/supabase';
-import { validarCargaDocente } from '@/lib/rulesEngine';
+import { validarCargaDocente, calcularDesgloseContrato } from '@/lib/rulesEngine';
 import { exportarTablaAExcel, exportarTablaAPdf } from '@/lib/exportUtils';
 import { 
   Establecimiento, 
@@ -760,22 +760,27 @@ export default function EscuelaDashboard() {
 
     const cleanRun = normalizarRun(editingFuncionario.run);
 
-    // Calculate hours breakdown based on bilateral mode
-    let calculatedTotal = 0;
-    let calculatedAula = 0;
-    let calculatedColab = 0;
+    // Calculate hours breakdown based on bilateral mode using centralized rules engine
+    const mockContrato: Contrato = {
+      id: 'mock-id',
+      funcionario_run: cleanRun,
+      rbd: selectedRbd,
+      calidad_juridica: 'A contrata',
+      funcion_principal: editFuncCargo || 'Docente',
+      estado: 'Activo',
+      horas_totales: editContInputMode === 'aula-primero' ? 0 : editContHoras,
+      horas_aula: editContInputMode === 'aula-primero' ? (editContHorasAula || 0) : undefined,
+      es_uniprofesional: editContEsUniprofesional,
+      horas_directivas: editContHorasDirectivas || 0,
+      horas_tecnico_pedagogicas: editContHorasTecPed || 0
+    };
+    
+    const tempCrono = editContCronoHours.map((h, i) => ({ id: `temp-${i}`, contrato_id: 'mock-id', tipo: h.tipo, horas: h.horas }));
+    const desglose = calcularDesgloseContrato(mockContrato, cursosDinamicos, [], tempCrono, undefined, editFuncCargo);
 
-    if (editContInputMode === 'aula-primero') {
-      calculatedAula = editContHorasAula || 0;
-      calculatedColab = parseFloat((calculatedAula * (35 / 65)).toFixed(2));
-      const sumCrono = editContCronoHours.reduce((s, h) => s + h.horas, 0);
-      const dirHrs = editContEsUniprofesional ? Math.min(10, editContHorasDirectivas || 0) : (editContHorasDirectivas || 0);
-      calculatedTotal = parseFloat((calculatedAula + calculatedColab + sumCrono + dirHrs + (editContHorasTecPed || 0)).toFixed(2));
-    } else {
-      calculatedTotal = editContHoras;
-      calculatedAula = parseFloat((editContHoras * 0.65).toFixed(2));
-      calculatedColab = parseFloat((editContHoras * 0.35).toFixed(2));
-    }
+    let calculatedAula = desglose.horasAula;
+    let calculatedColab = desglose.horasColaborativas;
+    let calculatedTotal = desglose.horasTotales;
 
     // Proactively align editContFins sum with calculatedTotal
     const sumFins = editContFins.reduce((s, l) => s + l.horas, 0);
