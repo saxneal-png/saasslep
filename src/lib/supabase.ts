@@ -379,10 +379,30 @@ const supabaseAnonKey = typeof window !== 'undefined' ? (window as any).env?.NEX
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const handleFallback = <T>(error: any, fallbackData: T, tableName: string): T => {
+function handleFallback<T>(error: any, fallbackData: T, tableName: string): T {
   console.warn(`⚠️ Error al consultar la tabla "${tableName}" en Supabase. Usando fallback local. Detalle:`, error.message || error);
   return fallbackData;
-};
+}
+// Global casing flags detected dynamically
+let isCursosDinamicosSnakeCase = false;
+let isAsignaturasDinamicasSnakeCase = false;
+let isSchemaDetected = false;
+
+async function detectSchemaCasing() {
+  if (isSchemaDetected) return;
+  try {
+    const { error: cursoErr } = await supabase.from('cursos_dinamicos').select('horas_pie').limit(1);
+    isCursosDinamicosSnakeCase = !cursoErr || (cursoErr.code !== '42703');
+
+    const { error: asigErr } = await supabase.from('asignaturas_dinamicas').select('curso_nombre').limit(1);
+    isAsignaturasDinamicasSnakeCase = !asigErr || (asigErr.code !== '42703');
+    
+    isSchemaDetected = true;
+  } catch (e) {
+    console.warn("⚠️ Fallback detection: ", e);
+    isSchemaDetected = true;
+  }
+}
 
 export const api = {
   getEstablecimientos: async (): Promise<Establecimiento[]> => {
@@ -1008,6 +1028,7 @@ export const api = {
   },
 
   getCursosDinamicos: async (rbd: string): Promise<CursoDinamico[]> => {
+    await detectSchemaCasing();
     const { data, error } = await supabase.from('cursos_dinamicos').select('*').eq('rbd', rbd);
     if (error) return handleFallback(error, dbLocal.cursosDinamicos.filter(c => c.rbd === rbd), 'cursos_dinamicos');
     return (data || []).map(c => ({
@@ -1022,18 +1043,29 @@ export const api = {
   },
 
   crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
-    const dbCurso = {
-      rbd: curso.rbd,
-      nombre: curso.nombre,
-      nivel: curso.nivel,
-      regimen: curso.regimen,
-      horas_pie: curso.horasPIE,
-      horasPIE: curso.horasPIE,
-      profesor_jefe_run: curso.profesor_jefe_run,
-      profesorJefeRun: curso.profesor_jefe_run,
-      concentracion_prioritarios: curso.concentracion_prioritarios,
-      concentracionPrioritarios: curso.concentracion_prioritarios
-    };
+    await detectSchemaCasing();
+    let dbCurso: any;
+    if (isCursosDinamicosSnakeCase) {
+      dbCurso = {
+        rbd: curso.rbd,
+        nombre: curso.nombre,
+        nivel: curso.nivel,
+        regimen: curso.regimen,
+        horas_pie: curso.horasPIE,
+        profesor_jefe_run: curso.profesor_jefe_run,
+        concentracion_prioritarios: curso.concentracion_prioritarios
+      };
+    } else {
+      dbCurso = {
+        rbd: curso.rbd,
+        nombre: curso.nombre,
+        nivel: curso.nivel,
+        regimen: curso.regimen,
+        horasPIE: curso.horasPIE,
+        profesorJefeRun: curso.profesor_jefe_run,
+        concentracionPrioritarios: curso.concentracion_prioritarios
+      };
+    }
     const { error } = await supabase.from('cursos_dinamicos').upsert(dbCurso);
     // Always update local storage
     const list = dbLocal.cursosDinamicos;
@@ -1050,9 +1082,9 @@ export const api = {
   },
 
   eliminarCursoDinamico: async (rbd: string, nombre: string): Promise<void> => {
-    // Delete in both formats for compatibility
-    await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq('curso_nombre', nombre);
-    await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq('cursoNombre', nombre);
+    await detectSchemaCasing();
+    const colName = isAsignaturasDinamicasSnakeCase ? 'curso_nombre' : 'cursoNombre';
+    await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq(colName, nombre);
     
     const { data: contratos } = await supabase.from('contratos').select('id').eq('rbd', rbd);
     if (contratos && contratos.length > 0) {
@@ -1073,7 +1105,7 @@ export const api = {
   },
 
   getAsignaturasDinamicas: async (rbd: string, cursoNombre: string): Promise<AsignaturaDinamica[]> => {
-    // Try querying using both column layouts since PostgREST rejects invalid filters. We query select * and filter in memory if needed, or query safely
+    await detectSchemaCasing();
     const { data, error } = await supabase.from('asignaturas_dinamicas').select('*').eq('rbd', rbd);
     if (error) return handleFallback(error, dbLocal.asignaturasDinamicas.filter(a => a.rbd === rbd && a.cursoNombre === cursoNombre), 'asignaturas_dinamicas');
     
@@ -1091,14 +1123,23 @@ export const api = {
   },
 
   crearAsignaturaDinamica: async (asignatura: AsignaturaDinamica): Promise<void> => {
-    const dbAsig = {
-      rbd: asignatura.rbd,
-      curso_nombre: asignatura.cursoNombre,
-      cursoNombre: asignatura.cursoNombre,
-      nombre: asignatura.nombre,
-      horas_sugeridas: asignatura.horasSugeridas,
-      horasSugeridas: asignatura.horasSugeridas
-    };
+    await detectSchemaCasing();
+    let dbAsig: any;
+    if (isAsignaturasDinamicasSnakeCase) {
+      dbAsig = {
+        rbd: asignatura.rbd,
+        curso_nombre: asignatura.cursoNombre,
+        nombre: asignatura.nombre,
+        horas_sugeridas: asignatura.horasSugeridas
+      };
+    } else {
+      dbAsig = {
+        rbd: asignatura.rbd,
+        cursoNombre: asignatura.cursoNombre,
+        nombre: asignatura.nombre,
+        horasSugeridas: asignatura.horasSugeridas
+      };
+    }
     const { error } = await supabase.from('asignaturas_dinamicas').upsert(dbAsig);
     // Always update local storage
     const list = dbLocal.asignaturasDinamicas;
