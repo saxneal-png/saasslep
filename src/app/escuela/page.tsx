@@ -39,6 +39,7 @@ export default function EscuelaDashboard() {
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [asignaciones, setAsignaciones] = useState<AsignacionAula[]>([]);
+  const [financiamientosEscuela, setFinanciamientosEscuela] = useState<FinanciamientoContrato[]>([]);
   const [alertas, setAlertas] = useState<AlertaConciliacion[]>([]);
   const [cargosPersonalizados, setCargosPersonalizados] = useState<CargoPersonalizado[]>([]);
   const [planesEstudio, setPlanesEstudio] = useState<PlanEstudioNorm[]>([]);
@@ -251,6 +252,11 @@ export default function EscuelaDashboard() {
     setPlanesEstudio(plans);
     setTareasReemplazo(tasks);
     setReemplazosList(reemps);
+
+    // Load financiamientos for this school's contracts into React state for reactivity
+    const contratoIds = conts.map(c => c.id);
+    const fins = await api.getFinanciamientosPorContratos(contratoIds);
+    setFinanciamientosEscuela(fins);
 
     if (dynCursos.length > 0) {
       setSelectedCursoForAsig(dynCursos[0].nombre);
@@ -1465,16 +1471,17 @@ export default function EscuelaDashboard() {
   });
 
   // Funding helper for both Docente and Asistente
+  // Reads from financiamientosEscuela React state (not dbLocal) for proper reactivity
   const getFinsSum = (estamento: EstamentoType, origen: OrigenFondo) => {
     return contratos.filter(c => getEstamento(c) === estamento).reduce((sum, c) => {
-      const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+      const fins = financiamientosEscuela.filter(f => f.contrato_id === c.id);
       return sum + fins.filter(f => f.origen_fondo === origen).reduce((s, f) => s + f.horas, 0);
     }, 0);
   };
 
   const getFinsOtrasSum = (estamento: EstamentoType) => {
     return contratos.filter(c => getEstamento(c) === estamento).reduce((sum, c) => {
-      const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+      const fins = financiamientosEscuela.filter(f => f.contrato_id === c.id);
       return sum + fins.filter(f => 
         f.origen_fondo !== 'Subvención Regular' && 
         f.origen_fondo !== 'SEP' && 
@@ -1502,7 +1509,7 @@ export default function EscuelaDashboard() {
         return isTitularOrIndefinido ? c.calidad_juridica === 'Indefinido' : c.calidad_juridica !== 'Indefinido';
       }
     }).reduce((sum, c) => {
-      const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+      const fins = financiamientosEscuela.filter(f => f.contrato_id === c.id);
       return sum + fins.filter(f => f.origen_fondo === origen).reduce((s, f) => s + f.horas, 0);
     }, 0);
   };
@@ -1522,7 +1529,7 @@ export default function EscuelaDashboard() {
         return isTitularOrIndefinido ? c.calidad_juridica === 'Indefinido' : c.calidad_juridica !== 'Indefinido';
       }
     }).reduce((sum, c) => {
-      const fins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === c.id);
+      const fins = financiamientosEscuela.filter(f => f.contrato_id === c.id);
       return sum + fins.filter(f => 
         f.origen_fondo !== 'Subvención Regular' && 
         f.origen_fondo !== 'SEP' && 
@@ -3157,10 +3164,10 @@ export default function EscuelaDashboard() {
                           const cAsigs = asignaciones.filter(a => a.contrato_id === c.id);
                           const pedagogicas = cAsigs.reduce((sum, a) => sum + a.horas, 0);
 
-                          const pieHrs = dbLocal.financiamientoContratos
+                          const pieHrs = financiamientosEscuela
                             .filter(fc => fc.contrato_id === c.id && fc.origen_fondo === 'PIE')
                             .reduce((sum, fc) => sum + fc.horas, 0);
-                          const sepHrs = dbLocal.financiamientoContratos
+                          const sepHrs = financiamientosEscuela
                             .filter(fc => fc.contrato_id === c.id && fc.origen_fondo === 'SEP')
                             .reduce((sum, fc) => sum + fc.horas, 0);
                           const dirHrs = c.horas_directivas || 0;

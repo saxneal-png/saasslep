@@ -564,6 +564,18 @@ export const api = {
     }
   },
 
+  getFinanciamientosPorContratos: async (contratoIds: string[]): Promise<FinanciamientoContrato[]> => {
+    if (contratoIds.length === 0) return [];
+    try {
+      const { data, error } = await supabase.from('financiamientos').select('*').in('contrato_id', contratoIds);
+      if (error) return handleFallback(error, dbLocal.financiamientoContratos.filter(f => contratoIds.includes(f.contrato_id)), 'financiamientos');
+      return data || [];
+    } catch (err) {
+      return handleFallback(err, dbLocal.financiamientoContratos.filter(f => contratoIds.includes(f.contrato_id)), 'financiamientos');
+    }
+  },
+
+
   getFinanciamientos: async (): Promise<FinanciamientoContrato[]> => {
     try {
       // 1. Get exact total count first
