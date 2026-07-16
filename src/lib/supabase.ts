@@ -1011,15 +1011,15 @@ export const api = {
   getCursosDinamicos: async (rbd: string): Promise<CursoDinamico[]> => {
     const { data, error } = await supabase.from('cursos_dinamicos').select('*').eq('rbd', rbd);
     if (error) return handleFallback(error, dbLocal.cursosDinamicos.filter(c => c.rbd === rbd), 'cursos_dinamicos');
-    // Map snake_case DB columns to TS model
+    // Map DB columns to TS model (supports both snake_case and camelCase layouts)
     return (data || []).map(c => ({
       rbd: c.rbd,
       nombre: c.nombre,
       nivel: c.nivel,
       regimen: c.regimen,
-      horasPIE: c.horas_pie,
-      profesor_jefe_run: c.profesor_jefe_run,
-      concentracion_prioritarios: undefined // column not in DB schema
+      horasPIE: c.horasPIE !== undefined ? c.horasPIE : c.horas_pie,
+      profesor_jefe_run: c.profesorJefeRun !== undefined ? c.profesorJefeRun : c.profesor_jefe_run,
+      concentracion_prioritarios: undefined
     }));
   },
 
@@ -1051,8 +1051,8 @@ export const api = {
   },
 
   eliminarCursoDinamico: async (rbd: string, nombre: string): Promise<void> => {
-    // Delete children (asignaturas) first to respect FK, then delete parent course
-    await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq('curso_nombre', nombre);
+    // Delete children (asignaturas) first - use cursoNombre (camelCase) which is the real DB column
+    await supabase.from('asignaturas_dinamicas').delete().eq('rbd', rbd).eq('cursoNombre', nombre);
     const { data: contratos } = await supabase.from('contratos').select('id').eq('rbd', rbd);
     if (contratos && contratos.length > 0) {
       const ids = contratos.map(c => c.id);
@@ -1071,29 +1071,30 @@ export const api = {
   },
 
   getAsignaturasDinamicas: async (rbd: string, cursoNombre: string): Promise<AsignaturaDinamica[]> => {
+    // DB column is cursoNombre (camelCase) — filter directly on that column
     const { data, error } = await supabase
       .from('asignaturas_dinamicas')
       .select('*')
       .eq('rbd', rbd)
-      .eq('curso_nombre', cursoNombre);
+      .eq('cursoNombre', cursoNombre);
     if (error) return handleFallback(error, dbLocal.asignaturasDinamicas.filter(a => a.rbd === rbd && a.cursoNombre === cursoNombre), 'asignaturas_dinamicas');
     return (data || []).map(a => ({
       rbd: a.rbd,
-      cursoNombre: a.curso_nombre,
+      cursoNombre: a.cursoNombre,
       nombre: a.nombre,
-      horasSugeridas: a.horas_sugeridas
+      horasSugeridas: a.horasSugeridas
     }));
   },
 
   crearAsignaturaDinamica: async (asignatura: AsignaturaDinamica): Promise<void> => {
-    // Schema: asignaturas_dinamicas(rbd, curso_nombre, nombre, horas_sugeridas)
+    // DB columns are cursoNombre and horasSugeridas (camelCase in the live Supabase instance)
     const dbAsig = {
       rbd: asignatura.rbd,
-      curso_nombre: asignatura.cursoNombre,
+      cursoNombre: asignatura.cursoNombre,
       nombre: asignatura.nombre,
-      horas_sugeridas: asignatura.horasSugeridas
+      horasSugeridas: asignatura.horasSugeridas
     };
-    const { error } = await supabase.from('asignaturas_dinamicas').upsert(dbAsig, { onConflict: 'rbd,curso_nombre,nombre' });
+    const { error } = await supabase.from('asignaturas_dinamicas').upsert(dbAsig, { onConflict: 'rbd,cursoNombre,nombre' });
     // Always update local storage
     const list = dbLocal.asignaturasDinamicas;
     const index = list.findIndex(a => a.rbd === asignatura.rbd && a.cursoNombre === asignatura.cursoNombre && a.nombre === asignatura.nombre);
@@ -1105,7 +1106,7 @@ export const api = {
     dbLocal.asignaturasDinamicas = list;
     if (error) {
       console.error("❌ Error en Supabase al crear asignatura dinámica:", error);
-      throw error; // propagate so the UI can show the error
+      throw error;
     }
   },
 
