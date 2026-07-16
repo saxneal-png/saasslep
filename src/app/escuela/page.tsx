@@ -693,18 +693,32 @@ export default function EscuelaDashboard() {
     setEditFuncFechaSistema(f.fecha_ingreso_sistema || '');
     setEditFuncFechaEstablecimiento(f.fecha_ingreso_establecimiento || '');
     
-    const relatedCont = contratos.find(c => c.funcionario_run === f.run);
-    if (relatedCont) {
-      setEditContHoras(relatedCont.horas_totales);
-      setEditContHorasDirectivas(relatedCont.horas_directivas);
-      setEditContHorasAula(relatedCont.horas_aula);
-      setEditContHorasTecPed(relatedCont.horas_tecnico_pedagogicas);
-      const fins = await api.getFinanciamientosPorContrato(relatedCont.id);
-      setEditContFins(fins.map(fi => ({ 
-        origen: fi.origen_fondo, 
-        calidad: relatedCont.calidad_juridica, 
-        horas: fi.horas 
-      })));
+    // Load ALL contracts for this funcionario in this RBD (not just the first)
+    const relatedContsForFuncionario = contratos.filter(
+      c => c.funcionario_run === f.run && normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd))
+    );
+    const firstCont = relatedContsForFuncionario[0];
+    if (firstCont) {
+      // Use the first contract for the general fields
+      setEditContHorasDirectivas(firstCont.horas_directivas);
+      setEditContHorasAula(firstCont.horas_aula);
+      setEditContHorasTecPed(firstCont.horas_tecnico_pedagogicas);
+      // Load financiamientos from ALL contracts, tagging each with its calidad
+      const allFinsNested = await Promise.all(
+        relatedContsForFuncionario.map(c => 
+          api.getFinanciamientosPorContrato(c.id).then(fins =>
+            fins.map(fi => ({
+              origen: fi.origen_fondo,
+              calidad: c.calidad_juridica,
+              horas: fi.horas
+            }))
+          )
+        )
+      );
+      const allFins = allFinsNested.flat();
+      setEditContFins(allFins);
+      const totalHrs = allFins.reduce((s, fn) => s + fn.horas, 0);
+      setEditContHoras(totalHrs);
     } else {
       setEditContHoras(0);
       setEditContHorasDirectivas(undefined);
@@ -716,67 +730,95 @@ export default function EscuelaDashboard() {
  
   const handleSaveFuncionario = async () => {
     if (!editingFuncionario) return;
-    
-    await api.upsertFuncionario({
-      ...editingFuncionario,
-      nombre: editFuncNombre,
-      cargo: editFuncCargo,
-      email: editFuncEmail,
-      titulo: editFuncTitulo,
-      tramo: editFuncTramo as any,
-      fecha_ingreso_sistema: editFuncFechaSistema || undefined,
-      fecha_ingreso_establecimiento: editFuncFechaEstablecimiento || undefined
-    });
- 
-    // 2. Update contract and finance sources in Supabase
+
+    // --- VALIDATION: 44-hour SLEP-wide maximum ---
     const cleanRun = editingFuncionario.run;
-    const relatedConts = contratos.filter(c => c.funcionario_run === cleanRun && normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)));
-    
-    if (editContFins.length > 0) {
-      // Delete old contracts and financiamientos for this teacher in Supabase
+    const totalHorasNuevo = editContFins.reduce((s, fn) => s + fn.horas, 0);
+    // Sum of hours in OTHER schools/RBDs for this funcionario
+    const horasEnOtrosColegios = contratos
+      .filter(c => c.funcionario_run === cleanRun && normalizarRbd(String(c.rbd)) !== normalizarRbd(String(selectedRbd)))
+      .reduce((s, c) => s + c.horas_totales, 0);
+    const totalHorasSLEP = totalHorasNuevo + horasEnOtrosColegios;
+
+    if (totalHorasSLEP > 44) {
+      const msg = horasEnOtrosColegios > 0
+        ? `⚠️ Límite SLEP superado\n\nEste funcionario tiene ${horasEnOtrosColegios} hrs en otros establecimientos del SLEP.\nAgregando ${totalHorasNuevo} hrs en este colegio = ${totalHorasSLEP} hrs totales.\n\nEl máximo permitido es 44 hrs en todo el SLEP.\n\nRevisa las horas asignadas y vuelve a intentar.`
+        : `⚠️ Límite de contrato superado\n\nLa suma de horas en este establecimiento es ${totalHorasNuevo} hrs, lo que supera el máximo legal de 44 hrs en el SLEP.\n\nRevisa las horas asignadas y vuelve a intentar.`;
+      alert(msg);
+      return;
+    }
+
+    // Optional soft warning at exactly 44
+    if (totalHorasSLEP === 44 && horasEnOtrosColegios > 0) {
+      const confirmar = confirm(`ℹ️ Este funcionario llega exactamente a 44 hrs en el SLEP (${horasEnOtrosColegios} hrs en otros colegios + ${totalHorasNuevo} hrs aquí).\n\n¿Deseas continuar guardando?`);
+      if (!confirmar) return;
+    }
+
+    try {
+      await api.upsertFuncionario({
+        ...editingFuncionario,
+        nombre: editFuncNombre,
+        cargo: editFuncCargo,
+        email: editFuncEmail,
+        titulo: editFuncTitulo,
+        tramo: editFuncTramo as any,
+        fecha_ingreso_sistema: editFuncFechaSistema || undefined,
+        fecha_ingreso_establecimiento: editFuncFechaEstablecimiento || undefined
+      });
+
+      // 2. Update contract and finance sources in Supabase
+      const relatedConts = contratos.filter(
+        c => c.funcionario_run === cleanRun && normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd))
+      );
+
+      // Delete old contracts for this teacher in this RBD
       for (const oldCont of relatedConts) {
         await api.deleteContrato(oldCont.id);
       }
 
-      const calidadesUnicas = Array.from(new Set(editContFins.map(sl => sl.calidad)));
-
-      for (let cIdx = 0; cIdx < calidadesUnicas.length; cIdx++) {
-        const cal = calidadesUnicas[cIdx];
-        const linesForCal = editContFins.filter(l => l.calidad === cal);
-        const totalHorasCal = linesForCal.reduce((sum, l) => sum + l.horas, 0);
-
-        // Find primary function/details from previous contract if exists
+      // Group financing lines by calidad and create one contract per calidad
+      if (editContFins.length > 0) {
+        const calidadesUnicas = Array.from(new Set(editContFins.map(sl => sl.calidad)));
         const oldCont = relatedConts[0];
-        
-        const nuevoContrato: Contrato = {
-          id: `c-school-edit-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-${selectedRbd}-${cal.toLowerCase().replace(/[^a-z]/g, '')}-${cIdx}`,
-          funcionario_run: cleanRun,
-          rbd: selectedRbd,
-          calidad_juridica: cal,
-          funcion_principal: editFuncCargo || oldCont?.funcion_principal || 'Docente de Aula',
-          estado: oldCont?.estado || 'Activo',
-          horas_totales: totalHorasCal,
-          horas_directivas: oldCont?.horas_directivas,
-          horas_aula: oldCont?.horas_aula,
-          horas_tecnico_pedagogicas: oldCont?.horas_tecnico_pedagogicas,
-          fecha_inicio_licencia: oldCont?.fecha_inicio_licencia,
-          fecha_termino_licencia: oldCont?.fecha_termino_licencia
-        };
 
-        const newFins = linesForCal.map((l, lIdx) => ({
-          id: `fin-edit-${nuevoContrato.id}-${lIdx}`,
-          contrato_id: nuevoContrato.id,
-          origen_fondo: l.origen,
-          horas: l.horas
-        }));
-        
-        await api.upsertContratoCompleto(nuevoContrato, newFins);
+        for (let cIdx = 0; cIdx < calidadesUnicas.length; cIdx++) {
+          const cal = calidadesUnicas[cIdx];
+          const linesForCal = editContFins.filter(l => l.calidad === cal);
+          const totalHorasCal = linesForCal.reduce((sum, l) => sum + l.horas, 0);
+
+          const nuevoContrato: Contrato = {
+            id: `c-school-edit-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-${selectedRbd}-${cal.toLowerCase().replace(/[^a-z]/g, '')}-${cIdx}`,
+            funcionario_run: cleanRun,
+            rbd: selectedRbd,
+            calidad_juridica: cal,
+            funcion_principal: editFuncCargo || oldCont?.funcion_principal || 'Docente de Aula',
+            estado: oldCont?.estado || 'Activo',
+            horas_totales: totalHorasCal,
+            horas_directivas: oldCont?.horas_directivas,
+            horas_aula: oldCont?.horas_aula,
+            horas_tecnico_pedagogicas: oldCont?.horas_tecnico_pedagogicas,
+            fecha_inicio_licencia: oldCont?.fecha_inicio_licencia,
+            fecha_termino_licencia: oldCont?.fecha_termino_licencia
+          };
+
+          const newFins = linesForCal.map((l, lIdx) => ({
+            id: `fin-edit-${nuevoContrato.id}-${lIdx}`,
+            contrato_id: nuevoContrato.id,
+            origen_fondo: l.origen,
+            horas: l.horas
+          }));
+
+          await api.upsertContratoCompleto(nuevoContrato, newFins);
+        }
       }
+
+      setEditingFuncionario(null);
+      await loadAllSchoolData();
+      alert('✅ Funcionario y contrato actualizados exitosamente.');
+    } catch (err: any) {
+      console.error('❌ Error al guardar funcionario:', err);
+      alert(`❌ Error al guardar: ${err?.message || 'Error desconocido'}. Revisa la consola del navegador para más detalles.`);
     }
- 
-    setEditingFuncionario(null);
-    await loadAllSchoolData();
-    alert('✅ Funcionario y contrato actualizados exitosamente.');
   };
 
   const handleOpenEditCurso = async (c: CursoDinamico) => {
@@ -4184,10 +4226,44 @@ export default function EscuelaDashboard() {
                   <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-3">
                     <div className="flex justify-between items-center border-b pb-2">
                       <span className="font-bold text-slate-800">Financiamiento por Subvenciones (Horas Contrato)</span>
-                      <span className="bg-slep-blue text-white font-mono font-bold px-2 py-0.5 rounded text-[10px]">
-                        Total Contrato: {editContHoras} hrs
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const totalEdit = editContFins.reduce((s, fn) => s + fn.horas, 0);
+                          const horasOtrosRbd = contratos
+                            .filter(c => c.funcionario_run === editingFuncionario?.run && normalizarRbd(String(c.rbd)) !== normalizarRbd(String(selectedRbd)))
+                            .reduce((s, c) => s + c.horas_totales, 0);
+                          const totalSLEP = totalEdit + horasOtrosRbd;
+                          const excede = totalSLEP > 44;
+                          const exacto = totalSLEP === 44;
+                          return (
+                            <>
+                              {horasOtrosRbd > 0 && (
+                                <span className="text-[10px] text-slate-500 font-medium">+{horasOtrosRbd} hrs otros colegios</span>
+                              )}
+                              <span className={`font-mono font-bold px-2 py-0.5 rounded text-[10px] ${
+                                excede ? 'bg-red-600 text-white animate-pulse' :
+                                exacto ? 'bg-amber-500 text-white' :
+                                'bg-slep-blue text-white'
+                              }`}>
+                                {excede ? '⚠️ ' : exacto ? '⚡ ' : ''}Total SLEP: {totalSLEP}/44 hrs
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
                     </div>
+                    {editContFins.reduce((s, fn) => s + fn.horas, 0) > 44 && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-[11px] text-red-800 font-semibold flex items-start gap-2">
+                        <span className="text-base leading-none">🚫</span>
+                        <span>La suma de horas supera el máximo de <strong>44 hrs</strong> permitidas en el SLEP. Reduce las horas antes de guardar.</span>
+                      </div>
+                    )}
+                    {editContFins.reduce((s, fn) => s + fn.horas, 0) + contratos.filter(c => c.funcionario_run === editingFuncionario?.run && normalizarRbd(String(c.rbd)) !== normalizarRbd(String(selectedRbd))).reduce((s, c) => s + c.horas_totales, 0) > 44 && editContFins.reduce((s, fn) => s + fn.horas, 0) <= 44 && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-[11px] text-orange-800 font-semibold flex items-start gap-2">
+                        <span className="text-base leading-none">⚠️</span>
+                        <span>Sumando las horas de este colegio con las de otros establecimientos SLEP se superan las <strong>44 hrs</strong> máximas permitidas.</span>
+                      </div>
+                    )}
                     
                     <div className="space-y-2.5 max-h-[160px] overflow-y-auto pr-1">
                       {editContFins.map((f, idx) => (
