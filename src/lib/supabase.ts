@@ -1034,17 +1034,16 @@ export const api = {
   },
 
   crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
-    // ⚠️ concentracion_prioritarios does NOT exist as a DB column yet.
-    // It is stored only in localStorage until the column is added via SQL migration.
-    // See: ALTER TABLE cursos_dinamicos ADD COLUMN concentracion_prioritarios NUMERIC(5,2) DEFAULT 0;
+    // Column concentracion_prioritarios was added via:
+    // ALTER TABLE cursos_dinamicos ADD COLUMN IF NOT EXISTS concentracion_prioritarios NUMERIC(5,2) DEFAULT 0;
     const dbCurso = {
       rbd: curso.rbd,
       nombre: curso.nombre,
       nivel: curso.nivel,
       regimen: curso.regimen,
       horas_pie: curso.horasPIE ?? null,
-      profesor_jefe_run: curso.profesor_jefe_run ?? null
-      // concentracion_prioritarios: intentionally omitted — column not in DB schema
+      profesor_jefe_run: curso.profesor_jefe_run ?? null,
+      concentracion_prioritarios: curso.concentracion_prioritarios ?? 0
     };
 
     const { error } = await supabase.from('cursos_dinamicos').upsert(dbCurso, { onConflict: 'rbd,nombre' });
@@ -1053,7 +1052,7 @@ export const api = {
     const list = dbLocal.cursosDinamicos;
     const index = list.findIndex(c => c.rbd === curso.rbd && c.nombre === curso.nombre);
     if (index >= 0) {
-      list[index] = curso; // includes concentracion_prioritarios in localStorage
+      list[index] = curso;
     } else {
       list.push(curso);
     }
