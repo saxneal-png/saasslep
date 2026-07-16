@@ -169,6 +169,48 @@ export default function EscuelaDashboard() {
     }
   }, []);
 
+  // Synchronize bilateral hours config reactively using the rules engine
+  useEffect(() => {
+    if (!editingFuncionario) return;
+    
+    const mockCont: Contrato = {
+      id: 'mock-id',
+      funcionario_run: editingFuncionario.run,
+      rbd: selectedRbd,
+      calidad_juridica: 'A contrata',
+      funcion_principal: editFuncCargo || 'Docente',
+      estado: 'Activo',
+      horas_totales: editContInputMode === 'aula-primero' ? 0 : editContHoras,
+      horas_aula: editContInputMode === 'aula-primero' ? (editContHorasAula || 0) : undefined,
+      es_uniprofesional: editContEsUniprofesional,
+      horas_directivas: editContHorasDirectivas || 0,
+      horas_tecnico_pedagogicas: editContHorasTecPed || 0
+    };
+
+    const tempCrono = editContCronoHours.map((h, i) => ({ id: `temp-${i}`, contrato_id: 'mock-id', tipo: h.tipo, horas: h.horas }));
+    const desglose = calcularDesgloseContrato(mockCont, cursosDinamicos, [], tempCrono, undefined, editFuncCargo);
+
+    if (editContInputMode === 'aula-primero') {
+      if (editContHoras !== desglose.horasTotales) {
+        setEditContHoras(desglose.horasTotales);
+      }
+    } else {
+      if (editContHorasAula !== desglose.horasAula) {
+        setEditContHorasAula(desglose.horasAula);
+      }
+    }
+  }, [
+    editContInputMode,
+    editContHorasAula,
+    editContHoras,
+    editContHorasDirectivas,
+    editContHorasTecPed,
+    editContEsUniprofesional,
+    editContCronoHours,
+    editFuncCargo,
+    editingFuncionario
+  ]);
+
   // Sync school details when selectedRbd changes and establish background polling
   useEffect(() => {
     if (!selectedRbd) return;
@@ -4166,6 +4208,7 @@ export default function EscuelaDashboard() {
           const tempCont = relatedCont ? {
             ...relatedCont,
             horas_totales: editContHoras,
+            horas_aula: editContInputMode === 'aula-primero' ? editContHorasAula : undefined,
             horas_directivas: editContHorasDirectivas || 0,
             horas_tecnico_pedagogicas: editContHorasTecPed || 0
           } : undefined;
