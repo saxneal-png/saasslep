@@ -2668,6 +2668,71 @@ export default function RRHHPage() {
                               </div>
                             )}
 
+                            {/* Consolidated Resumen based on actual assignments */}
+                            {c.rbd !== '99999' && (() => {
+                              const pedagogicasAsignadas = asigs.reduce((sum, a) => sum + a.horas, 0); 
+                              const docenciaAsignadaCrono = parseFloat((pedagogicasAsignadas * (desglose.duracionMinutos / 60)).toFixed(2));
+                              
+                              let recreoAsignadoCrono = 0;
+                              if (desglose.duracionMinutos === 45) {
+                                recreoAsignadoCrono = parseFloat((pedagogicasAsignadas * (3 / 38)).toFixed(2));
+                              } else if (desglose.esParvularia && desglose.duracionMinutos === 60) {
+                                recreoAsignadoCrono = 0;
+                              } else {
+                                recreoAsignadoCrono = parseFloat((pedagogicasAsignadas * (5 / 60)).toFixed(2));
+                              }
+
+                              const ratioHNL = desglose.esExcepcion ? 0.40 / 0.60 : 0.35 / 0.65;
+                              const scalingFactor = desglose.esParvularia && desglose.duracionMinutos === 60 ? 4 / 3 : 1;
+                              const noLectivasTotalesRequeridas = parseFloat((pedagogicasAsignadas * scalingFactor * ratioHNL).toFixed(2));
+
+                              const totalHorasUsadas = parseFloat((docenciaAsignadaCrono + recreoAsignadoCrono + noLectivasTotalesRequeridas + desglose.horasCronologicasAdicionales + desglose.horasDirectivas + desglose.horasTecnicoPedagogicas).toFixed(2));
+                              const vacantesHrs = Math.max(0, c.horas_totales - totalHorasUsadas);
+                              const cumpleLey = desglose.horasAula >= pedagogicasAsignadas;
+
+                              return (
+                                <div className="border border-slate-200/60 rounded-xl p-3 bg-blue-50/10 space-y-2 mt-2">
+                                  <p className="font-bold text-slate-700 text-[11px] border-b pb-1">📊 Resumen de Jornada y Conciliación (Reactivo)</p>
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-center text-xs">
+                                    <div className="bg-white p-2 rounded border">
+                                      <span className="block text-[8px] uppercase text-slate-400 font-semibold">Total Aula (Ped)</span>
+                                      <strong className="text-indigo-700">{pedagogicasAsignadas} hrs</strong>
+                                    </div>
+                                    <div className="bg-white p-2 rounded border">
+                                      <span className="block text-[8px] uppercase text-slate-400 font-semibold">Aula Disp. (Ped)</span>
+                                      <strong className="text-indigo-650">{desglose.horasAula} hrs</strong>
+                                    </div>
+                                    <div className="bg-white p-2 rounded border">
+                                      <span className="block text-[8px] uppercase text-slate-400 font-semibold">Recreo (Crono)</span>
+                                      <strong className="text-pink-700">{recreoAsignadoCrono.toFixed(2)} hrs</strong>
+                                    </div>
+                                    <div className="bg-white p-2 rounded border">
+                                      <span className="block text-[8px] uppercase text-slate-400 font-semibold">Planif. / HNL</span>
+                                      <strong className="text-slate-700">{noLectivasTotalesRequeridas.toFixed(2)} hrs</strong>
+                                    </div>
+                                    <div className="bg-white p-2 rounded border">
+                                      <span className="block text-[8px] uppercase text-slate-400 font-semibold">Horas Usadas</span>
+                                      <strong className="text-slate-800">{totalHorasUsadas.toFixed(2)} / {c.horas_totales} hrs</strong>
+                                    </div>
+                                    <div className={`p-2 rounded border font-bold ${vacantesHrs > 0.05 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`}>
+                                      <span className="block text-[8px] uppercase text-slate-450 font-semibold">Horas Vacantes</span>
+                                      <strong>{vacantesHrs.toFixed(2)} hrs</strong>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className={`p-2 rounded border text-[10px] font-semibold flex items-center justify-between mt-1 ${
+                                    cumpleLey ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900'
+                                  }`}>
+                                    <span>
+                                      {cumpleLey 
+                                        ? '✓ Cumple con la proporción legal de aula y planificación.' 
+                                        : `⚠️ Exceso detectado: Las horas de clase asignadas (${pedagogicasAsignadas} hrs) superan el máximo de aula permitido (${desglose.horasAula} hrs).`}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
                             {/* Additional Chronological Details list */}
                             {cronoItems.length > 0 && (
                               <div className="pt-2 border-t border-slate-100">
