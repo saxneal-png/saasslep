@@ -2673,18 +2673,15 @@ export default function RRHHPage() {
                               const pedagogicasAsignadas = asigs.reduce((sum, a) => sum + a.horas, 0); 
                               const docenciaAsignadaCrono = parseFloat((pedagogicasAsignadas * (desglose.duracionMinutos / 60)).toFixed(2));
                               
-                              let recreoAsignadoCrono = 0;
-                              if (desglose.duracionMinutos === 45) {
-                                recreoAsignadoCrono = parseFloat((pedagogicasAsignadas * (3 / 38)).toFixed(2));
-                              } else if (desglose.esParvularia && desglose.duracionMinutos === 60) {
-                                recreoAsignadoCrono = 0;
-                              } else {
-                                recreoAsignadoCrono = parseFloat((pedagogicasAsignadas * (5 / 60)).toFixed(2));
-                              }
-
-                              // HNL per HA from MINEDUC table: 65/35 = (44-38*0.75-3)/38 = 12.5/38; 60/40 = (44-26*0.75-3)/26 = 21.5/26
-                              const ratioHNL = desglose.esExcepcion ? (21.5 / 26) : desglose.esParvularia ? (1 / 1.65) : (12.5 / 38);
-                              const noLectivasTotalesRequeridas = parseFloat((pedagogicasAsignadas * ratioHNL).toFixed(2));
+                              const ratio = desglose.esExcepcion ? 0.60 : 0.65;
+                              const factorLectivasHC = desglose.duracionMinutos / 60;
+                              const C_req = Math.round((pedagogicasAsignadas * factorLectivasHC) / ratio);
+                              const minutosRecreo = Math.round(C_req * (180 / 44));
+                              const recreoCrono = parseFloat((minutosRecreo / 60).toFixed(2));
+                              const hnlCrono = Math.max(0, C_req - (pedagogicasAsignadas * factorLectivasHC) - recreoCrono);
+                              // Update UI variables
+                              let recreoAsignadoCrono = recreoCrono;
+                              let noLectivasTotalesRequeridas = hnlCrono;
 
                               const totalHorasUsadas = parseFloat((docenciaAsignadaCrono + recreoAsignadoCrono + noLectivasTotalesRequeridas + desglose.horasCronologicasAdicionales + desglose.horasDirectivas + desglose.horasTecnicoPedagogicas).toFixed(2));
                               const vacantesHrs = Math.max(0, c.horas_totales - totalHorasUsadas);

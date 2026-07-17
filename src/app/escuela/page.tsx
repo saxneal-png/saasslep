@@ -4705,27 +4705,19 @@ export default function EscuelaDashboard() {
                     const otrasFuncionesHrs = cargosPersonalizados
                       .filter(cp => cp.funcionario_run === editingFuncionario.run)
                       .reduce((sum, cp) => sum + cp.horas, 0);
-                    const otrasHrsAsignadas = dirHrs + tecHrs + otrasFuncionesHrs;
-
-                    // Calculation of indicators BASED ON ACTUAL CLASS ASSIGNMENTS
-                    const docenciaAsignadaCrono = parseFloat((pedagogicasAsignadas * (desglose.duracionMinutos / 60)).toFixed(2));
                     
-                    let recreoAsignadoCrono = 0;
-                    if (desglose.duracionMinutos === 45) {
-                      recreoAsignadoCrono = parseFloat((pedagogicasAsignadas * (3 / 38)).toFixed(2));
-                    } else if (desglose.esParvularia && desglose.duracionMinutos === 60) {
-                      recreoAsignadoCrono = 0;
-                    } else {
-                      recreoAsignadoCrono = parseFloat((pedagogicasAsignadas * (5 / 60)).toFixed(2));
-                    }
+                    const ratio = desglose.esExcepcion ? 0.60 : 0.65;
+                    const factorLectivasHC = desglose.duracionMinutos / 60;
 
-                    // HNL per HA from MINEDUC table: 65/35 = (44-38*0.75-3)/38 = 12.5/38; 60/40 = (44-26*0.75-3)/26 = 21.5/26
-                    const ratioHNL = desglose.esExcepcion ? (21.5 / 26) : desglose.esParvularia ? (1 / 1.65) : (12.5 / 38);
-                    const noLectivasTotalesRequeridas = parseFloat((pedagogicasAsignadas * ratioHNL).toFixed(2));
-
-                    // Total crono used = assigned class + break + calculated HNL + directivas + tecnicas + adicionales
-                    const totalHorasUsadas = parseFloat((docenciaAsignadaCrono + recreoAsignadoCrono + noLectivasTotalesRequeridas + desglose.horasCronologicasAdicionales + dirHrs + tecHrs + otrasFuncionesHrs).toFixed(2));
-                    
+                    // MINEDUC calculation for required contract hours, recreation and non‑teaching hours
+const C_req = Math.round((pedagogicasAsignadas * factorLectivasHC) / ratio);
+const minutosRecreo = Math.round(C_req * (180 / 44));
+const recreoCrono = parseFloat((minutosRecreo / 60).toFixed(2));
+const hnlCrono = Math.max(0, C_req - (pedagogicasAsignadas * factorLectivasHC) - recreoCrono);
+// Update legacy variables for UI compatibility
+recreoAsignadoCrono = recreoCrono;
+noLectivasTotalesRequeridas = hnlCrono;
+                    const totalHorasUsadas = parseFloat((C_req + desglose.horasCronologicasAdicionales + dirHrs + tecHrs + otrasFuncionesHrs).toFixed(2));
                     const vacantesHrs = Math.max(0, editContHoras - totalHorasUsadas);
                     const cumpleLey = desglose.horasAula >= pedagogicasAsignadas;
 
@@ -5159,6 +5151,16 @@ export default function EscuelaDashboard() {
                                   const newAsigs = editCursoAsignaturas.filter((_, i) => i !== index);
                                   setEditCursoAsignaturas(newAsigs);
                                   const newAsignaciones = editCursoAsignaciones.filter(a => a.asignatura !== asig.nombre);
+                                  
+                                  // MINEDUC calculation for required contract hours, recreation and non‑teaching hours
+                                  const ratio = desglose.esExcepcion ? 0.60 : 0.65;
+                                  const factorLectivasHC = desglose.duracionMinutos / 60;
+                                  const pedagogicasAsignadas = newAsignaciones.reduce((sum, a) => sum + a.horas, 0);
+                                  const C_req = Math.round((pedagogicasAsignadas * factorLectivasHC) / ratio);
+                                  const minutosRecreo = Math.round(C_req * (180 / 44));
+                                  const recreoCrono = parseFloat((minutosRecreo / 60).toFixed(2));
+                                  const hnlCrono = Math.max(0, C_req - (pedagogicasAsignadas * factorLectivasHC) - recreoCrono);
+                                  // Update UI variables
                                   setEditCursoAsignaciones(newAsignaciones);
                                 }}
                                 className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
