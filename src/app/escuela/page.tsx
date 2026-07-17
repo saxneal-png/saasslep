@@ -4719,9 +4719,9 @@ export default function EscuelaDashboard() {
                       recreoAsignadoCrono = parseFloat((pedagogicasAsignadas * (5 / 60)).toFixed(2));
                     }
 
-                    const ratioHNL = desglose.esExcepcion ? 0.40 / 0.60 : 0.35 / 0.65;
-                    const scalingFactor = desglose.esParvularia && desglose.duracionMinutos === 60 ? 4 / 3 : 1;
-                    const noLectivasTotalesRequeridas = parseFloat((pedagogicasAsignadas * scalingFactor * ratioHNL).toFixed(2));
+                    // HNL per HA from MINEDUC table: 65/35 = (44-38*0.75-3)/38 = 12.5/38; 60/40 = (44-26*0.75-3)/26 = 21.5/26
+                    const ratioHNL = desglose.esExcepcion ? (21.5 / 26) : desglose.esParvularia ? (1 / 1.65) : (12.5 / 38);
+                    const noLectivasTotalesRequeridas = parseFloat((pedagogicasAsignadas * ratioHNL).toFixed(2));
 
                     // Total crono used = assigned class + break + calculated HNL + directivas + tecnicas + adicionales
                     const totalHorasUsadas = parseFloat((docenciaAsignadaCrono + recreoAsignadoCrono + noLectivasTotalesRequeridas + desglose.horasCronologicasAdicionales + dirHrs + tecHrs + otrasFuncionesHrs).toFixed(2));
