@@ -5151,16 +5151,6 @@ export default function EscuelaDashboard() {
                                   const newAsigs = editCursoAsignaturas.filter((_, i) => i !== index);
                                   setEditCursoAsignaturas(newAsigs);
                                   const newAsignaciones = editCursoAsignaciones.filter(a => a.asignatura !== asig.nombre);
-                                  
-                                  // MINEDUC calculation for required contract hours, recreation and non‑teaching hours
-                                  const ratio = desglose.esExcepcion ? 0.60 : 0.65;
-                                  const factorLectivasHC = desglose.duracionMinutos / 60;
-                                  const pedagogicasAsignadas = newAsignaciones.reduce((sum, a) => sum + a.horas, 0);
-                                  const C_req = Math.round((pedagogicasAsignadas * factorLectivasHC) / ratio);
-                                  const minutosRecreo = Math.round(C_req * (180 / 44));
-                                  const recreoCrono = parseFloat((minutosRecreo / 60).toFixed(2));
-                                  const hnlCrono = Math.max(0, C_req - (pedagogicasAsignadas * factorLectivasHC) - recreoCrono);
-                                  // Update UI variables
                                   setEditCursoAsignaciones(newAsignaciones);
                                 }}
                                 className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
