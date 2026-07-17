@@ -447,10 +447,10 @@ export function calcularDesgloseContrato(
   } else {
     if (horasTotales > 0) {
       if (config.esParvularia && config.duracionLectivaMinutos === 60) {
-        horasAula = Math.floor(horasTotales * ratioLectivo);
+        horasAula = Math.round(horasTotales * ratioLectivo);
       } else {
         const factorLectivasHC = config.duracionLectivaMinutos / 60;
-        horasAula = Math.floor((horasTotales * ratioLectivo) / factorLectivasHC);
+        horasAula = Math.round((horasTotales * ratioLectivo) / factorLectivasHC);
       }
     } else {
       horasAula = sumAsigHoras;
@@ -471,7 +471,7 @@ export function calcularDesgloseContrato(
   const bloquePresencialTotal = parseFloat((docenciaAulaCronologica + recreoCalculado).toFixed(2));
 
   let horasColaborativas = parseFloat((horasTotales - docenciaAulaCronologica - recreoCalculado).toFixed(2));
-  if (horasColaborativas < 0) horasColaborativas = 0;
+  horasColaborativas = Math.max(0, horasColaborativas);
 
   const esPIE = contrato.calidad_juridica.includes('PIE') || 
                 String(contrato.funcion_principal).toUpperCase().includes('PIE');
