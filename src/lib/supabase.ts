@@ -163,7 +163,8 @@ const CONTRATOS_MOCK_INICIAL: Contrato[] = [
   { id: 'c3', funcionario_run: '16789012-3', rbd: '10202', calidad_juridica: 'Titular', funcion_principal: 'Docente PIE', estado: 'Licencia Médica', horas_totales: 44 },
   { id: 'c4', funcionario_run: '10876543-2', rbd: '10202', calidad_juridica: 'A contrata', funcion_principal: 'Docente de Aula', estado: 'Reemplazo', horas_totales: 44, vinculo_titular_id: 'c3' },
   { id: 'c5', funcionario_run: '15432987-K', rbd: '10201', calidad_juridica: 'A contrata', funcion_principal: 'Docente de Aula', estado: 'Activo', horas_totales: 10 },
-  { id: 'c6', funcionario_run: '17654321-0', rbd: '10204', calidad_juridica: 'Titular', funcion_principal: 'Auxiliar de Servicios', estado: 'Activo', horas_totales: 44 }
+  { id: 'c6', funcionario_run: '17654321-0', rbd: '10204', calidad_juridica: 'Titular', funcion_principal: 'Auxiliar de Servicios', estado: 'Activo', horas_totales: 44 },
+  { id: 'c8', funcionario_run: '18901234-5', rbd: '10202', calidad_juridica: 'A contrata', funcion_principal: 'Psicóloga', estado: 'Activo', horas_totales: 22 }
 ];
 
 const FINANCIAMIENTOS_MOCK_INICIAL: FinanciamientoContrato[] = [
@@ -173,7 +174,8 @@ const FINANCIAMIENTOS_MOCK_INICIAL: FinanciamientoContrato[] = [
   { id: 'f4', contrato_id: 'c3', origen_fondo: 'PIE', horas: 44 },
   { id: 'f5', contrato_id: 'c4', origen_fondo: 'PIE', horas: 44 },
   { id: 'f6', contrato_id: 'c5', origen_fondo: 'SEP', horas: 10 },
-  { id: 'f7', contrato_id: 'c6', origen_fondo: 'Subvención Regular', horas: 44 }
+  { id: 'f7', contrato_id: 'c6', origen_fondo: 'Subvención Regular', horas: 44 },
+  { id: 'f8', contrato_id: 'c8', origen_fondo: 'PIE', horas: 22 }
 ];
 
 const ASIGNACIONES_MOCK_INICIAL: AsignacionAula[] = [

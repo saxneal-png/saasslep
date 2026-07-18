@@ -3811,18 +3811,25 @@ export default function EscuelaDashboard() {
                       
                       // Active contracts of PIE specialists in this school - Group 1: Docentes y Técnicos
                       const eligibleDocentesPie = contratos.filter(cont => {
-                        if (cont.rbd !== selectedRbd) return false;
-                        const func = funcionarios.find(f => f.run === cont.funcionario_run);
+                        if (normalizarRbd(String(cont.rbd)) !== normalizarRbd(String(selectedRbd))) return false;
+                        const func = funcionarios.find(f => normalizarRun(f.run) === normalizarRun(cont.funcionario_run));
                         if (!func) return false;
-                        return esDocenteOTecnicoDiferencial(func.cargo || cont.funcion_principal, cont.calidad_juridica);
+
+                        const isSupport = esProfesionalApoyoPIE(func.cargo || cont.funcion_principal, cont.calidad_juridica);
+                        if (isSupport) return false;
+
+                        const isDocenteTecnico = esDocenteOTecnicoDiferencial(func.cargo || cont.funcion_principal, cont.calidad_juridica);
+                        const isPieFunded = financiamientosEscuela.some(f => f.contrato_id === cont.id && f.origen_fondo === 'PIE');
+                        return isDocenteTecnico || isPieFunded;
                       });
                       const docIds = eligibleDocentesPie.map(cont => cont.id);
 
                       // Active contracts of PIE specialists in this school - Group 2: Profesionales de Apoyo
                       const eligibleProfesionalesPie = contratos.filter(cont => {
-                        if (cont.rbd !== selectedRbd) return false;
-                        const func = funcionarios.find(f => f.run === cont.funcionario_run);
+                        if (normalizarRbd(String(cont.rbd)) !== normalizarRbd(String(selectedRbd))) return false;
+                        const func = funcionarios.find(f => normalizarRun(f.run) === normalizarRun(cont.funcionario_run));
                         if (!func) return false;
+                        
                         return esProfesionalApoyoPIE(func.cargo || cont.funcion_principal, cont.calidad_juridica);
                       });
                       const profIds = eligibleProfesionalesPie.map(cont => cont.id);
