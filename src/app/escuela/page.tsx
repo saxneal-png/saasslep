@@ -37,7 +37,7 @@ const formatDecHours = (hours: number): string => {
   return `${h} h ${m} m`;
 };
 
-const esEspecialistaPIEOApoyo = (cargoStr: string, calidadJuridicaStr: string): boolean => {
+const esDocenteOTecnicoDiferencial = (cargoStr: string, calidadJuridicaStr: string): boolean => {
   const cargo = String(cargoStr || '').toUpperCase().trim();
   const calidad = String(calidadJuridicaStr || '').toUpperCase().trim();
 
@@ -47,21 +47,50 @@ const esEspecialistaPIEOApoyo = (cargoStr: string, calidadJuridicaStr: string): 
   const cargoNorm = normalize(cargo);
   const calidadNorm = normalize(calidad);
 
-  const matchesKeyword = [
-    'DIFERENCIAL',
-    'PIE',
-    'SEP',
+  const isSupportProfessional = [
     'PSICOLO',
     'FONOAUDIO',
     'KINESIO',
-    'PSICOPEDA',
     'TERAPEUTA',
     'ASISTENTE SOCIAL',
     'TRABAJADOR SOCIAL',
     'TRABAJADORA SOCIAL'
   ].some(keyword => cargoNorm.includes(keyword) || calidadNorm.includes(keyword));
 
-  return matchesKeyword;
+  if (isSupportProfessional) return false;
+
+  return [
+    'DIFERENCIAL',
+    'PSICOPEDA',
+    'COORDINADOR PIE',
+    'COORDINADORA PIE',
+    'TECNICO'
+  ].some(keyword => cargoNorm.includes(keyword) || calidadNorm.includes(keyword)) || cargoNorm.includes('PIE');
+};
+
+const esProfesionalApoyoPIE = (cargoStr: string, calidadJuridicaStr: string): boolean => {
+  const cargo = String(cargoStr || '').toUpperCase().trim();
+  const calidad = String(calidadJuridicaStr || '').toUpperCase().trim();
+
+  const normalize = (str: string) => 
+    str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  const cargoNorm = normalize(cargo);
+  const calidadNorm = normalize(calidad);
+
+  return [
+    'PSICOLO',
+    'FONOAUDIO',
+    'KINESIO',
+    'TERAPEUTA',
+    'ASISTENTE SOCIAL',
+    'TRABAJADOR SOCIAL',
+    'TRABAJADORA SOCIAL'
+  ].some(keyword => cargoNorm.includes(keyword) || calidadNorm.includes(keyword));
+};
+
+const esEspecialistaPIEOApoyo = (cargoStr: string, calidadJuridicaStr: string): boolean => {
+  return esDocenteOTecnicoDiferencial(cargoStr, calidadJuridicaStr) || esProfesionalApoyoPIE(cargoStr, calidadJuridicaStr);
 };
 
 export default function EscuelaDashboard() {
@@ -3780,25 +3809,38 @@ export default function EscuelaDashboard() {
                         ? (baseHours + incrementHours)
                         : (c.horasPIE !== undefined ? c.horasPIE : (dec ? dec.horasPIEReglamentarias : 10));
                       
-                      // Active contracts of PIE specialists in this school
-                      const eligibleContractsPie = contratos.filter(cont => {
+                      // Active contracts of PIE specialists in this school - Group 1: Docentes y Técnicos
+                      const eligibleDocentesPie = contratos.filter(cont => {
                         if (cont.rbd !== selectedRbd) return false;
                         const func = funcionarios.find(f => f.run === cont.funcionario_run);
                         if (!func) return false;
-                        return esEspecialistaPIEOApoyo(func.cargo || cont.funcion_principal, cont.calidad_juridica);
+                        return esDocenteOTecnicoDiferencial(func.cargo || cont.funcion_principal, cont.calidad_juridica);
                       });
-                      const contractIdsPie = eligibleContractsPie.map(cont => cont.id);
+                      const docIds = eligibleDocentesPie.map(cont => cont.id);
 
-                      // Current assignments for this course by PIE teachers
-                      const currentAsigsCurso = asignaciones.filter(
-                        a => a.curso === c.nombre && contractIdsPie.includes(a.contrato_id)
+                      // Active contracts of PIE specialists in this school - Group 2: Profesionales de Apoyo
+                      const eligibleProfesionalesPie = contratos.filter(cont => {
+                        if (cont.rbd !== selectedRbd) return false;
+                        const func = funcionarios.find(f => f.run === cont.funcionario_run);
+                        if (!func) return false;
+                        return esProfesionalApoyoPIE(func.cargo || cont.funcion_principal, cont.calidad_juridica);
+                      });
+                      const profIds = eligibleProfesionalesPie.map(cont => cont.id);
+
+                      // Current assignments
+                      const currentDocAsigs = asignaciones.filter(
+                        a => a.curso === c.nombre && docIds.includes(a.contrato_id)
                       );
-                      const totalAsignadoCurso = currentAsigsCurso.reduce((sum, a) => sum + a.horas, 0);
+                      const currentProfAsigs = asignaciones.filter(
+                        a => a.curso === c.nombre && profIds.includes(a.contrato_id)
+                      );
+
+                      const totalAsignadoCurso = currentDocAsigs.reduce((sum, a) => sum + a.horas, 0) + currentProfAsigs.reduce((sum, a) => sum + a.horas, 0);
                       const delta = totalAsignadoCurso - hrsRequeridas;
                       const cubierto = Math.abs(delta) < 0.05 || totalAsignadoCurso >= hrsRequeridas;
 
                       return (
-                        <div key={c.nombre} className="border border-slate-200/60 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between space-y-3">
+                        <div key={c.nombre} className="border border-slate-200/60 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between space-y-4">
                           <div>
                             <div className="flex justify-between items-start">
                               <div>
@@ -3812,36 +3854,37 @@ export default function EscuelaDashboard() {
                               </div>
                             </div>
 
+                            {/* Section 1: Docentes y Técnicos Diferenciales */}
                             <div className="mt-3 space-y-2">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Docentes PIE Asignados:</span>
-                              {currentAsigsCurso.length > 0 ? (
+                              <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block">Docentes y Técnicos Diferenciales PIE:</span>
+                              {currentDocAsigs.length > 0 ? (
                                 <div className="bg-white rounded-lg border border-slate-200 divide-y divide-slate-100 text-xs">
-                                  {currentAsigsCurso.map(a => {
+                                  {currentDocAsigs.map(a => {
                                     const cont = contratos.find(co => co.id === a.contrato_id);
                                     const func = funcionarios.find(f => f.run === cont?.funcionario_run);
                                     return (
-                                      <div key={a.id} className="p-2.5 flex justify-between items-center hover:bg-slate-50/30">
+                                      <div key={a.id} className="p-2 flex justify-between items-center hover:bg-slate-50/30">
                                         <div className="flex flex-col min-w-0 pr-2">
-                                          <span className="font-semibold text-slate-800 truncate">
+                                          <span className="font-semibold text-slate-850 truncate">
                                             {func ? func.nombre : 'Docente Desconocido'}
                                           </span>
-                                          <span className="text-[10px] text-slate-400">
-                                            RUN: {cont?.funcionario_run}
+                                          <span className="text-[9px] text-slate-400">
+                                            {func ? func.cargo : 'Docente PIE'}
                                           </span>
                                         </div>
-                                        <div className="flex items-center gap-2 flex-shrink-0">
-                                          <span className="font-bold text-slep-blue bg-blue-50 px-2 py-0.5 rounded border border-blue-100 text-[10px]">
+                                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                                          <span className="font-bold text-slep-blue bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[9px]">
                                             {a.horas} hrs
                                           </span>
                                           <button
                                             type="button"
                                             onClick={async () => {
-                                              if (confirm(`¿Está seguro de remover a este docente del curso ${c.nombre}?`)) {
+                                              if (confirm(`¿Está seguro de remover a este docente?`)) {
                                                 await api.deleteAsignacion(a.id);
                                                 await loadAllSchoolData();
                                               }
                                             }}
-                                            className="text-red-500 hover:text-red-700 font-bold p-1 cursor-pointer transition-colors"
+                                            className="text-red-500 hover:text-red-700 font-bold p-0.5 cursor-pointer transition-colors text-[10px]"
                                             title="Remover asignación"
                                           >
                                             ✕
@@ -3852,8 +3895,55 @@ export default function EscuelaDashboard() {
                                   })}
                                 </div>
                               ) : (
-                                <p className="text-[11px] text-slate-400 italic bg-white p-3 rounded-lg border border-slate-200 text-center">
-                                  Ningún docente asignado aún.
+                                <p className="text-[10px] text-slate-400 italic bg-white p-2 rounded-lg border border-slate-200 text-center">
+                                  Ningún docente/técnico asignado aún.
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Section 2: Profesionales de Apoyo */}
+                            <div className="mt-3 space-y-2">
+                              <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block">Profesionales de Apoyo PIE (Psicólogos, Fonoaudiólogos, etc.):</span>
+                              {currentProfAsigs.length > 0 ? (
+                                <div className="bg-white rounded-lg border border-slate-200 divide-y divide-slate-100 text-xs">
+                                  {currentProfAsigs.map(a => {
+                                    const cont = contratos.find(co => co.id === a.contrato_id);
+                                    const func = funcionarios.find(f => f.run === cont?.funcionario_run);
+                                    return (
+                                      <div key={a.id} className="p-2 flex justify-between items-center hover:bg-slate-50/30">
+                                        <div className="flex flex-col min-w-0 pr-2">
+                                          <span className="font-semibold text-slate-850 truncate">
+                                            {func ? func.nombre : 'Profesional Desconocido'}
+                                          </span>
+                                          <span className="text-[9px] text-slate-400">
+                                            {func ? func.cargo : 'Profesional de Apoyo'}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                                          <span className="font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 text-[9px]">
+                                            {a.horas} hrs
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={async () => {
+                                              if (confirm(`¿Está seguro de remover a este profesional?`)) {
+                                                await api.deleteAsignacion(a.id);
+                                                await loadAllSchoolData();
+                                              }
+                                            }}
+                                            className="text-red-500 hover:text-red-700 font-bold p-0.5 cursor-pointer transition-colors text-[10px]"
+                                            title="Remover asignación"
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <p className="text-[10px] text-slate-400 italic bg-white p-2 rounded-lg border border-slate-200 text-center">
+                                  Ningún profesional de apoyo asignado aún.
                                 </p>
                               )}
                             </div>
@@ -3871,17 +3961,17 @@ export default function EscuelaDashboard() {
                               </span>
                             </div>
 
-                            {/* Dropdowns to add a teacher assignment */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                            {/* Form 1: Add Docente/Técnico Diferencial */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end pt-1">
                               <div className="sm:col-span-2">
-                                <label className="block text-[9px] font-bold text-slate-500 mb-0.5 uppercase">Asignar Docente PIE</label>
+                                <label className="block text-[8px] font-bold text-slate-500 mb-0.5 uppercase">Asignar Docente/Técnico PIE</label>
                                 <select
                                   id={`select-pie-docente-${c.nombre}`}
                                   className="w-full p-1.5 border rounded text-xs bg-white text-slate-700 focus:outline-slep-blue cursor-pointer"
                                   defaultValue=""
                                 >
-                                  <option value="">-- Seleccionar --</option>
-                                  {eligibleContractsPie.map(cont => {
+                                  <option value="">-- Seleccionar Docente/Técnico --</option>
+                                  {eligibleDocentesPie.map(cont => {
                                     const func = funcionarios.find(f => f.run === cont.funcionario_run);
                                     const totalContHrs = cont.horas_totales;
                                     const assignedHrs = asignaciones
@@ -3895,7 +3985,7 @@ export default function EscuelaDashboard() {
                                         value={cont.id}
                                         disabled={dispHrs <= 0}
                                       >
-                                        {func ? func.nombre.split(' ')[0] + ' ' + (func.nombre.split(' ')[2] || '') : cont.funcionario_run} ({dispHrs.toFixed(1)} hrs disp.)
+                                        {func ? func.nombre.split(' ')[0] + ' ' + (func.nombre.split(' ')[2] || '') : cont.funcionario_run} ({func?.cargo}) - ({dispHrs.toFixed(1)} hrs disp.)
                                       </option>
                                     );
                                   })}
@@ -3903,7 +3993,6 @@ export default function EscuelaDashboard() {
                               </div>
                               <div className="flex gap-1">
                                 <div className="w-12">
-                                  <label className="block text-[9px] font-bold text-slate-500 mb-0.5 uppercase">Horas</label>
                                   <input
                                     type="number"
                                     id={`input-pie-horas-${c.nombre}`}
@@ -3931,7 +4020,7 @@ export default function EscuelaDashboard() {
                                       return;
                                     }
 
-                                    const selectedCont = eligibleContractsPie.find(cont => cont.id === cId);
+                                    const selectedCont = eligibleDocentesPie.find(cont => cont.id === cId);
                                     if (!selectedCont) return;
 
                                     const totalContHrs = selectedCont.horas_totales;
@@ -3960,6 +4049,101 @@ export default function EscuelaDashboard() {
                                     horasEl.value = "2";
                                   }}
                                   className="flex-1 bg-slep-blue hover:bg-slep-blue-hover text-white font-bold rounded text-xs transition-colors cursor-pointer text-center flex items-center justify-center py-1.5"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Form 2: Add Profesional Apoyo */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end pt-1">
+                              <div className="sm:col-span-2">
+                                <label className="block text-[8px] font-bold text-slate-500 mb-0.5 uppercase">Asignar Profesional Apoyo</label>
+                                <select
+                                  id={`select-pie-profesional-${c.nombre}`}
+                                  className="w-full p-1.5 border rounded text-xs bg-white text-slate-700 focus:outline-slep-blue cursor-pointer"
+                                  defaultValue=""
+                                >
+                                  <option value="">-- Seleccionar Profesional --</option>
+                                  {eligibleProfesionalesPie.map(cont => {
+                                    const func = funcionarios.find(f => f.run === cont.funcionario_run);
+                                    const totalContHrs = cont.horas_totales;
+                                    const assignedHrs = asignaciones
+                                      .filter(as => as.contrato_id === cont.id)
+                                      .reduce((sum, as) => sum + as.horas, 0);
+                                    const dispHrs = totalContHrs - assignedHrs;
+
+                                    return (
+                                      <option 
+                                        key={cont.id} 
+                                        value={cont.id}
+                                        disabled={dispHrs <= 0}
+                                      >
+                                        {func ? func.nombre.split(' ')[0] + ' ' + (func.nombre.split(' ')[2] || '') : cont.funcionario_run} ({func?.cargo}) - ({dispHrs.toFixed(1)} hrs disp.)
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
+                              <div className="flex gap-1">
+                                <div className="w-12">
+                                  <input
+                                    type="number"
+                                    id={`input-pie-prof-horas-${c.nombre}`}
+                                    min="1"
+                                    step="1"
+                                    defaultValue="2"
+                                    className="w-full p-1.5 border rounded text-xs text-center font-bold"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const selectEl = document.getElementById(`select-pie-profesional-${c.nombre}`) as HTMLSelectElement;
+                                    const horasEl = document.getElementById(`input-pie-prof-horas-${c.nombre}`) as HTMLInputElement;
+                                    if (!selectEl || !horasEl) return;
+                                    const cId = selectEl.value;
+                                    const hrs = parseFloat(horasEl.value) || 0;
+
+                                    if (!cId) {
+                                      alert('Seleccione un profesional.');
+                                      return;
+                                    }
+                                    if (hrs <= 0) {
+                                      alert('Horas debe ser mayor a 0.');
+                                      return;
+                                    }
+
+                                    const selectedCont = eligibleProfesionalesPie.find(cont => cont.id === cId);
+                                    if (!selectedCont) return;
+
+                                    const totalContHrs = selectedCont.horas_totales;
+                                    const assignedHrs = asignaciones
+                                      .filter(as => as.contrato_id === selectedCont.id)
+                                      .reduce((sum, as) => sum + as.horas, 0);
+                                    const dispHrs = totalContHrs - assignedHrs;
+
+                                    if (hrs > dispHrs + 0.01) {
+                                      alert(`El profesional solo cuenta con ${dispHrs.toFixed(1)} hrs disponibles.`);
+                                      return;
+                                    }
+
+                                    const func = funcionarios.find(f => f.run === selectedCont.funcionario_run);
+                                    const newAsig: AsignacionAula = {
+                                      id: `asig-pie-prof-${Date.now()}-${Math.random()}`,
+                                      contrato_id: cId,
+                                      curso: c.nombre,
+                                      asignatura: func ? func.cargo || 'Profesional Apoyo' : 'Profesional Apoyo',
+                                      horas: hrs
+                                    };
+
+                                    await api.saveAsignacion(newAsig);
+                                    await loadAllSchoolData();
+
+                                    selectEl.value = "";
+                                    horasEl.value = "2";
+                                  }}
+                                  className="flex-1 bg-purple-600 hover:bg-purple-750 text-white font-bold rounded text-xs transition-colors cursor-pointer text-center flex items-center justify-center py-1.5"
                                 >
                                   +
                                 </button>
