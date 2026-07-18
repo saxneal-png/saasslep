@@ -842,9 +842,9 @@ export function validarHardCap44Horas(
     }
 
     const desglose = calcularDesgloseContrato(c, cursosDinamicos, asignaciones, cronList);
-    const sumContrato = desglose.horasAula + desglose.horasColaborativas + desglose.horasCronologicasAdicionales + desglose.horasDirectivas + desglose.horasTecnicoPedagogicas;
+    const sumContrato = desglose.horasTotales;
     sumaTotal += sumContrato;
-    detalle += `RBD ${c.rbd}: Aula ${desglose.horasAula} + Colab ${desglose.horasColaborativas} + Crono ${desglose.horasCronologicasAdicionales} + Dir ${desglose.horasDirectivas} + UTP ${desglose.horasTecnicoPedagogicas} = ${sumContrato} hrs.\n`;
+    detalle += `RBD ${c.rbd}: Total Contrato = ${sumContrato} hrs (Aula ${desglose.horasAula} ped, Colab ${desglose.horasColaborativas} hrs, Crono ${desglose.horasCronologicasAdicionales} hrs).\n`;
 
     // 1. Validate PIE limits on Docencia de Aula Efectiva
     const docenciaEfectiva = desglose.esPIE ? desglose.docenciaEfectivaPIE : desglose.docenciaAulaCronologica;
