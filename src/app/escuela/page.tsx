@@ -3645,58 +3645,20 @@ export default function EscuelaDashboard() {
                               const vacantesHrs = Math.max(0, totHrs - totalHorasUsadas);
 
                               return (
-                                <div key={f.run} className="p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50/50 transition-all space-y-3 shadow-sm">
+                                <div key={f.run} className="p-3.5 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 transition-all shadow-sm">
                                   <div className="flex justify-between items-start">
                                     <div>
-                                      <p className="font-bold text-slate-800 text-sm">{f.nombre}</p>
-                                      <p className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded px-1.5 py-0.5 inline-block font-semibold mt-1">
-                                        {f.cargo} • {f.estamento}
-                                      </p>
-                                      <p className="text-[9px] font-mono text-slate-400 mt-1 font-semibold">RUN: {f.run}</p>
+                                      <p className="font-bold text-slate-800 text-xs uppercase">{f.nombre}</p>
+                                      <p className="text-[10px] text-slate-500 font-medium mt-0.5">{f.cargo} • {f.estamento}</p>
+                                      <p className="text-[9px] font-mono text-slate-400 mt-0.5">RUN: {f.run}</p>
                                     </div>
-                                    <div className="text-right flex flex-col items-end gap-1.5 flex-shrink-0">
-                                      <span className="bg-slate-100 text-slate-700 font-mono text-[10px] font-bold px-2 py-0.5 rounded border border-slate-250">
-                                        Contrato: {totHrs} hrs
-                                      </span>
-                                      {vacantesHrs > 0.05 ? (
-                                        <span className="bg-amber-50 text-amber-800 font-mono text-[9px] font-black px-2 py-0.5 rounded border border-amber-250">
-                                          Vacantes: {formatDecHours(vacantesHrs)}
-                                        </span>
-                                      ) : (
-                                        <span className="bg-emerald-50 text-emerald-800 font-mono text-[9px] font-bold px-2 py-0.5 rounded border border-emerald-250">
-                                          ✓ Sin Vacantes
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {/* Proportional breakdown from rules engine (Expediente style) */}
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-[10px]">
-                                    <div className="bg-slate-50/50 p-1.5 rounded border">
-                                      <span className="text-[9px] text-slate-400 font-semibold block">AULA ASIGNADA</span>
-                                      <strong className="text-indigo-700 font-bold">{pedAsignadas} / {maxAulaTotal} hrs ped</strong>
-                                    </div>
-                                    <div className="bg-slate-50/50 p-1.5 rounded border">
-                                      <span className="text-[9px] text-slate-400 font-semibold block">AULA DISPONIBLE</span>
-                                      <strong className={pedDisponibles > 0 ? "text-emerald-700 font-extrabold" : "text-slate-500 font-bold"}>
-                                        {pedDisponibles} hrs ped
-                                      </strong>
-                                    </div>
-                                    <div className="bg-slate-50/50 p-1.5 rounded border">
-                                      <span className="text-[9px] text-slate-400 font-semibold block">PLANIF. / HNL</span>
-                                      <strong className="text-slate-700 font-bold">{formatDecHours(hnlTotal)}</strong>
-                                    </div>
-                                    <div className="bg-slate-50/50 p-1.5 rounded border">
-                                      <span className="text-[9px] text-slate-400 font-semibold block">RECREO</span>
-                                      <strong className="text-pink-700 font-bold">{formatDecHours(recreoTotal)}</strong>
-                                    </div>
-                                    <div className="bg-slate-50/50 p-1.5 rounded border">
-                                      <span className="text-[9px] text-slate-400 font-semibold block">TRAB. COLABORATIVO</span>
-                                      <strong className="text-amber-800 font-bold">{totalCrono} hrs</strong>
-                                    </div>
-                                    <div className="bg-slate-50/50 p-1.5 rounded border">
-                                      <span className="text-[9px] text-slate-400 font-semibold block">OTROS CARGOS / ADM</span>
-                                      <strong className="text-slate-750 font-bold">{directivasTotal + tecPedTotal} hrs</strong>
+                                    <div className="text-right flex flex-col items-end gap-1 flex-shrink-0 text-xs">
+                                      <div className="text-[10px] text-slate-600">
+                                        <span className="font-semibold text-slate-500">Contrato:</span> {totHrs} hrs, <span className="font-semibold text-slate-500">horas utilizadas:</span> {totalHorasUsadas.toFixed(1)} hrs
+                                      </div>
+                                      <div className="mt-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-150 text-[10px]">
+                                        Vacantes: {formatDecHours(vacantesHrs)}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
