@@ -145,9 +145,10 @@ export default function EscuelaDashboard() {
   const [editContHorasTecPed, setEditContHorasTecPed] = useState<number | undefined>(undefined);
   const [editContEsUniprofesional, setEditContEsUniprofesional] = useState<boolean>(false);
   const [editContCronoHours, setEditContCronoHours] = useState<{ id: string; tipo: string; horas: number }[]>([]);
-  const [editContInputMode, setEditContInputMode] = useState<'aula-primero' | 'contrato-primero'>('aula-primero');
+  const [editContInputMode, setEditContInputMode] = useState<'aula-primero' | 'contrato-primero'>('contrato-primero');
   const [newEditCronoType, setNewEditCronoType] = useState<string>('Trabajo Colaborativo');
   const [newEditCronoHours, setNewEditCronoHours] = useState<number>(2);
+  const [selectedSubvQualityIndex, setSelectedSubvQualityIndex] = useState<number>(0);
 
   const [editingCurso, setEditingCurso] = useState<CursoDinamico | null>(null);
   const [editCursoAsignaturas, setEditCursoAsignaturas] = useState<AsignaturaDinamica[]>([]);
@@ -769,7 +770,7 @@ export default function EscuelaDashboard() {
       setEditContHorasAula(firstCont.horas_aula || 30);
       setEditContHorasTecPed(firstCont.horas_tecnico_pedagogicas);
       setEditContEsUniprofesional(!!firstCont.es_uniprofesional);
-      setEditContInputMode(firstCont.horas_aula ? 'aula-primero' : 'contrato-primero');
+      setEditContInputMode('contrato-primero');
 
       // Fetch chronological hours
       api.getHorasCronologicasAdicionales(firstCont.id).then(cronoList => {
@@ -4519,170 +4520,86 @@ export default function EscuelaDashboard() {
                     </div>
                   )}
 
-                  {/* Bilateral Hours Config and Desglose Panel */}
+                  {/* Additional Chronological Hours Panel */}
                   <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/50 space-y-4">
-                    <div className="flex justify-between items-center border-b pb-2">
-                      <span className="font-bold text-slate-800">Configuración de Carga Horaria (Bilateral)</span>
-                      <div className="flex bg-slate-200/50 rounded-lg p-0.5 border">
+                    <div className="bg-white p-3 rounded-lg border text-xs space-y-2 shadow-sm">
+                      <p className="font-bold text-slate-700 text-[10px] uppercase">💼 Horas Cronológicas Adicionales</p>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <select
+                          value={newEditCronoType}
+                          onChange={(e) => setNewEditCronoType(e.target.value)}
+                          className="p-1 border rounded bg-slate-50 font-semibold text-slate-700 cursor-pointer text-xs"
+                        >
+                          <option value="Trabajo Colaborativo">Trabajo Colaborativo</option>
+                          <option value="Técnicas">Técnicas</option>
+                          <option value="Apoyo UTP">Apoyo UTP</option>
+                          <option value="Taller Extracurricular">Taller Extracurricular</option>
+                          <option value="Reforzamiento Pedagógico">Reforzamiento Pedagógico</option>
+                        </select>
+
+                        {/* Subvención / Calidad selection */}
+                        <select
+                          value={selectedSubvQualityIndex}
+                          onChange={(e) => setSelectedSubvQualityIndex(Number(e.target.value))}
+                          className="p-1 border rounded bg-slate-50 font-semibold text-slate-700 cursor-pointer text-xs max-w-[200px]"
+                        >
+                          {editContFins.map((fin, idx) => (
+                            <option key={idx} value={idx}>
+                              {fin.origen} - {fin.calidad}
+                            </option>
+                          ))}
+                          {editContFins.length === 0 && (
+                            <option value="0">Subvención Regular - A contrata</option>
+                          )}
+                        </select>
+                        
+                        <input
+                          type="number"
+                          min={1}
+                          max={44}
+                          placeholder="Horas"
+                          className="w-16 p-1 border rounded text-center font-bold text-xs"
+                          value={newEditCronoHours}
+                          onChange={(e) => setNewEditCronoHours(Number(e.target.value) || 0)}
+                        />
+
                         <button
                           type="button"
-                          onClick={() => setEditContInputMode('aula-primero')}
-                          className={`px-3 py-1 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer ${
-                            editContInputMode === 'aula-primero' 
-                              ? 'bg-white text-slep-blue shadow-sm' 
-                              : 'text-slate-500 hover:text-slate-700'
-                          }`}
+                          onClick={() => {
+                            if (newEditCronoHours <= 0) return;
+                            const selectedFin = editContFins[selectedSubvQualityIndex] || editContFins[0] || { origen: 'Subvención Regular', calidad: 'A contrata' };
+                            const itemTipo = `${newEditCronoType} (${selectedFin.origen} - ${selectedFin.calidad})`;
+                            setEditContCronoHours([
+                              ...editContCronoHours,
+                              { id: `crono-edit-${Date.now()}`, tipo: itemTipo, horas: newEditCronoHours }
+                            ]);
+                            setNewEditCronoHours(2);
+                          }}
+                          className="bg-slep-blue text-white px-3 py-1 rounded font-black hover:bg-slep-blue-hover cursor-pointer text-xs"
                         >
-                          Aula Primero
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditContInputMode('contrato-primero')}
-                          className={`px-3 py-1 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer ${
-                            editContInputMode === 'contrato-primero' 
-                              ? 'bg-white text-slep-blue shadow-sm' 
-                              : 'text-slate-500 hover:text-slate-700'
-                          }`}
-                        >
-                          Contrato Primero
+                          ➕ Agregar
                         </button>
                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {editContInputMode === 'aula-primero' ? (
-                        <div className="space-y-2">
-                          <label className="block text-slate-500 font-bold mb-1">Horas Aula (Lectivas)</label>
-                          <input 
-                            type="number"
-                            min={0}
-                            max={44}
-                            className="w-full p-2 border rounded font-black text-slate-800 focus:outline-slep-blue text-center bg-amber-50/10"
-                            value={editContHorasAula !== undefined ? editContHorasAula : ''}
-                            onChange={(e) => setEditContHorasAula(e.target.value ? parseFloat(e.target.value) : undefined)}
-                          />
+                      {editContCronoHours.length > 0 ? (
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {editContCronoHours.map(item => (
+                            <span key={item.id} className="bg-amber-100/70 border border-amber-300 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1.5 font-semibold text-[10px]">
+                              {item.tipo}: <strong>{item.horas} hrs</strong>
+                              <button
+                                type="button"
+                                onClick={() => setEditContCronoHours(editContCronoHours.filter(h => h.id !== item.id))}
+                                className="text-red-600 hover:text-red-800 font-extrabold cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          ))}
                         </div>
                       ) : (
-                        <div className="space-y-2">
-                          <label className="block text-slate-500 font-bold mb-1">Total Horas Contrato</label>
-                          <input 
-                            type="number"
-                            min={0}
-                            max={44}
-                            className="w-full p-2 border rounded font-black text-slate-800 focus:outline-slep-blue text-center bg-amber-50/10"
-                            value={editContHoras}
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value) || 0;
-                              setEditContHoras(val);
-                            }}
-                          />
-                        </div>
+                        <p className="text-[10px] text-slate-400 italic">No se han registrado horas cronológicas adicionales.</p>
                       )}
-
-                      <div className="space-y-2 border-l pl-4 border-slate-200/60">
-                        <div className="flex items-center gap-2 pt-1 pb-2">
-                          <input 
-                            type="checkbox"
-                            id="edit_es_uniprofesional"
-                            className="h-4 w-4 text-slep-blue rounded border-slate-350 cursor-pointer"
-                            checked={editContEsUniprofesional}
-                            onChange={(e) => setEditContEsUniprofesional(e.target.checked)}
-                          />
-                          <label htmlFor="edit_es_uniprofesional" className="text-slate-600 font-bold text-[10px] cursor-pointer">
-                            Doble Rol (Directivas independientes hasta 10 hrs)
-                          </label>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-slate-500 font-bold mb-0.5 text-[9px] uppercase">Horas Directivas</label>
-                            <input 
-                              type="number"
-                              min={0}
-                              max={editContEsUniprofesional ? 10 : 44}
-                              className="w-full p-1.5 border rounded font-semibold text-slate-800 text-center"
-                              value={editContHorasDirectivas !== undefined ? editContHorasDirectivas : ''}
-                              onChange={(e) => setEditContHorasDirectivas(e.target.value ? parseFloat(e.target.value) : undefined)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-slate-500 font-bold mb-0.5 text-[9px] uppercase">Horas UTP</label>
-                            <input 
-                              type="number"
-                              min={0}
-                              max={44}
-                              className="w-full p-1.5 border rounded font-semibold text-slate-800 text-center"
-                              value={editContHorasTecPed !== undefined ? editContHorasTecPed : ''}
-                              onChange={(e) => setEditContHorasTecPed(e.target.value ? parseFloat(e.target.value) : undefined)}
-                            />
-                          </div>
-                        </div>
-                      </div>
                     </div>
-
-                    {/* Additional Chronological Hours Subform */}
-                    {editContInputMode === 'aula-primero' && (
-                      <div className="bg-white p-3 rounded-lg border text-xs space-y-2 shadow-sm">
-                        <p className="font-bold text-slate-700 text-[10px] uppercase">💼 Horas Cronológicas Adicionales</p>
-                        <div className="flex gap-2 items-center">
-                          <select
-                            value={newEditCronoType}
-                            onChange={(e) => setNewEditCronoType(e.target.value)}
-                            className="p-1 border rounded bg-slate-50 font-semibold text-slate-700 cursor-pointer"
-                          >
-                            <option value="Trabajo Colaborativo">Trabajo Colaborativo</option>
-                            <option value="Técnicas">Técnicas</option>
-                            <option value="Apoyo UTP">Apoyo UTP</option>
-                            <option value="Taller Extracurricular">Taller Extracurricular</option>
-                            <option value="Reforzamiento Pedagógico">Reforzamiento Pedagógico</option>
-                          </select>
-                          
-                          <input
-                            type="number"
-                            min={1}
-                            max={44}
-                            placeholder="Horas"
-                            className="w-16 p-1 border rounded text-center font-bold"
-                            value={newEditCronoHours}
-                            onChange={(e) => setNewEditCronoHours(Number(e.target.value) || 0)}
-                          />
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (newEditCronoHours <= 0) return;
-                              setEditContCronoHours([
-                                ...editContCronoHours,
-                                { id: `crono-edit-${Date.now()}`, tipo: newEditCronoType, horas: newEditCronoHours }
-                              ]);
-                              setNewEditCronoHours(2);
-                            }}
-                            className="bg-slep-blue text-white px-3 py-1 rounded font-black hover:bg-slep-blue-hover cursor-pointer"
-                          >
-                            ➕ Agregar
-                          </button>
-                        </div>
-
-                        {editContCronoHours.length > 0 ? (
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            {editContCronoHours.map(item => (
-                              <span key={item.id} className="bg-amber-100/70 border border-amber-300 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1.5 font-semibold text-[10px]">
-                                {item.tipo}: <strong>{item.horas} hrs</strong>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditContCronoHours(editContCronoHours.filter(h => h.id !== item.id))}
-                                  className="text-red-600 hover:text-red-800 font-extrabold cursor-pointer"
-                                >
-                                  ✕
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-[10px] text-slate-400 italic">No se han registrado horas cronológicas adicionales.</p>
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   {/* Ley 20.903 indicators */}
