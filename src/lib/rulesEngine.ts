@@ -1,5 +1,5 @@
 import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado, RegistroRemuneracion, Funcionario, CursoDinamico, HorasCronologicasAdicionales } from './types';
-import { calcularJornadaDocente } from './jornadaDocente';
+import { calcularJornadaDocente, calcularJornadaDocenteMixta } from './jornadaDocente';
 
 export interface PlanEstudioNivel {
   nivel: string;
@@ -461,14 +461,46 @@ export function calcularDesgloseContrato(
   let docenciaAulaCronologica = 0;
   let recreoCalculado = 0;
   let horasColaborativas = 0;
+  let calculatedTopeMaxDoc = 0;
 
   if (config.duracionLectivaMinutos === 45 && !config.esParvularia && horasTotales > 0) {
-    const proporcion = esExcepcion ? '60/40' : '65/35';
-    const result = calcularJornadaDocente(horasTotales, proporcion, horasAula || sumAsigHoras || Math.round(horasTotales * ratioLectivo / 0.75));
-    horasAula = result.aulaAsignadaPed;
+    const esPIE = contrato.calidad_juridica.includes('PIE') || 
+                  String(contrato.funcion_principal).toUpperCase().includes('PIE');
+
+    let l65 = 0;
+    let l60 = 0;
+    let pie = 0;
+
+    if (esPIE) {
+      pie = horasTotales;
+    } else {
+      if (contratoAsigs.length > 0) {
+        contratoAsigs.forEach(a => {
+          const { esParvularia: parv, esExcepcion: ex } = obtenerRatioPorCurso(contrato.rbd, a.curso, cursosDinamicos);
+          if (ex) {
+            l60 += a.horas;
+          } else {
+            l65 += a.horas;
+          }
+        });
+      } else {
+        if (esExcepcion) {
+          l60 = Math.round(horasTotales * 0.60 / 0.75);
+        } else {
+          l65 = Math.round(horasTotales * 0.65 / 0.75);
+        }
+      }
+    }
+
+    const result = calcularJornadaDocenteMixta(l65, l60, pie, horasTotales);
+    horasAula = l65 + l60;
+    if (contratoAsigs.length === 0) {
+      horasAula = result.aulaMaxTotal;
+    }
     docenciaAulaCronologica = result.horasLectivasHC;
     recreoCalculado = result.recreoHC;
     horasColaborativas = result.hnlHC;
+    calculatedTopeMaxDoc = parseFloat((result.aulaMaxTotal * 0.75).toFixed(2));
   } else {
     docenciaAulaCronologica = parseFloat((horasAula * (config.duracionLectivaMinutos / 60)).toFixed(2));
     if (config.duracionLectivaMinutos === 45) {
@@ -501,7 +533,7 @@ export function calcularDesgloseContrato(
   const horasTecnicoPedagogicas = contrato.horas_tecnico_pedagogicas || 0;
 
   const baseTope = esExcepcion ? 26.25 : 28.5;
-  const topeMaximoDocencia = parseFloat((baseTope * (horasTotales / 44)).toFixed(2));
+  const topeMaximoDocencia = calculatedTopeMaxDoc > 0 ? calculatedTopeMaxDoc : parseFloat((baseTope * (horasTotales / 44)).toFixed(2));
 
   return {
     horasAula,

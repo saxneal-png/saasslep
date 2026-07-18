@@ -1255,12 +1255,6 @@ export default function SostenedorDashboard() {
               >
                 ⚖️ Conciliación de Horas
               </button>
-              <Link
-                href="/sostenedor/auditor-mixto"
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all text-left text-slate-300 hover:bg-white/5 block"
-              >
-                ⚖️ Auditor de Contratos Mixtos
-              </Link>
             </nav>
           </div>
 
