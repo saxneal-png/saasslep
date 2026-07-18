@@ -1139,32 +1139,49 @@ export const api = {
       regimen: c.regimen,
       horasPIE: c.horasPIE !== undefined ? c.horasPIE : c.horas_pie,
       profesor_jefe_run: c.profesorJefeRun !== undefined ? c.profesorJefeRun : c.profesor_jefe_run,
-      concentracion_prioritarios: c.concentracion_prioritarios !== undefined ? c.concentracion_prioritarios : c.concentracionPrioritarios
+      concentracion_prioritarios: c.concentracion_prioritarios !== undefined ? c.concentracion_prioritarios : c.concentracionPrioritarios,
+      alumnos_neet: c.alumnos_neet !== undefined ? c.alumnos_neet : (c.alumnosNeet !== undefined ? c.alumnosNeet : 0),
+      alumnos_neep: c.alumnos_neep !== undefined ? c.alumnos_neep : (c.alumnosNeep !== undefined ? c.alumnosNeep : 0)
     }));
   },
 
   crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
-    // Column concentracion_prioritarios was added via:
-    // ALTER TABLE cursos_dinamicos ADD COLUMN IF NOT EXISTS concentracion_prioritarios NUMERIC(5,2) DEFAULT 0;
-    const dbCurso = {
+    // Columns alumnos_neet, alumnos_neep are optional DB columns. If not created in Supabase yet, we fallback gracefully.
+    const dbCurso: any = {
       rbd: curso.rbd,
       nombre: curso.nombre,
       nivel: curso.nivel,
       regimen: curso.regimen,
       horas_pie: curso.horasPIE ?? null,
       profesor_jefe_run: curso.profesor_jefe_run ?? null,
-      concentracion_prioritarios: curso.concentracion_prioritarios ?? 0
+      concentracion_prioritarios: curso.concentracion_prioritarios ?? 0,
+      alumnos_neet: curso.alumnos_neet ?? 0,
+      alumnos_neep: curso.alumnos_neep ?? 0
     };
 
-    const { error } = await supabase.from('cursos_dinamicos').upsert(dbCurso, { onConflict: 'rbd,nombre' });
+    let { error } = await supabase.from('cursos_dinamicos').upsert(dbCurso, { onConflict: 'rbd,nombre' });
+    if (error && (error.message.includes('column') || error.code === '42703')) {
+      console.warn("⚠️ Columnas alumnos_neet/alumnos_neep no existen en Supabase de producción. Se reintenta sin ellas.");
+      const dbCursoFallback = {
+        rbd: curso.rbd,
+        nombre: curso.nombre,
+        nivel: curso.nivel,
+        regimen: curso.regimen,
+        horas_pie: curso.horasPIE ?? null,
+        profesor_jefe_run: curso.profesor_jefe_run ?? null,
+        concentracion_prioritarios: curso.concentracion_prioritarios ?? 0
+      };
+      const retry = await supabase.from('cursos_dinamicos').upsert(dbCursoFallback, { onConflict: 'rbd,nombre' });
+      error = retry.error;
+    }
 
     // Always update localStorage immediately so UI reflects the change
     const list = dbLocal.cursosDinamicos;
     const index = list.findIndex(c => c.rbd === curso.rbd && c.nombre === curso.nombre);
     if (index >= 0) {
-      list[index] = curso;
+      list[index] = { ...curso };
     } else {
-      list.push(curso);
+      list.push({ ...curso });
     }
     dbLocal.cursosDinamicos = list;
 

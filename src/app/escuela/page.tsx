@@ -374,19 +374,27 @@ export default function EscuelaDashboard() {
     setReemplazosList(reemps);
     setAllCronoHours(cronosList);
 
-    // Load persisted NEET/NEEP student counts
+    // Load persisted NEET/NEEP student counts (combining database values with localStorage fallback)
+    const pieStudentsMap: {[courseName: string]: { neet: number, neep: number }} = {};
     if (typeof window !== 'undefined') {
       const savedPieStudents = localStorage.getItem(`pie_students_${selectedRbd}`);
       if (savedPieStudents) {
         try {
-          setCoursePieStudents(JSON.parse(savedPieStudents));
+          Object.assign(pieStudentsMap, JSON.parse(savedPieStudents));
         } catch (e) {
           console.error(e);
         }
-      } else {
-        setCoursePieStudents({});
       }
     }
+    dynCursos.forEach(c => {
+      if (c.alumnos_neet !== undefined || c.alumnos_neep !== undefined) {
+        pieStudentsMap[c.nombre] = {
+          neet: c.alumnos_neet ?? pieStudentsMap[c.nombre]?.neet ?? 0,
+          neep: c.alumnos_neep ?? pieStudentsMap[c.nombre]?.neep ?? 0
+        };
+      }
+    });
+    setCoursePieStudents(pieStudentsMap);
 
     // Load financiamientos for this school's contracts into React state for reactivity
     const contratoIds = conts.map(c => c.id);
@@ -3695,9 +3703,28 @@ export default function EscuelaDashboard() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        localStorage.setItem(`pie_students_${selectedRbd}`, JSON.stringify(coursePieStudents));
-                        alert('✓ Matrícula NEE (NEET y NEEP) guardada correctamente.');
+                      onClick={async () => {
+                        try {
+                          localStorage.setItem(`pie_students_${selectedRbd}`, JSON.stringify(coursePieStudents));
+                          
+                          await Promise.all(
+                            cursosDinamicos.map(async (c) => {
+                              const studentInfo = coursePieStudents[c.nombre] || { neet: 0, neep: 0 };
+                              const updatedCurso: CursoDinamico = {
+                                ...c,
+                                alumnos_neet: studentInfo.neet,
+                                alumnos_neep: studentInfo.neep
+                              };
+                              await api.crearCursoDinamico(updatedCurso);
+                            })
+                          );
+                          
+                          alert('✓ Matrícula NEE (NEET y NEEP) guardada correctamente en la Base de Datos.');
+                          await loadAllSchoolData();
+                        } catch (e) {
+                          console.error(e);
+                          alert('❌ Error al guardar la matrícula en la base de datos.');
+                        }
                       }}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-4 py-2 rounded-xl border border-emerald-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
                     >

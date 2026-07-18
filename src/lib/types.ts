@@ -109,6 +109,8 @@ export interface CursoDinamico {
   horasPIE?: number;
   profesor_jefe_run?: string;
   concentracion_prioritarios?: number;
+  alumnos_neet?: number;
+  alumnos_neep?: number;
 }
 
 export interface AsignaturaDinamica {
