@@ -37,6 +37,33 @@ const formatDecHours = (hours: number): string => {
   return `${h} h ${m} m`;
 };
 
+const esEspecialistaPIEOApoyo = (cargoStr: string, calidadJuridicaStr: string): boolean => {
+  const cargo = String(cargoStr || '').toUpperCase().trim();
+  const calidad = String(calidadJuridicaStr || '').toUpperCase().trim();
+
+  const normalize = (str: string) => 
+    str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  const cargoNorm = normalize(cargo);
+  const calidadNorm = normalize(calidad);
+
+  const matchesKeyword = [
+    'DIFERENCIAL',
+    'PIE',
+    'SEP',
+    'PSICOLO',
+    'FONOAUDIO',
+    'KINESIO',
+    'PSICOPEDA',
+    'TERAPEUTA',
+    'ASISTENTE SOCIAL',
+    'TRABAJADOR SOCIAL',
+    'TRABAJADORA SOCIAL'
+  ].some(keyword => cargoNorm.includes(keyword) || calidadNorm.includes(keyword));
+
+  return matchesKeyword;
+};
+
 export default function EscuelaDashboard() {
   const router = useRouter();
   const [selectedRbd, setSelectedRbd] = useState<string>('10202');
@@ -3518,10 +3545,13 @@ export default function EscuelaDashboard() {
                             normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd)) && 
                             (c.horas_totales > 0)
                           );
-                          const isSpecialistCargo = ['DOCENTE DIFERENCIAL', 'COORDINADOR/A PIE'].includes(f.cargo || '') || 
-                            ['Psicólogo', 'Psicóloga', 'Fonoaudiólogo', 'Fonoaudióloga', 'Psicopedagogo', 'Psicopedagoga', 'Terapeuta Ocupacional'].some(x => (f.cargo || '').includes(x));
+                          const relatedCont = contratos.find(c => 
+                            c.funcionario_run === f.run && 
+                            normalizarRbd(String(c.rbd)) === normalizarRbd(String(selectedRbd))
+                          );
+                          const isSpecialistCargo = relatedCont ? esEspecialistaPIEOApoyo(f.cargo || relatedCont.funcion_principal, relatedCont.calidad_juridica) : false;
                           
-                          return hasPieContract && (isSpecialistCargo || f.cargo?.includes('PIE'));
+                          return hasPieContract && isSpecialistCargo;
                         });
 
                         if (pieFuncs.length === 0) {
@@ -3620,7 +3650,7 @@ export default function EscuelaDashboard() {
                               const contract = contratos.find(c => c.id === a.contrato_id);
                               if (!contract) return sum;
                               const teacher = funcionarios.find(f => f.run === contract.funcionario_run);
-                              const isPieStaff = teacher?.cargo === 'DOCENTE DIFERENCIAL' || teacher?.cargo === 'COORDINADOR/A PIE';
+                              const isPieStaff = teacher ? esEspecialistaPIEOApoyo(teacher.cargo || contract.funcion_principal, contract.calidad_juridica) : false;
                               return isPieStaff ? sum + a.horas : sum;
                             }, 0);
 
@@ -3755,9 +3785,7 @@ export default function EscuelaDashboard() {
                         if (cont.rbd !== selectedRbd) return false;
                         const func = funcionarios.find(f => f.run === cont.funcionario_run);
                         if (!func) return false;
-                        const isSpecialistCargo = ['DOCENTE DIFERENCIAL', 'COORDINADOR/A PIE'].includes(func.cargo || '') || 
-                          ['Psicólogo', 'Psicóloga', 'Fonoaudiólogo', 'Fonoaudióloga', 'Psicopedagogo', 'Psicopedagoga', 'Terapeuta Ocupacional'].some(x => (func.cargo || '').includes(x));
-                        return isSpecialistCargo || func.cargo?.includes('PIE');
+                        return esEspecialistaPIEOApoyo(func.cargo || cont.funcion_principal, cont.calidad_juridica);
                       });
                       const contractIdsPie = eligibleContractsPie.map(cont => cont.id);
 
