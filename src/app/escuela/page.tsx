@@ -374,6 +374,20 @@ export default function EscuelaDashboard() {
     setReemplazosList(reemps);
     setAllCronoHours(cronosList);
 
+    // Load persisted NEET/NEEP student counts
+    if (typeof window !== 'undefined') {
+      const savedPieStudents = localStorage.getItem(`pie_students_${selectedRbd}`);
+      if (savedPieStudents) {
+        try {
+          setCoursePieStudents(JSON.parse(savedPieStudents));
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        setCoursePieStudents({});
+      }
+    }
+
     // Load financiamientos for this school's contracts into React state for reactivity
     const contratoIds = conts.map(c => c.id);
     const fins = await api.getFinanciamientosPorContratos(contratoIds);
@@ -3674,9 +3688,21 @@ export default function EscuelaDashboard() {
 
                 {/* Course Allocations Matrix */}
                 <div className="bg-white rounded-xl shadow border border-slate-200/60 overflow-hidden">
-                  <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                    <h3 className="text-sm font-bold text-slate-800">🏫 Matriz de Cobertura y Asignación de Horas PIE por Curso</h3>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Ingresa la matrícula NEE de cada curso para evaluar el cumplimiento de la cobertura horaria de apoyos.</p>
+                  <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800">🏫 Matriz de Cobertura y Asignación de Horas PIE por Curso</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Ingresa la matrícula NEE de cada curso para evaluar el cumplimiento de la cobertura horaria de apoyos.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem(`pie_students_${selectedRbd}`, JSON.stringify(coursePieStudents));
+                        alert('✓ Matrícula NEE (NEET y NEEP) guardada correctamente.');
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-4 py-2 rounded-xl border border-emerald-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      💾 Guardar Matrícula PIE
+                    </button>
                   </div>
                   
                   <div className="overflow-x-auto">
