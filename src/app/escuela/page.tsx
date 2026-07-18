@@ -29,6 +29,14 @@ import {
 import { normalizarRun, normalizarRbd } from '@/lib/csvParser';
 import { calcularCargaDocente } from '@/lib/rulesEngine';
 
+const formatDecHours = (hours: number): string => {
+  if (hours <= 0) return "0 h 0 m";
+  const mins = Math.round(hours * 60);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${h} h ${m} m`;
+};
+
 export default function EscuelaDashboard() {
   const router = useRouter();
   const [selectedRbd, setSelectedRbd] = useState<string>('10202');
@@ -4750,19 +4758,19 @@ export default function EscuelaDashboard() {
                             </div>
                             <div className="bg-white p-2 rounded border">
                               <span className="block text-[8px] uppercase text-slate-400 font-semibold">Recreo (Crono)</span>
-                              <strong className="text-pink-700">{recreoAsignadoCrono.toFixed(2)} hrs</strong>
+                              <strong className="text-pink-700">{formatDecHours(recreoAsignadoCrono)}</strong>
                             </div>
                             <div className="bg-white p-2 rounded border">
                               <span className="block text-[8px] uppercase text-slate-400 font-semibold">Planif. / HNL</span>
-                              <strong className="text-slate-700">{noLectivasTotalesRequeridas.toFixed(2)} hrs</strong>
+                              <strong className="text-slate-700">{formatDecHours(noLectivasTotalesRequeridas)}</strong>
                             </div>
                             <div className="bg-white p-2 rounded border">
                               <span className="block text-[8px] uppercase text-slate-400 font-semibold">Horas Usadas</span>
-                              <strong className="text-slate-800">{totalHorasUsadas.toFixed(2)} / {editContHoras} hrs</strong>
+                              <strong className="text-slate-800">{formatDecHours(totalHorasUsadas)} / {formatDecHours(editContHoras)}</strong>
                             </div>
                             <div className={`p-2 rounded border font-bold ${vacantesHrs > 0.05 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`}>
-                              <span className="block text-[8px] uppercase text-slate-450 font-semibold">Horas Vacantes</span>
-                              <strong>{vacantesHrs.toFixed(2)} hrs</strong>
+                              <span className="block text-[8px] uppercase text-slate-455 font-semibold">Horas Vacantes</span>
+                              <strong>{formatDecHours(vacantesHrs)}</strong>
                             </div>
                           </div>
                         </div>

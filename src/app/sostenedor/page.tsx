@@ -24,6 +24,14 @@ import {
 } from '@/lib/types';
 import { validarCargaDocente, conciliarFuncionario, calcularCargaDocente, calcularDesgloseContrato } from '@/lib/rulesEngine';
 
+const formatDecHours = (hours: number): string => {
+  if (hours <= 0) return "0 h 0 m";
+  const mins = Math.round(hours * 60);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${h} h ${m} m`;
+};
+
 export default function SostenedorDashboard() {
   const router = useRouter();
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
@@ -1247,6 +1255,12 @@ export default function SostenedorDashboard() {
               >
                 ⚖️ Conciliación de Horas
               </button>
+              <Link
+                href="/sostenedor/auditor-mixto"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all text-left text-slate-300 hover:bg-white/5 block"
+              >
+                ⚖️ Auditor de Contratos Mixtos
+              </Link>
             </nav>
           </div>
 
@@ -2326,19 +2340,19 @@ export default function SostenedorDashboard() {
                               </div>
                               <div className="bg-white p-2 rounded border">
                                 <span className="block text-[8px] uppercase text-slate-400 font-semibold">Recreo (Crono)</span>
-                                <strong className="text-pink-700">{recreoAsignadoCrono.toFixed(2)} hrs</strong>
+                                <strong className="text-pink-700">{formatDecHours(recreoAsignadoCrono)}</strong>
                               </div>
                               <div className="bg-white p-2 rounded border">
                                 <span className="block text-[8px] uppercase text-slate-400 font-semibold">Planif. / HNL</span>
-                                <strong className="text-slate-700">{noLectivasTotalesRequeridas.toFixed(2)} hrs</strong>
+                                <strong className="text-slate-700">{formatDecHours(noLectivasTotalesRequeridas)}</strong>
                               </div>
                               <div className="bg-white p-2 rounded border">
                                 <span className="block text-[8px] uppercase text-slate-400 font-semibold">Horas Usadas</span>
-                                <strong className="text-slate-800">{totalHorasUsadas.toFixed(2)} / {editContHoras} hrs</strong>
+                                <strong className="text-slate-800">{formatDecHours(totalHorasUsadas)} / {formatDecHours(editContHoras)}</strong>
                               </div>
                               <div className={`p-2 rounded border font-bold ${vacantesHrs > 0.05 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`}>
-                                <span className="block text-[8px] uppercase text-slate-450 font-semibold">Horas Vacantes</span>
-                                <strong>{vacantesHrs.toFixed(2)} hrs</strong>
+                                <span className="block text-[8px] uppercase text-slate-455 font-semibold">Horas Vacantes</span>
+                                <strong>{formatDecHours(vacantesHrs)}</strong>
                               </div>
                             </div>
                           </div>

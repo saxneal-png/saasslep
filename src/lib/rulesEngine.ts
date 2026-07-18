@@ -1,4 +1,5 @@
 import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado, RegistroRemuneracion, Funcionario, CursoDinamico, HorasCronologicasAdicionales } from './types';
+import { calcularJornadaDocente } from './jornadaDocente';
 
 export interface PlanEstudioNivel {
   nivel: string;
@@ -457,21 +458,31 @@ export function calcularDesgloseContrato(
     }
   }
 
-  const docenciaAulaCronologica = parseFloat((horasAula * (config.duracionLectivaMinutos / 60)).toFixed(2));
-  
+  let docenciaAulaCronologica = 0;
   let recreoCalculado = 0;
-  if (config.duracionLectivaMinutos === 45) {
-    recreoCalculado = parseFloat((horasTotales * (3 / 44)).toFixed(2));
-  } else if (config.esParvularia && config.duracionLectivaMinutos === 60) {
-    recreoCalculado = 0; 
+  let horasColaborativas = 0;
+
+  if (config.duracionLectivaMinutos === 45 && !config.esParvularia && horasTotales > 0) {
+    const proporcion = esExcepcion ? '60/40' : '65/35';
+    const result = calcularJornadaDocente(horasTotales, proporcion, horasAula || sumAsigHoras || Math.round(horasTotales * ratioLectivo / 0.75));
+    horasAula = result.aulaAsignadaPed;
+    docenciaAulaCronologica = result.horasLectivasHC;
+    recreoCalculado = result.recreoHC;
+    horasColaborativas = result.hnlHC;
   } else {
-    recreoCalculado = parseFloat((horasAula * (5 / 60)).toFixed(2));
+    docenciaAulaCronologica = parseFloat((horasAula * (config.duracionLectivaMinutos / 60)).toFixed(2));
+    if (config.duracionLectivaMinutos === 45) {
+      recreoCalculado = parseFloat((horasTotales * (3 / 44)).toFixed(2));
+    } else if (config.esParvularia && config.duracionLectivaMinutos === 60) {
+      recreoCalculado = 0; 
+    } else {
+      recreoCalculado = parseFloat((horasAula * (5 / 60)).toFixed(2));
+    }
+    horasColaborativas = parseFloat((horasTotales - docenciaAulaCronologica - recreoCalculado).toFixed(2));
+    horasColaborativas = Math.max(0, horasColaborativas);
   }
 
   const bloquePresencialTotal = parseFloat((docenciaAulaCronologica + recreoCalculado).toFixed(2));
-
-  let horasColaborativas = parseFloat((horasTotales - docenciaAulaCronologica - recreoCalculado).toFixed(2));
-  horasColaborativas = Math.max(0, horasColaborativas);
 
   const esPIE = contrato.calidad_juridica.includes('PIE') || 
                 String(contrato.funcion_principal).toUpperCase().includes('PIE');
@@ -849,6 +860,65 @@ export function validarHardCap44Horas(
     sumaTotal,
     detalle
   };
+}
+
+// Utility to combine multiple DesgloseContrato results for mixed ratio calculations
+/**
+ * Aggregates an array of DesgloseContrato objects into a single summary.
+ * Numeric fields are summed, boolean flags are combined with logical OR.
+ */
+export function combinarDesgloses(desgloses: DesgloseContrato[]): DesgloseContrato {
+  const result: DesgloseContrato = {
+    horasAula: 0,
+    horasColaborativas: 0,
+    horasCronologicasAdicionales: 0,
+    horasDirectivas: 0,
+    horasTecnicoPedagogicas: 0,
+    horasTotales: 0,
+    esParvularia: false,
+    esExcepcion: false,
+    docenciaAulaCronologica: 0,
+    recreoCalculado: 0,
+    bloquePresencialTotal: 0,
+    esEspecial: false,
+    esLenguaje: false,
+    duracionMinutos: 0,
+    topeMaximoDocencia: 0,
+    docenciaEfectivaPIE: 0,
+    esPIE: false
+  };
+  for (const d of desgloses) {
+    result.horasAula += d.horasAula;
+    result.horasColaborativas += d.horasColaborativas;
+    result.horasCronologicasAdicionales += d.horasCronologicasAdicionales;
+    result.horasDirectivas += d.horasDirectivas;
+    result.horasTecnicoPedagogicas += d.horasTecnicoPedagogicas;
+    result.horasTotales += d.horasTotales;
+    result.docenciaAulaCronologica += d.docenciaAulaCronologica;
+    result.recreoCalculado += d.recreoCalculado;
+    result.bloquePresencialTotal += d.bloquePresencialTotal;
+    result.topeMaximoDocencia += d.topeMaximoDocencia;
+    result.docenciaEfectivaPIE += d.docenciaEfectivaPIE;
+    result.esParvularia = result.esParvularia || d.esParvularia;
+    result.esExcepcion = result.esExcepcion || d.esExcepcion;
+    result.esEspecial = result.esEspecial || d.esEspecial;
+    result.esLenguaje = result.esLenguaje || d.esLenguaje;
+    result.esPIE = result.esPIE || d.esPIE;
+    result.duracionMinutos = Math.max(result.duracionMinutos, d.duracionMinutos);
+  }
+  const round = (n: number) => Math.round(n * 100) / 100;
+  result.horasAula = round(result.horasAula);
+  result.horasColaborativas = round(result.horasColaborativas);
+  result.horasCronologicasAdicionales = round(result.horasCronologicasAdicionales);
+  result.horasDirectivas = round(result.horasDirectivas);
+  result.horasTecnicoPedagogicas = round(result.horasTecnicoPedagogicas);
+  result.horasTotales = round(result.horasTotales);
+  result.docenciaAulaCronologica = round(result.docenciaAulaCronologica);
+  result.recreoCalculado = round(result.recreoCalculado);
+  result.bloquePresencialTotal = round(result.bloquePresencialTotal);
+  result.topeMaximoDocencia = round(result.topeMaximoDocencia);
+  result.docenciaEfectivaPIE = round(result.docenciaEfectivaPIE);
+  return result;
 }
 
 export function normalizarRun(run: string): string {
