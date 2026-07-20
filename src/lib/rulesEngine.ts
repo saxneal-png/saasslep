@@ -436,26 +436,24 @@ export function calcularDesgloseContrato(
   let horasAula = contrato.horas_aula;
   let horasTotales = contrato.horas_totales;
 
-  if (horasAula !== undefined && horasAula !== null && horasAula > 0) {
-    if (horasTotales === 0 || contrato.horas_aula !== undefined) {
-      if (config.esParvularia && config.duracionLectivaMinutos === 60) {
-        horasTotales = Math.round(horasAula / ratioLectivo);
-      } else {
-        const factorLectivasHC = config.duracionLectivaMinutos / 60;
-        horasTotales = Math.round((horasAula * factorLectivasHC) / ratioLectivo);
-      }
-    }
-  } else {
-    if (horasTotales > 0) {
+  if (horasTotales && horasTotales > 0) {
+    if (horasAula === undefined || horasAula === null || horasAula === 0) {
       if (config.esParvularia && config.duracionLectivaMinutos === 60) {
         horasAula = Math.round(horasTotales * ratioLectivo);
       } else {
         const factorLectivasHC = config.duracionLectivaMinutos / 60;
         horasAula = Math.round((horasTotales * ratioLectivo) / factorLectivasHC);
       }
-    } else {
-      horasAula = sumAsigHoras;
     }
+  } else if (horasAula !== undefined && horasAula !== null && horasAula > 0) {
+    if (config.esParvularia && config.duracionLectivaMinutos === 60) {
+      horasTotales = Math.round(horasAula / ratioLectivo);
+    } else {
+      const factorLectivasHC = config.duracionLectivaMinutos / 60;
+      horasTotales = Math.round((horasAula * factorLectivasHC) / ratioLectivo);
+    }
+  } else {
+    horasAula = sumAsigHoras;
   }
 
   let docenciaAulaCronologica = 0;
@@ -842,7 +840,7 @@ export function validarHardCap44Horas(
     }
 
     const desglose = calcularDesgloseContrato(c, cursosDinamicos, asignaciones, cronList);
-    const sumContrato = desglose.horasTotales;
+    const sumContrato = (c.horas_totales !== undefined && c.horas_totales !== null && c.horas_totales > 0) ? c.horas_totales : desglose.horasTotales;
     sumaTotal += sumContrato;
     detalle += `RBD ${c.rbd}: Total Contrato = ${sumContrato} hrs (Aula ${desglose.horasAula} ped, Colab ${desglose.horasColaborativas} hrs, Crono ${desglose.horasCronologicasAdicionales} hrs).\n`;
 
