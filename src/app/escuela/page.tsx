@@ -24,7 +24,8 @@ import {
   CARGOS_DOCENTES_LIST,
   ReemplazoDetalle,
   CalidadJuridica,
-  HorasCronologicasAdicionales
+  HorasCronologicasAdicionales,
+  TipoCursoModalidad
 } from '@/lib/types';
 
 import { normalizarRun, normalizarRbd } from '@/lib/csvParser';
@@ -151,6 +152,27 @@ export default function EscuelaDashboard() {
     "5° Básico", "6° Básico", "7° Básico", "8° Básico",
     "1° Medio", "2° Medio", "3° Medio", "4° Medio"
   ];
+  const OPCIONES_COMBINADOS_MINEDUC = [
+    { label: "1° y 2° Básico", niveles: ["1° Básico", "2° Básico"] },
+    { label: "3° y 4° Básico", niveles: ["3° Básico", "4° Básico"] },
+    { label: "5° y 6° Básico", niveles: ["5° Básico", "6° Básico"] },
+    { label: "7° y 8° Básico", niveles: ["7° Básico", "8° Básico"] },
+    { label: "NT1 y NT2 (Parvularia)", niveles: ["NT1", "NT2"] },
+    { label: "Personalizado / Manual", niveles: [] }
+  ];
+  const OPCIONES_MULTIGRADO_RURAL = [
+    { label: "1° a 6° Básico Multigrado", niveles: ["1° Básico", "2° Básico", "3° Básico", "4° Básico", "5° Básico", "6° Básico"] },
+    { label: "1° a 4° Básico Multigrado", niveles: ["1° Básico", "2° Básico", "3° Básico", "4° Básico"] },
+    { label: "5° a 8° Básico Multigrado", niveles: ["5° Básico", "6° Básico", "7° Básico", "8° Básico"] },
+    { label: "1° a 8° Básico Unidocente", niveles: ["1° Básico", "2° Básico", "3° Básico", "4° Básico", "5° Básico", "6° Básico", "7° Básico", "8° Básico"] }
+  ];
+
+  const [tipoCursoModalidad, setTipoCursoModalidad] = useState<TipoCursoModalidad>('Simple');
+  const [selectedCombinadoIndex, setSelectedCombinadoIndex] = useState<number>(0);
+  const [selectedMultigradoIndex, setSelectedMultigradoIndex] = useState<number>(0);
+  const [selectedNivelesMultiples, setSelectedNivelesMultiples] = useState<string[]>(["1° Básico", "2° Básico"]);
+  const [esEscuelaRural, setEsEscuelaRural] = useState<boolean>(false);
+
   const [selectedCursoNorm, setSelectedCursoNorm] = useState(NOMENCLATURA_CURSOS[0]);
   const [cursoSufijo, setCursoSufijo] = useState('A');
   const [selectedPlanIndex, setSelectedPlanIndex] = useState(0);
@@ -637,10 +659,37 @@ export default function EscuelaDashboard() {
     }
   };
 
-  // Create course selecting from strict normalized list
+  // Create course selecting from strict normalized list or Chilean combined/multigrade rural rules
   const handleCreateCurso = async (e: React.FormEvent) => {
     e.preventDefault();
-    const fullCursoNombre = `${selectedCursoNorm} ${cursoSufijo}`.trim();
+
+    let fullCursoNombre = '';
+    let nivelesArr: string[] = [];
+    let baseNivel = '';
+
+    if (tipoCursoModalidad === 'Simple') {
+      fullCursoNombre = `${selectedCursoNorm} ${cursoSufijo}`.trim();
+      nivelesArr = [selectedCursoNorm];
+      baseNivel = selectedCursoNorm;
+    } else if (tipoCursoModalidad === 'Combinado') {
+      const opt = OPCIONES_COMBINADOS_MINEDUC[selectedCombinadoIndex];
+      let labelBase = opt ? opt.label : 'Curso Combinado';
+      if (labelBase === 'Personalizado / Manual') {
+        labelBase = selectedNivelesMultiples.length > 0 ? selectedNivelesMultiples.join(' y ') : 'Curso Combinado';
+        nivelesArr = selectedNivelesMultiples;
+      } else {
+        nivelesArr = opt ? opt.niveles : ['1° Básico', '2° Básico'];
+      }
+      fullCursoNombre = `${labelBase} ${cursoSufijo}`.trim();
+      baseNivel = 'Curso Combinado (' + nivelesArr.join(', ') + ')';
+    } else if (tipoCursoModalidad === 'Multigrado') {
+      const opt = OPCIONES_MULTIGRADO_RURAL[selectedMultigradoIndex];
+      const labelBase = opt ? opt.label : '1° a 6° Básico Multigrado';
+      nivelesArr = opt ? opt.niveles : ['1° Básico', '2° Básico', '3° Básico', '4° Básico', '5° Básico', '6° Básico'];
+      fullCursoNombre = `${labelBase} ${cursoSufijo}`.trim();
+      baseNivel = labelBase;
+    }
+
     if (cursosDinamicos.some(c => c.nombre === fullCursoNombre)) {
       alert('El curso ya se encuentra creado en este establecimiento.');
       return;
@@ -652,13 +701,16 @@ export default function EscuelaDashboard() {
       return;
     }
 
-    const esDe1a4Basico = selectedCursoNorm.includes('1°') || selectedCursoNorm.includes('2°') || selectedCursoNorm.includes('3°') || selectedCursoNorm.includes('4°');
+    const esDe1a4Basico = selectedCursoNorm.includes('1°') || selectedCursoNorm.includes('2°') || selectedCursoNorm.includes('3°') || selectedCursoNorm.includes('4°') || tipoCursoModalidad !== 'Simple';
     const nuevoCurso: CursoDinamico = {
       rbd: selectedRbd,
       nombre: fullCursoNombre,
-      nivel: plan.nivel,
+      nivel: baseNivel || plan.nivel,
       regimen: plan.regimen,
-      // @ts-ignore
+      tipo_curso: tipoCursoModalidad,
+      niveles_combinados: nivelesArr,
+      es_multigrado: tipoCursoModalidad === 'Multigrado',
+      es_rural: esEscuelaRural || tipoCursoModalidad === 'Multigrado',
       concentracion_prioritarios: esDe1a4Basico ? newCursoConcentracion : 0
     };
 
@@ -679,7 +731,7 @@ export default function EscuelaDashboard() {
     await loadAllSchoolData();
     setSelectedCursoForAsig(nuevoCurso.nombre);
     setSelectedCursoPlan(nuevoCurso.nombre);
-    alert('✅ Curso y plan de estudio asociado creados con éxito.');
+    alert(`✅ Curso "${nuevoCurso.nombre}" (${tipoCursoModalidad}) y plan de estudio asociado creados con éxito.`);
   };
 
   const handleDeleteCurso = async (nombre: string) => {
@@ -2701,6 +2753,8 @@ export default function EscuelaDashboard() {
                         const assignedHrs = asignaciones.filter(a => a.curso === c.nombre).reduce((sum, a) => sum + a.horas, 0);
                         const baseOblig = basePlan?.horasObligatorias || 38;
                         const horasInsuficientes = assignedHrs < baseOblig;
+                        const isCombinado = c.tipo_curso === 'Combinado';
+                        const isMultigrado = c.tipo_curso === 'Multigrado' || c.es_multigrado;
                         return (
                           <div key={c.nombre} className="relative group">
                             <button
@@ -2712,9 +2766,24 @@ export default function EscuelaDashboard() {
                                   : 'bg-slate-50 hover:bg-slep-blue hover:text-white border-slate-200 hover:border-slep-blue'
                               }`}
                             >
-                              <span className="text-xl group-hover:scale-110 transition-transform">🏫</span>
+                              <span className="text-xl group-hover:scale-110 transition-transform">
+                                {isMultigrado ? '🏡' : isCombinado ? '🔀' : '🏫'}
+                              </span>
                               <span className={`transition-colors ${horasInsuficientes ? 'text-rose-800' : 'text-slate-800 group-hover:text-white'}`}>{c.nombre}</span>
                               <span className={`text-[9px] font-normal ${horasInsuficientes ? 'text-rose-600' : 'text-slate-400 group-hover:text-white/80'}`}>{c.nivel}</span>
+                              
+                              {/* Chilean Rural / Combined Badges */}
+                              {isCombinado && (
+                                <span className="text-[8px] bg-indigo-600 text-white font-bold px-1.5 py-0.5 rounded uppercase mt-0.5 shadow-sm" title={`Curso Combinado MINEDUC: ${c.niveles_combinados?.join(', ') || ''}`}>
+                                  🔀 Combinado
+                                </span>
+                              )}
+                              {isMultigrado && (
+                                <span className="text-[8px] bg-emerald-700 text-white font-bold px-1.5 py-0.5 rounded uppercase mt-0.5 shadow-sm" title={`Aula Multigrado Rural MINEDUC`}>
+                                  🏡 Multigrado Rural
+                                </span>
+                              )}
+
                               {c.concentracion_prioritarios !== undefined && Number(c.concentracion_prioritarios) >= 80 && (
                                 <span className="text-[8px] bg-amber-500 text-white font-bold px-1.5 py-0.5 rounded uppercase mt-0.5" title={`Alta concentración de alumnos prioritarios (${c.concentracion_prioritarios}%). Ley 20.903: Carga lectiva máxima del 60%.`}>
                                   ✨ Ratio 60/40
@@ -2758,94 +2827,197 @@ export default function EscuelaDashboard() {
                     </div>
                   </div>
 
-                  {/* Select normalized course names and study plan */}
-                  <form onSubmit={handleCreateCurso} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border text-xs">
-                    <div>
-                      <label className="block font-bold text-slate-500 mb-1">Curso Base</label>
-                      <select
-                        className="w-full p-2 bg-white border rounded"
-                        value={selectedCursoNorm}
-                        onChange={(e) => setSelectedCursoNorm(e.target.value)}
-                      >
-                        {NOMENCLATURA_CURSOS.map(c => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
+                  {/* Select normalized course names, combined & multigrade rural modalities and study plan */}
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 text-xs shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-200/80">
+                      <div>
+                        <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                          <span>➕ Crear Nuevo Curso</span>
+                          <span className="text-[10px] font-normal text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">Normativa MINEDUC Chile</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500">Admite cursos simples, cursos combinados y aulas multigrado rurales.</p>
+                      </div>
+
+                      {/* Modalidad Selection Pills */}
+                      <div className="flex items-center bg-slate-200/70 p-1 rounded-xl gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setTipoCursoModalidad('Simple')}
+                          className={`px-3 py-1.5 rounded-lg font-bold transition-all text-xs cursor-pointer ${
+                            tipoCursoModalidad === 'Simple' 
+                              ? 'bg-white text-slep-blue shadow-sm' 
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          🏫 Simple (Monogrado)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTipoCursoModalidad('Combinado')}
+                          className={`px-3 py-1.5 rounded-lg font-bold transition-all text-xs cursor-pointer ${
+                            tipoCursoModalidad === 'Combinado' 
+                              ? 'bg-indigo-600 text-white shadow-sm' 
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          🔀 Curso Combinado
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTipoCursoModalidad('Multigrado')}
+                          className={`px-3 py-1.5 rounded-lg font-bold transition-all text-xs cursor-pointer ${
+                            tipoCursoModalidad === 'Multigrado' 
+                              ? 'bg-emerald-700 text-white shadow-sm' 
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          🏡 Aula Multigrado Rural
+                        </button>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block font-bold text-slate-500 mb-1">Letra / Sufijo (Ej: A, B, HC, TP)</label>
-                      <input 
-                        type="text"
-                        placeholder="Ej: A"
-                        className="w-full p-2 bg-white border rounded font-bold"
-                        value={cursoSufijo}
-                        onChange={(e) => setCursoSufijo(e.target.value)}
-                      />
-                    </div>
+                    <form onSubmit={handleCreateCurso} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      {/* 1. Modalidad Specific Selector */}
+                      {tipoCursoModalidad === 'Simple' && (
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Curso Base</label>
+                          <select
+                            className="w-full p-2.5 bg-white border border-slate-300 rounded-lg shadow-sm font-semibold"
+                            value={selectedCursoNorm}
+                            onChange={(e) => setSelectedCursoNorm(e.target.value)}
+                          >
+                            {NOMENCLATURA_CURSOS.map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
-                    <div>
-                      <label className="block font-bold text-slate-500 mb-1">Asociar Plan de Estudio</label>
-                      <select
-                        className="w-full p-2 bg-white border rounded"
-                        value={selectedPlanIndex}
-                        onChange={(e) => setSelectedPlanIndex(Number(e.target.value))}
-                      >
-                        {planesEstudio.map((p, idx) => {
-                          // Filter to avoid confusion: check if selectedCursoNorm matches plan level
-                          // Selected base course is like: '1° Básico', '2° Medio', etc.
-                          // Plan levels are like: '1° a 4° Básico', '5° a 8° Básico', 'Educación Parvularia (Pre-Kínder y Kínder)', '1° y 2° Medio', '3° y 4° Medio'
-                          const isBasic = selectedCursoNorm.includes('Básico');
-                          const isMed = selectedCursoNorm.includes('Medio');
-                          const isPlanBasic = p.nivel.includes('Básico');
-                          const isPlanMed = p.nivel.includes('Medio');
+                      {tipoCursoModalidad === 'Combinado' && (
+                        <div className="md:col-span-2">
+                          <label className="block font-bold text-indigo-900 mb-1">Combinación de Niveles MINEDUC</label>
+                          <select
+                            className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg shadow-sm font-bold text-indigo-900"
+                            value={selectedCombinadoIndex}
+                            onChange={(e) => setSelectedCombinadoIndex(Number(e.target.value))}
+                          >
+                            {OPCIONES_COMBINADOS_MINEDUC.map((opt, idx) => (
+                              <option key={idx} value={idx}>{opt.label}</option>
+                            ))}
+                          </select>
 
-                          // Custom parsing helper to see if specific number matches
-                          const baseNumMatch = selectedCursoNorm.match(/\d+/);
-                          const baseNum = baseNumMatch ? parseInt(baseNumMatch[0], 10) : 1;
+                          {OPCIONES_COMBINADOS_MINEDUC[selectedCombinadoIndex]?.label === 'Personalizado / Manual' && (
+                            <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+                              <p className="text-[10px] font-bold text-indigo-800 mb-1">Seleccione los niveles a combinar:</p>
+                              <div className="grid grid-cols-3 gap-1">
+                                {NOMENCLATURA_CURSOS.map(c => {
+                                  const isChecked = selectedNivelesMultiples.includes(c);
+                                  return (
+                                    <label key={c} className="flex items-center gap-1 text-[10px] font-medium text-slate-700 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedNivelesMultiples([...selectedNivelesMultiples, c]);
+                                          } else {
+                                            setSelectedNivelesMultiples(selectedNivelesMultiples.filter(x => x !== c));
+                                          }
+                                        }}
+                                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                      />
+                                      {c}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
-                          let matches = false;
-                          if (isBasic && isPlanBasic) {
-                            if (p.nivel.includes('1° a 4°') && baseNum <= 4) matches = true;
-                            if (p.nivel.includes('5° a 8°') && baseNum >= 5) matches = true;
-                            if (!p.nivel.includes('1° a 4°') && !p.nivel.includes('5° a 8°')) matches = true; // fallback
-                          } else if (isMed && isPlanMed) {
-                            if (p.nivel.includes('1° y 2°') && baseNum <= 2) matches = true;
-                            if (p.nivel.includes('3° y 4°') && baseNum >= 3) matches = true;
-                            if (!p.nivel.includes('1° y 2°') && !p.nivel.includes('3° y 4°')) matches = true; // fallback
-                          }
-                          
-                          if (!matches) return null;
+                      {tipoCursoModalidad === 'Multigrado' && (
+                        <div className="md:col-span-2">
+                          <label className="block font-bold text-emerald-900 mb-1">Agrupación Multigrado Rural (MINEDUC)</label>
+                          <select
+                            className="w-full p-2.5 bg-white border border-emerald-300 rounded-lg shadow-sm font-bold text-emerald-900"
+                            value={selectedMultigradoIndex}
+                            onChange={(e) => setSelectedMultigradoIndex(Number(e.target.value))}
+                          >
+                            {OPCIONES_MULTIGRADO_RURAL.map((opt, idx) => (
+                              <option key={idx} value={idx}>{opt.label}</option>
+                            ))}
+                          </select>
+                          <label className="flex items-center gap-2 mt-2 cursor-pointer font-bold text-emerald-800 text-[11px]">
+                            <input
+                              type="checkbox"
+                              checked={esEscuelaRural}
+                              onChange={(e) => setEsEscuelaRural(e.target.checked)}
+                              className="rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            Escuela Rural / Modulo Multigrado Activo
+                          </label>
+                        </div>
+                      )}
 
-                          return (
+                      {/* 2. Letra / Sufijo */}
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Letra / Sufijo (Ej: A, B, Rural)</label>
+                        <input 
+                          type="text"
+                          placeholder="Ej: A"
+                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-extrabold uppercase shadow-sm"
+                          value={cursoSufijo}
+                          onChange={(e) => setCursoSufijo(e.target.value)}
+                        />
+                      </div>
+
+                      {/* 3. Plan de Estudio */}
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Asociar Plan de Estudio Base</label>
+                        <select
+                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg shadow-sm"
+                          value={selectedPlanIndex}
+                          onChange={(e) => setSelectedPlanIndex(Number(e.target.value))}
+                        >
+                          {planesEstudio.map((p, idx) => (
                             <option key={idx} value={idx}>
                               {p.nivel} ({p.regimen}) - {p.horasObligatorias} hrs
                             </option>
-                          );
-                        })}
-                      </select>
-                    </div>
+                          ))}
+                        </select>
+                      </div>
 
-                    {(selectedCursoNorm.includes('1°') || selectedCursoNorm.includes('2°') || selectedCursoNorm.includes('3°') || selectedCursoNorm.includes('4°')) && (
+                      {/* 4. Concentración Prioritarios */}
                       <div>
-                        <label className="block font-bold text-slate-500 mb-1">Concentración Alumnos Prioritarios (%)</label>
+                        <label className="block font-bold text-slate-700 mb-1">Concentración Prioritarios (%)</label>
                         <input 
                           type="number"
                           min="0"
                           max="100"
-                          className="w-full p-2 bg-white border rounded font-bold"
+                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold shadow-sm"
                           value={newCursoConcentracion}
                           onChange={(e) => setNewCursoConcentracion(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
                         />
                       </div>
-                    )}
 
-                    <div className="flex items-end">
-                      <button type="submit" className="w-full bg-slep-blue text-white font-bold py-2 rounded text-xs shadow">
-                        Crear Curso
-                      </button>
-                    </div>
-                  </form>
+                      {/* Submit Button */}
+                      <div className="md:col-span-4 flex justify-end mt-2">
+                        <button 
+                          type="submit" 
+                          className={`font-extrabold px-6 py-2.5 rounded-xl text-white shadow transition-all cursor-pointer flex items-center gap-2 ${
+                            tipoCursoModalidad === 'Combinado' 
+                              ? 'bg-indigo-600 hover:bg-indigo-700' 
+                              : tipoCursoModalidad === 'Multigrado' 
+                              ? 'bg-emerald-700 hover:bg-emerald-800' 
+                              : 'bg-slep-blue hover:bg-slep-blue-hover'
+                          }`}
+                        >
+                          <span>✨ Crear Curso {tipoCursoModalidad === 'Combinado' ? 'Combinado' : tipoCursoModalidad === 'Multigrado' ? 'Multigrado' : ''}</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
 
                   {/* Create Custom Roles (SEP/PIE etc. bound) */}
                   <form onSubmit={handleCreateCargoPersonalizado} className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3 bg-slate-50 p-4 rounded-xl border text-xs">
@@ -5087,7 +5259,19 @@ export default function EscuelaDashboard() {
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
                 <div>
                   <p className="text-[10px] uppercase font-bold text-slate-400">Plan de Estudio y Carga de Docentes</p>
-                  <h3 className="text-lg font-bold text-slate-800">Planificador del Curso: {editingCurso.nombre}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-800">Planificador del Curso: {editingCurso.nombre}</h3>
+                    {editingCurso.tipo_curso === 'Combinado' && (
+                      <span className="text-[10px] bg-indigo-600 text-white font-extrabold px-2 py-0.5 rounded-full shadow-sm">
+                        🔀 Combinado ({editingCurso.niveles_combinados?.join(', ') || ''})
+                      </span>
+                    )}
+                    {(editingCurso.tipo_curso === 'Multigrado' || editingCurso.es_multigrado) && (
+                      <span className="text-[10px] bg-emerald-700 text-white font-extrabold px-2 py-0.5 rounded-full shadow-sm">
+                        🏡 Multigrado Rural
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-500 mt-0.5">{editingCurso.nivel} ({editingCurso.regimen})</p>
                 </div>
                 <button 

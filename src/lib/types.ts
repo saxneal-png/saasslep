@@ -101,11 +101,17 @@ export interface ProfesionalEscuelaAsignada {
   establecimiento_rbd: string;
 }
 
+export type TipoCursoModalidad = 'Simple' | 'Combinado' | 'Multigrado';
+
 export interface CursoDinamico {
   rbd: string;
-  nombre: string; // e.g. '3° Básico A'
+  nombre: string; // e.g. '3° Básico A', '1° y 2° Básico A', '1° a 6° Básico Multigrado A'
   nivel: string; // e.g. '1° a 4° Básico'
   regimen: 'JEC' | 'No JEC';
+  tipo_curso?: TipoCursoModalidad;
+  niveles_combinados?: string[];
+  es_multigrado?: boolean;
+  es_rural?: boolean;
   horasPIE?: number;
   profesor_jefe_run?: string;
   concentracion_prioritarios?: number;

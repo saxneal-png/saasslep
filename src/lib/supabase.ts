@@ -1244,6 +1244,10 @@ export const api = {
       nombre: c.nombre,
       nivel: c.nivel,
       regimen: c.regimen,
+      tipo_curso: c.tipo_curso || c.tipoCurso || 'Simple',
+      niveles_combinados: c.niveles_combinados || c.nivelesCombinados || [],
+      es_multigrado: c.es_multigrado !== undefined ? c.es_multigrado : (c.esMultigrado !== undefined ? c.esMultigrado : false),
+      es_rural: c.es_rural !== undefined ? c.es_rural : (c.esRural !== undefined ? c.esRural : false),
       horasPIE: c.horasPIE !== undefined ? c.horasPIE : c.horas_pie,
       profesor_jefe_run: c.profesorJefeRun !== undefined ? c.profesorJefeRun : c.profesor_jefe_run,
       concentracion_prioritarios: c.concentracion_prioritarios !== undefined ? c.concentracion_prioritarios : c.concentracionPrioritarios,
@@ -1253,12 +1257,16 @@ export const api = {
   },
 
   crearCursoDinamico: async (curso: CursoDinamico): Promise<void> => {
-    // Columns alumnos_neet, alumnos_neep are optional DB columns. If not created in Supabase yet, we fallback gracefully.
+    // Columns alumnos_neet, alumnos_neep, tipo_curso, etc. are saved with fallbacks
     const dbCurso: any = {
       rbd: curso.rbd,
       nombre: curso.nombre,
       nivel: curso.nivel,
       regimen: curso.regimen,
+      tipo_curso: curso.tipo_curso || 'Simple',
+      niveles_combinados: curso.niveles_combinados || [],
+      es_multigrado: curso.es_multigrado ?? false,
+      es_rural: curso.es_rural ?? false,
       horas_pie: curso.horasPIE ?? null,
       profesor_jefe_run: curso.profesor_jefe_run ?? null,
       concentracion_prioritarios: curso.concentracion_prioritarios ?? 0,
@@ -1268,7 +1276,7 @@ export const api = {
 
     let { error } = await supabase.from('cursos_dinamicos').upsert(dbCurso, { onConflict: 'rbd,nombre' });
     if (error && (error.message.includes('column') || error.code === '42703')) {
-      console.warn("⚠️ Columnas alumnos_neet/alumnos_neep no existen en Supabase de producción. Se reintenta sin ellas.");
+      console.warn("⚠️ Columnas avanzadas no existen aún en Supabase de producción. Se reintenta con campos básicos.");
       const dbCursoFallback = {
         rbd: curso.rbd,
         nombre: curso.nombre,
