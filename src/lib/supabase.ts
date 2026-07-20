@@ -828,7 +828,10 @@ export const api = {
     const sanitizedFins = Array.from(finMapBulk.values());
 
     for (let i = 0; i < sanitizedFins.length; i += batchSize) {
-      const batch = sanitizedFins.slice(i, i + batchSize).map(({ id, ...rest }) => rest);
+      const batch = sanitizedFins.slice(i, i + batchSize).map(({ id, ...rest }) => ({
+        ...rest,
+        id: `${rest.contrato_id}-${rest.origen_fondo}`
+      }));
       if (batch.length > 0) {
         const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').insert(batch)));
         if (error) {
@@ -1013,9 +1016,10 @@ export const api = {
       const { error: dErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contrato.id);
       delErr = dErr;
       if (sanitizedFins.length > 0) {
-        // Strip explicit 'id' property so PostgREST pure INSERT is triggered without on_conflict=id header
+        // Ensure non-null unique id for pure INSERT
         const finsForInsert = sanitizedFins.map(({ id, ...rest }) => ({
           ...rest,
+          id: `${contrato.id}-${rest.origen_fondo}`,
           contrato_id: contrato.id
         }));
         const { error } = await supabase.from('financiamientos').insert(finsForInsert);
@@ -1025,9 +1029,10 @@ export const api = {
       const { error: dCrErr } = await supabase.from('horas_cronologicas_adicionales').delete().eq('contrato_id', contrato.id);
       delCrErr = dCrErr;
       if (horasCronologicas.length > 0) {
-        // Strip explicit 'id' property so PostgREST pure INSERT is triggered
-        const horasCronologicasForInsert = horasCronologicas.map(({ id, ...rest }: any) => ({
+        // Ensure non-null unique id for pure INSERT
+        const horasCronologicasForInsert = horasCronologicas.map(({ id, ...rest }: any, idx: number) => ({
           ...rest,
+          id: `${contrato.id}-hc-${idx}`,
           contrato_id: contrato.id
         }));
         const { error } = await supabase.from('horas_cronologicas_adicionales').insert(horasCronologicasForInsert);
