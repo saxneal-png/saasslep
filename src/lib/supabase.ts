@@ -922,21 +922,28 @@ export const api = {
     ];
     const dbContrato: any = {};
     CONTRATO_DB_COLS.forEach(col => {
-      if ((contrato as any)[col] !== undefined) dbContrato[col] = (contrato as any)[col];
+      if ((contrato as any)[col] !== undefined) {
+        let val = (contrato as any)[col];
+        // Clean empty strings for optional fields to prevent 400 Bad Request on DATE / UUID / FK columns
+        if (typeof val === 'string' && val.trim() === '') {
+          val = null;
+        }
+        dbContrato[col] = val;
+      }
     });
 
     const { error: cErr } = await supabase.from('contratos').upsert(dbContrato, { onConflict: 'id' });
     const { error: delErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contrato.id);
     let insErr = null;
     if (sanitizedFins.length > 0) {
-      const { error } = await supabase.from('financiamientos').insert(sanitizedFins);
+      const { error } = await supabase.from('financiamientos').upsert(sanitizedFins, { onConflict: 'id' });
       insErr = error;
     }
 
     const { error: delCrErr } = await supabase.from('horas_cronologicas_adicionales').delete().eq('contrato_id', contrato.id);
     let insCrErr = null;
     if (horasCronologicas.length > 0) {
-      const { error } = await supabase.from('horas_cronologicas_adicionales').insert(horasCronologicas);
+      const { error } = await supabase.from('horas_cronologicas_adicionales').upsert(horasCronologicas, { onConflict: 'id' });
       insCrErr = error;
     }
 
