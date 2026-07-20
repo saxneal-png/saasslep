@@ -809,11 +809,23 @@ export const api = {
       }
     }
 
-    // Apply deterministic IDs based on ${contrato_id}-${origen_fondo}
-    const sanitizedFins = financiamientos.map(f => ({
-      ...f,
-      id: `${f.contrato_id}-${f.origen_fondo}`
-    }));
+    // Apply deterministic IDs based on ${contrato_id}-${origen_fondo} and consolidate duplicates
+    const finMapBulk = new Map<string, FinanciamientoContrato>();
+    financiamientos.forEach(f => {
+      const key = `${f.contrato_id}-${f.origen_fondo}`;
+      const h = Number(f.horas) || 0;
+      const existing = finMapBulk.get(key);
+      if (existing) {
+        existing.horas = Number((existing.horas + h).toFixed(2));
+      } else {
+        finMapBulk.set(key, {
+          ...f,
+          id: key,
+          horas: h
+        });
+      }
+    });
+    const sanitizedFins = Array.from(finMapBulk.values());
 
     for (let i = 0; i < sanitizedFins.length; i += batchSize) {
       const batch = sanitizedFins.slice(i, i + batchSize);
@@ -936,11 +948,26 @@ export const api = {
       throw new Error(`Violación de Tope Laboral: El funcionario excede las 44 horas cronológicas permitidas en el Servicio Local.`);
     }
 
-    // 2. Deterministic ID for financiamientos
-    const sanitizedFins = financiamientos.map(f => ({
-      ...f,
-      id: `${contrato.id}-${f.origen_fondo}`
-    }));
+    // 2. Deterministic & Consolidated IDs for financiamientos
+    const finMap = new Map<string, FinanciamientoContrato>();
+    financiamientos.forEach(f => {
+      const origen = f.origen_fondo;
+      const key = `${contrato.id}-${origen}`;
+      const h = Number(f.horas) || 0;
+      const existing = finMap.get(key);
+      if (existing) {
+        existing.horas = Number((existing.horas + h).toFixed(2));
+      } else {
+        finMap.set(key, {
+          ...f,
+          id: key,
+          contrato_id: contrato.id,
+          origen_fondo: origen,
+          horas: h
+        });
+      }
+    });
+    const sanitizedFins = Array.from(finMap.values());
 
     // Sanitized contract record for DB
     const CONTRATO_DB_COLS = [
