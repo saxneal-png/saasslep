@@ -1044,12 +1044,12 @@ export const api = {
     dbLocal.horasCronologicasAdicionales = cronList;
 
     if (cErr || delErr || insErr || delCrErr || insCrErr) {
-      console.error("❌ DETALLE COMPLETO ERROR SUPABASE CONTRATO:", {
-        message: cErr?.message,
-        details: cErr?.details,
-        code: cErr?.code,
-        hint: cErr?.hint,
-        raw_cErr: cErr
+      console.error("❌ DETALLE COMPLETO ERRORES SUPABASE EN CONTRATO Y FINANCIAMIENTO:", {
+        cErr: cErr ? { message: cErr.message, details: cErr.details, code: cErr.code, hint: cErr.hint, full: cErr } : null,
+        delErr: delErr ? { message: delErr.message, details: delErr.details, code: delErr.code, hint: delErr.hint, full: delErr } : null,
+        insErr: insErr ? { message: insErr.message, details: insErr.details, code: insErr.code, hint: insErr.hint, full: insErr } : null,
+        delCrErr: delCrErr ? { message: delCrErr.message, details: delCrErr.details, code: delCrErr.code, hint: delCrErr.hint, full: delCrErr } : null,
+        insCrErr: insCrErr ? { message: insCrErr.message, details: insCrErr.details, code: insCrErr.code, hint: insCrErr.hint, full: insCrErr } : null
       });
       console.warn("⚠️ Error en Supabase, guardando contrato completo en local:", { cErr, delErr, insErr, delCrErr, insCrErr });
     }
