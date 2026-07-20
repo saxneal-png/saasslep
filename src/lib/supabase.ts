@@ -535,31 +535,45 @@ export const api = {
       const { count, error: countErr } = await countQuery;
       if (countErr) throw countErr;
       const total = count || 0;
-      if (total === 0) return [];
-
-      // 2. Fetch all ranges concurrently
-      const promises = [];
-      const CHUNK_SIZE = 1000;
-      for (let from = 0; from < total; from += CHUNK_SIZE) {
-        const to = from + CHUNK_SIZE - 1;
-        let query = supabase.from('contratos').select('*').range(from, to);
-        if (rbd) {
-          const cleanRbd = rbd.trim();
-          const normRbd = normalizarRbd(cleanRbd);
-          const zeroPadded = cleanRbd.padStart(5, '0');
-          const matches = Array.from(new Set([cleanRbd, normRbd, zeroPadded])).filter(Boolean);
-          query = query.or(matches.map(m => `rbd.eq.${m}`).join(','));
-        }
-        promises.push(query);
-      }
-
-      const results = await Promise.all(promises);
       const allData: Contrato[] = [];
-      for (const res of results) {
-        if (res.error) throw res.error;
-        if (res.data) allData.push(...res.data);
+
+      if (total > 0) {
+        // 2. Fetch all ranges concurrently
+        const promises = [];
+        const CHUNK_SIZE = 1000;
+        for (let from = 0; from < total; from += CHUNK_SIZE) {
+          const to = from + CHUNK_SIZE - 1;
+          let query = supabase.from('contratos').select('*').range(from, to);
+          if (rbd) {
+            const cleanRbd = rbd.trim();
+            const normRbd = normalizarRbd(cleanRbd);
+            const zeroPadded = cleanRbd.padStart(5, '0');
+            const matches = Array.from(new Set([cleanRbd, normRbd, zeroPadded])).filter(Boolean);
+            query = query.or(matches.map(m => `rbd.eq.${m}`).join(','));
+          }
+          promises.push(query);
+        }
+
+        const results = await Promise.all(promises);
+        for (const res of results) {
+          if (res.error) throw res.error;
+          if (res.data) allData.push(...res.data);
+        }
       }
-      return allData;
+
+      // Merge with dbLocal contracts so local-only or un-synced contracts are preserved
+      const localConts = rbd 
+        ? dbLocal.contratos.filter(c => normalizarRbd(String(c.rbd)) === normalizarRbd(String(rbd))) 
+        : dbLocal.contratos;
+
+      const mergedMap = new Map<string, Contrato>();
+      allData.forEach(c => mergedMap.set(c.id, c));
+      localConts.forEach(c => {
+        if (!mergedMap.has(c.id)) {
+          mergedMap.set(c.id, c);
+        }
+      });
+      return Array.from(mergedMap.values());
     } catch (error) {
       const fallback = rbd ? dbLocal.contratos.filter(c => c.rbd === rbd) : dbLocal.contratos;
       return handleFallback(error, fallback, 'contratos');
@@ -570,7 +584,15 @@ export const api = {
     try {
       const { data, error } = await supabase.from('financiamientos').select('*').eq('contrato_id', contratoId);
       if (error) return handleFallback(error, dbLocal.financiamientoContratos.filter(f => f.contrato_id === contratoId), 'financiamientos');
-      return data || [];
+      
+      const dbFins = data || [];
+      const localFins = dbLocal.financiamientoContratos.filter(f => f.contrato_id === contratoId);
+      const mergedMap = new Map<string, FinanciamientoContrato>();
+      dbFins.forEach(f => mergedMap.set(f.id, f));
+      localFins.forEach(f => {
+        if (!mergedMap.has(f.id)) mergedMap.set(f.id, f);
+      });
+      return Array.from(mergedMap.values());
     } catch (err) {
       return handleFallback(err, dbLocal.financiamientoContratos.filter(f => f.contrato_id === contratoId), 'financiamientos');
     }
@@ -581,7 +603,15 @@ export const api = {
     try {
       const { data, error } = await supabase.from('financiamientos').select('*').in('contrato_id', contratoIds);
       if (error) return handleFallback(error, dbLocal.financiamientoContratos.filter(f => contratoIds.includes(f.contrato_id)), 'financiamientos');
-      return data || [];
+
+      const dbFins = data || [];
+      const localFins = dbLocal.financiamientoContratos.filter(f => contratoIds.includes(f.contrato_id));
+      const mergedMap = new Map<string, FinanciamientoContrato>();
+      dbFins.forEach(f => mergedMap.set(f.id, f));
+      localFins.forEach(f => {
+        if (!mergedMap.has(f.id)) mergedMap.set(f.id, f);
+      });
+      return Array.from(mergedMap.values());
     } catch (err) {
       return handleFallback(err, dbLocal.financiamientoContratos.filter(f => contratoIds.includes(f.contrato_id)), 'financiamientos');
     }
@@ -922,29 +952,50 @@ export const api = {
     ];
     const dbContrato: any = {};
     CONTRATO_DB_COLS.forEach(col => {
-      if ((contrato as any)[col] !== undefined) {
-        let val = (contrato as any)[col];
-        // Clean empty strings for optional fields to prevent 400 Bad Request on DATE / UUID / FK columns
-        if (typeof val === 'string' && val.trim() === '') {
-          val = null;
+      let val = (contrato as any)[col];
+      if (val === undefined) return;
+
+      if (typeof val === 'number') {
+        if (isNaN(val)) {
+          val = 0;
         }
-        dbContrato[col] = val;
+      } else if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if (trimmed === '' || trimmed === 'undefined' || trimmed === 'null') {
+          val = null;
+        } else {
+          val = trimmed;
+        }
       }
+      dbContrato[col] = val;
     });
 
-    const { error: cErr } = await supabase.from('contratos').upsert(dbContrato, { onConflict: 'id' });
-    const { error: delErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contrato.id);
-    let insErr = null;
-    if (sanitizedFins.length > 0) {
-      const { error } = await supabase.from('financiamientos').upsert(sanitizedFins, { onConflict: 'id' });
-      insErr = error;
+    if (dbContrato.rbd !== undefined && dbContrato.rbd !== null) {
+      dbContrato.rbd = String(dbContrato.rbd);
     }
 
-    const { error: delCrErr } = await supabase.from('horas_cronologicas_adicionales').delete().eq('contrato_id', contrato.id);
+    const { error: cErr } = await supabase.from('contratos').upsert(dbContrato, { onConflict: 'id' });
+    
+    let delErr = null;
+    let insErr = null;
+    let delCrErr = null;
     let insCrErr = null;
-    if (horasCronologicas.length > 0) {
-      const { error } = await supabase.from('horas_cronologicas_adicionales').upsert(horasCronologicas, { onConflict: 'id' });
-      insCrErr = error;
+
+    // Only attempt children upsert if contract parent succeeded
+    if (!cErr) {
+      const { error: dErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contrato.id);
+      delErr = dErr;
+      if (sanitizedFins.length > 0) {
+        const { error } = await supabase.from('financiamientos').upsert(sanitizedFins, { onConflict: 'id' });
+        insErr = error;
+      }
+
+      const { error: dCrErr } = await supabase.from('horas_cronologicas_adicionales').delete().eq('contrato_id', contrato.id);
+      delCrErr = dCrErr;
+      if (horasCronologicas.length > 0) {
+        const { error } = await supabase.from('horas_cronologicas_adicionales').upsert(horasCronologicas, { onConflict: 'id' });
+        insCrErr = error;
+      }
     }
 
     // Proactively sync local storage
