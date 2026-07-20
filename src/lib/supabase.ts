@@ -1017,6 +1017,13 @@ export const api = {
     dbLocal.horasCronologicasAdicionales = cronList;
 
     if (cErr || delErr || insErr || delCrErr || insCrErr) {
+      console.error("❌ DETALLE COMPLETO ERROR SUPABASE CONTRATO:", {
+        message: cErr?.message,
+        details: cErr?.details,
+        code: cErr?.code,
+        hint: cErr?.hint,
+        raw_cErr: cErr
+      });
       console.warn("⚠️ Error en Supabase, guardando contrato completo en local:", { cErr, delErr, insErr, delCrErr, insCrErr });
     }
   },
@@ -1454,20 +1461,79 @@ export const api = {
     }
   },
 
+  updateContratoEstado: async (
+    contratoId: string, 
+    estado: EstadoContrato, 
+    vinculoTitularId: string | null = null,
+    fechaInicioLicencia?: string | null,
+    fechaTerminoLicencia?: string | null
+  ): Promise<void> => {
+    const updateObj: any = { estado, vinculo_titular_id: vinculoTitularId };
+    if (fechaInicioLicencia !== undefined) updateObj.fecha_inicio_licencia = fechaInicioLicencia;
+    if (fechaTerminoLicencia !== undefined) updateObj.fecha_termino_licencia = fechaTerminoLicencia;
+
+    const { error } = await supabase.from('contratos').update(updateObj).eq('id', contratoId);
+    if (error) {
+      console.warn("⚠️ Error al actualizar estado de contrato en Supabase, actualizando en local:", error);
+    }
+    const idx = dbLocal.contratos.findIndex(c => c.id === contratoId);
+    if (idx >= 0) {
+      dbLocal.contratos[idx] = { 
+        ...dbLocal.contratos[idx], 
+        estado, 
+        vinculo_titular_id: vinculoTitularId,
+        ...(fechaInicioLicencia !== undefined ? { fecha_inicio_licencia: fechaInicioLicencia || undefined } : {}),
+        ...(fechaTerminoLicencia !== undefined ? { fecha_termino_licencia: fechaTerminoLicencia || undefined } : {})
+      };
+      dbLocal.contratos = dbLocal.contratos;
+    }
+  },
+
+  deleteContrato: async (contratoId: string): Promise<void> => {
+    const { error: fErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contratoId);
+    const { error: crErr } = await supabase.from('horas_cronologicas_adicionales').delete().eq('contrato_id', contratoId);
+    const { error: cErr } = await supabase.from('contratos').delete().eq('id', contratoId);
+
+    if (cErr || fErr || crErr) {
+      console.warn("⚠️ Error al eliminar contrato en Supabase, eliminando en local:", { cErr, fErr, crErr });
+    }
+
+    dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== contratoId);
+    dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== contratoId);
+    dbLocal.horasCronologicasAdicionales = dbLocal.horasCronologicasAdicionales.filter(h => h.contrato_id !== contratoId);
+  },
+
   getTareasReemplazo: async (): Promise<TareaReemplazo[]> => {
-    const { data, error } = await supabase.from('tareas_reemplazo').select('*');
-    if (error) return handleFallback(error, dbLocal.tareasReemplazo, 'tareas_reemplazo');
-    return (data || []).map(row => ({
-      id: row.id,
-      rbd: row.rbd,
-      funcionario_titular_run: row.funcionario_titular_run,
-      horas_a_cubrir: Number(row.horas_reemplazo),
-      estado: row.estado,
-      reemplazo_run: row.reemplazo_run || undefined
-    }));
+    try {
+      const { data, error } = await supabase.from('tareas_reemplazo').select('*');
+      if (error) {
+        console.warn("⚠️ Error en Supabase al obtener tareas de reemplazo:", error);
+        return handleFallback(error, dbLocal.tareasReemplazo, 'tareas_reemplazo');
+      }
+      const dbList: TareaReemplazo[] = (data || []).map(row => ({
+        id: row.id,
+        rbd: row.rbd,
+        funcionario_titular_run: row.funcionario_titular_run,
+        horas_a_cubrir: Number(row.horas_reemplazo),
+        estado: row.estado,
+        reemplazo_run: row.reemplazo_run || undefined
+      }));
+      const localList = dbLocal.tareasReemplazo;
+      const mergedMap = new Map<string, TareaReemplazo>();
+      dbList.forEach(t => mergedMap.set(t.id, t));
+      localList.forEach(t => {
+        if (!mergedMap.has(t.id)) mergedMap.set(t.id, t);
+      });
+      return Array.from(mergedMap.values());
+    } catch (err) {
+      return handleFallback(err, dbLocal.tareasReemplazo, 'tareas_reemplazo');
+    }
   },
 
   crearTareaReemplazo: async (tarea: TareaReemplazo): Promise<void> => {
+    const list = [...dbLocal.tareasReemplazo.filter(t => t.id !== tarea.id), tarea];
+    dbLocal.tareasReemplazo = list;
+
     const dbRow = {
       id: tarea.id,
       rbd: tarea.rbd,
@@ -1479,48 +1545,62 @@ export const api = {
       fecha_inicio: (tarea as any).fecha_inicio || new Date().toISOString().split('T')[0],
       fecha_termino: (tarea as any).fecha_termino || new Date().toISOString().split('T')[0]
     };
-    const { error } = await supabase.from('tareas_reemplazo').insert(dbRow);
+    const { error } = await supabase.from('tareas_reemplazo').upsert(dbRow, { onConflict: 'id' });
     if (error) {
       console.warn("⚠️ Error en Supabase, creando tarea de reemplazo en local:", error);
-      const list = [...dbLocal.tareasReemplazo, tarea];
-      dbLocal.tareasReemplazo = list;
     }
   },
 
   resolverTareaReemplazo: async (id: string, reemplazoRun: string): Promise<void> => {
+    const list = dbLocal.tareasReemplazo.map(t => {
+      if (t.id === id) {
+        return { ...t, estado: 'Asignado' as const, reemplazo_run: reemplazoRun };
+      }
+      return t;
+    });
+    dbLocal.tareasReemplazo = list;
+
     const { error } = await supabase.from('tareas_reemplazo').update({ estado: 'Asignado', reemplazo_run: reemplazoRun }).eq('id', id);
     if (error) {
       console.warn("⚠️ Error en Supabase, resolviendo tarea de reemplazo en local:", error);
-      const list = dbLocal.tareasReemplazo.map(t => {
-        if (t.id === id) {
-          return { ...t, estado: 'Asignado' as const, reemplazo_run: reemplazoRun };
-        }
-        return t;
-      });
-      dbLocal.tareasReemplazo = list;
     }
   },
 
   getReemplazosLicencias: async (): Promise<ReemplazoDetalle[]> => {
-    const { data, error } = await supabase.from('reemplazos_licencias').select('*');
-    if (error) return handleFallback(error, dbLocal.reemplazosLicencias, 'reemplazos_licencias');
-    return data || [];
+    try {
+      const { data, error } = await supabase.from('reemplazos_licencias').select('*');
+      if (error) {
+        console.warn("⚠️ Error en Supabase al obtener reemplazos de licencias:", error);
+        return handleFallback(error, dbLocal.reemplazosLicencias, 'reemplazos_licencias');
+      }
+      const dbList: ReemplazoDetalle[] = data || [];
+      const localList = dbLocal.reemplazosLicencias;
+      const mergedMap = new Map<string, ReemplazoDetalle>();
+      dbList.forEach(r => mergedMap.set(r.id, r));
+      localList.forEach(r => {
+        if (!mergedMap.has(r.id)) mergedMap.set(r.id, r);
+      });
+      return Array.from(mergedMap.values());
+    } catch (err) {
+      return handleFallback(err, dbLocal.reemplazosLicencias, 'reemplazos_licencias');
+    }
   },
 
   saveReemplazoLicencia: async (r: ReemplazoDetalle): Promise<void> => {
-    const { error } = await supabase.from('reemplazos_licencias').upsert(r);
+    const list = dbLocal.reemplazosLicencias.filter(x => x.id !== r.id);
+    dbLocal.reemplazosLicencias = [...list, r];
+
+    const { error } = await supabase.from('reemplazos_licencias').upsert(r, { onConflict: 'id' });
     if (error) {
       console.warn("⚠️ Error en Supabase, guardando reemplazo en local:", error);
-      const list = dbLocal.reemplazosLicencias.filter(x => x.id !== r.id);
-      dbLocal.reemplazosLicencias = [...list, r];
     }
   },
 
   deleteReemplazoLicencia: async (id: string): Promise<void> => {
+    dbLocal.reemplazosLicencias = dbLocal.reemplazosLicencias.filter(r => r.id !== id);
     const { error } = await supabase.from('reemplazos_licencias').delete().eq('id', id);
     if (error) {
       console.warn("⚠️ Error en Supabase, eliminando reemplazo en local:", error);
-      dbLocal.reemplazosLicencias = dbLocal.reemplazosLicencias.filter(r => r.id !== id);
     }
   },
 

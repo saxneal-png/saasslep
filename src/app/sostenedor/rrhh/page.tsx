@@ -610,7 +610,7 @@ export default function RRHHPage() {
         estamento: 'Docente',
         cargo: 'Docente de Aula'
       };
-      dbLocal.funcionarios = [...dbLocal.funcionarios, nuevoFunc];
+      await api.upsertFuncionario(nuevoFunc);
 
       // Also create a placeholder replacement contract
       const nuevoCont: Contrato = {
@@ -623,7 +623,7 @@ export default function RRHHPage() {
         horas_totales: reemplazoHoras,
         vinculo_titular_id: titularContrato.id
       };
-      dbLocal.contratos = [...dbLocal.contratos, nuevoCont];
+      await api.upsertContratoCompleto(nuevoCont, []);
     }
 
     const nuevoReemplazo: ReemplazoDetalle = {
@@ -633,7 +633,8 @@ export default function RRHHPage() {
       rbd: titularContrato.rbd,
       horas: reemplazoHoras,
       fecha_inicio: reemplazoFInicio,
-      fecha_termino: reemplazoFTermino
+      fecha_termino: reemplazoFTermino,
+      validado_por_director: false
     };
 
     await api.saveReemplazoLicencia(nuevoReemplazo);
