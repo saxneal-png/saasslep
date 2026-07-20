@@ -1498,47 +1498,6 @@ export const api = {
     }
   },
 
-  updateContratoEstado: async (
-    contratoId: string, 
-    estado: EstadoContrato, 
-    vinculoTitularId: string | null = null,
-    fechaInicioLicencia?: string | null,
-    fechaTerminoLicencia?: string | null
-  ): Promise<void> => {
-    const updateObj: any = { estado, vinculo_titular_id: vinculoTitularId };
-    if (fechaInicioLicencia !== undefined) updateObj.fecha_inicio_licencia = fechaInicioLicencia;
-    if (fechaTerminoLicencia !== undefined) updateObj.fecha_termino_licencia = fechaTerminoLicencia;
-
-    const { error } = await supabase.from('contratos').update(updateObj).eq('id', contratoId);
-    if (error) {
-      console.warn("⚠️ Error al actualizar estado de contrato en Supabase, actualizando en local:", error);
-    }
-    const idx = dbLocal.contratos.findIndex(c => c.id === contratoId);
-    if (idx >= 0) {
-      dbLocal.contratos[idx] = { 
-        ...dbLocal.contratos[idx], 
-        estado, 
-        vinculo_titular_id: vinculoTitularId,
-        ...(fechaInicioLicencia !== undefined ? { fecha_inicio_licencia: fechaInicioLicencia || undefined } : {}),
-        ...(fechaTerminoLicencia !== undefined ? { fecha_termino_licencia: fechaTerminoLicencia || undefined } : {})
-      };
-      dbLocal.contratos = dbLocal.contratos;
-    }
-  },
-
-  deleteContrato: async (contratoId: string): Promise<void> => {
-    const { error: fErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contratoId);
-    const { error: crErr } = await supabase.from('horas_cronologicas_adicionales').delete().eq('contrato_id', contratoId);
-    const { error: cErr } = await supabase.from('contratos').delete().eq('id', contratoId);
-
-    if (cErr || fErr || crErr) {
-      console.warn("⚠️ Error al eliminar contrato en Supabase, eliminando en local:", { cErr, fErr, crErr });
-    }
-
-    dbLocal.contratos = dbLocal.contratos.filter(c => c.id !== contratoId);
-    dbLocal.financiamientoContratos = dbLocal.financiamientoContratos.filter(f => f.contrato_id !== contratoId);
-    dbLocal.horasCronologicasAdicionales = dbLocal.horasCronologicasAdicionales.filter(h => h.contrato_id !== contratoId);
-  },
 
   getTareasReemplazo: async (): Promise<TareaReemplazo[]> => {
     try {
