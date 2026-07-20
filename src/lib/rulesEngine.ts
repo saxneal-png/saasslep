@@ -517,7 +517,7 @@ export function calcularDesgloseContrato(
   const esPIE = contrato.calidad_juridica.includes('PIE') || 
                 String(contrato.funcion_principal).toUpperCase().includes('PIE');
 
-  const docenciaEfectivaPIE = esPIE ? docenciaAulaCronologica + 3 : docenciaAulaCronologica;
+  const docenciaEfectivaPIE = docenciaAulaCronologica;
 
   const cronList = (contrato.horas_cronologicas_adicionales || []).length > 0
     ? (contrato.horas_cronologicas_adicionales || [])
@@ -844,11 +844,11 @@ export function validarHardCap44Horas(
     sumaTotal += sumContrato;
     detalle += `RBD ${c.rbd}: Total Contrato = ${sumContrato} hrs (Aula ${desglose.horasAula} ped, Colab ${desglose.horasColaborativas} hrs, Crono ${desglose.horasCronologicasAdicionales} hrs).\n`;
 
-    // 1. Validate PIE limits on Docencia de Aula Efectiva
-    const docenciaEfectiva = desglose.esPIE ? desglose.docenciaEfectivaPIE : desglose.docenciaAulaCronologica;
+    // 1. Validate limits on Docencia de Aula Efectiva
+    const docenciaEfectiva = desglose.docenciaAulaCronologica;
     if (docenciaEfectiva > desglose.topeMaximoDocencia + 0.005) {
       valido = false;
-      errores.push(`[RBD ${c.rbd}] Docencia de Aula Efectiva (${docenciaEfectiva} hrs cronológicas, incluyendo 3 hrs PIE si aplica) excede el tope máximo legal de ${desglose.topeMaximoDocencia} hrs.`);
+      errores.push(`[RBD ${c.rbd}] Docencia de Aula Efectiva (${docenciaEfectiva} hrs cronológicas) excede el tope máximo legal de ${desglose.topeMaximoDocencia} hrs.`);
     }
 
     // 2. Validate Distribution (between 5 and 6 days)
