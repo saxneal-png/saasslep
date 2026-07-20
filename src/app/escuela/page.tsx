@@ -3349,10 +3349,12 @@ export default function EscuelaDashboard() {
                         <th className="p-3 text-center">Calidad Jurídica</th>
                         <th className="p-3 text-center">Horas Contrato</th>
                         <th className="p-3 text-center">Aula</th>
-                        <th className="p-3 text-center">{subTabDotacion === 'docentes' ? 'PIE Titular' : 'PIE Indefinido'}</th>
-                        <th className="p-3 text-center">{subTabDotacion === 'docentes' ? 'PIE Contrata' : 'PIE Plazo Fijo'}</th>
+                        <th className="p-3 text-center">Reg. Titular</th>
+                        <th className="p-3 text-center">Reg. Contrata</th>
                         <th className="p-3 text-center">{subTabDotacion === 'docentes' ? 'SEP Titular' : 'SEP Indefinido'}</th>
                         <th className="p-3 text-center">{subTabDotacion === 'docentes' ? 'SEP Contrata' : 'SEP Plazo Fijo'}</th>
+                        <th className="p-3 text-center">{subTabDotacion === 'docentes' ? 'PIE Titular' : 'PIE Indefinido'}</th>
+                        <th className="p-3 text-center">{subTabDotacion === 'docentes' ? 'PIE Contrata' : 'PIE Plazo Fijo'}</th>
                         <th className="p-3 text-center">Directivas</th>
                         <th className="p-3 text-center">Técnicas</th>
                         <th className="p-3 text-center">Otras Func.</th>
@@ -3369,52 +3371,62 @@ export default function EscuelaDashboard() {
                           return f?.estamento === targetEst;
                         });
 
-                        const sortedConts = [...schoolConts].sort((a, b) => {
-                          const fA = funcionarios.find(func => func.run === a.funcionario_run);
-                          const fB = funcionarios.find(func => func.run === b.funcionario_run);
-                          return (fA?.nombre || '').localeCompare(fB?.nombre || '');
-                        });
+                        // Group contracts by unique official RUN to avoid duplicated rows
+                        const uniqueRuns = Array.from(new Set(schoolConts.map(c => c.funcionario_run)));
+                        const uniqueFuncs = uniqueRuns
+                          .map(run => funcionarios.find(f => f.run === run))
+                          .filter((f): f is Funcionario => !!f)
+                          .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
-                        if (sortedConts.length === 0) {
+                        if (uniqueFuncs.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={15} className="p-8 text-center text-slate-400 italic">
+                              <td colSpan={17} className="p-8 text-center text-slate-400 italic">
                                 No se registran contratos en el estamento de {subTabDotacion === 'docentes' ? 'Docentes' : 'Asistentes de la Educación'} para este colegio.
                               </td>
                             </tr>
                           );
                         }
 
-                        return sortedConts.map(c => {
-                          const f = funcionarios.find(func => func.run === c.funcionario_run);
-                          if (!f) return null;
-                          const cAsigs = asignaciones.filter(a => a.contrato_id === c.id);
+                        return uniqueFuncs.map(f => {
+                          const userConts = schoolConts.filter(c => c.funcionario_run === f.run);
+                          const userContIds = userConts.map(c => c.id);
+                          const cAsigs = asignaciones.filter(a => userContIds.includes(a.contrato_id));
                           const pedagogicas = cAsigs.reduce((sum, a) => sum + a.horas, 0);
 
-                          const pieHrs = financiamientosEscuela
-                            .filter(fc => fc.contrato_id === c.id && fc.origen_fondo === 'PIE')
-                            .reduce((sum, fc) => sum + fc.horas, 0);
-                          const sepHrs = financiamientosEscuela
-                            .filter(fc => fc.contrato_id === c.id && fc.origen_fondo === 'SEP')
-                            .reduce((sum, fc) => sum + fc.horas, 0);
-                          const dirHrs = c.horas_directivas || 0;
-                          const tecHrs = c.horas_tecnico_pedagogicas || 0;
+                          let regTit = 0, regCon = 0;
+                          let sepTit = 0, sepCon = 0;
+                          let pieTit = 0, pieCon = 0;
+
+                          userConts.forEach(c => {
+                            const isTitular = c.calidad_juridica === 'Titular' || c.calidad_juridica === 'Indefinido';
+                            const cFins = financiamientosEscuela.filter(fc => fc.contrato_id === c.id);
+                            
+                            cFins.forEach(fc => {
+                              if (fc.origen_fondo === 'Subvención Regular') {
+                                if (isTitular) regTit += fc.horas; else regCon += fc.horas;
+                              } else if (fc.origen_fondo === 'SEP') {
+                                if (isTitular) sepTit += fc.horas; else sepCon += fc.horas;
+                              } else if (fc.origen_fondo === 'PIE') {
+                                if (isTitular) pieTit += fc.horas; else pieCon += fc.horas;
+                              }
+                            });
+                          });
+
+                          const totalHoras = userConts.reduce((sum, c) => sum + (c.horas_totales || 0), 0);
+                          const dirHrs = userConts.reduce((sum, c) => sum + (c.horas_directivas || 0), 0);
+                          const tecHrs = userConts.reduce((sum, c) => sum + (c.horas_tecnico_pedagogicas || 0), 0);
                           const otrasFuncionesHrs = cargosPersonalizados
-                            .filter(cp => cp.funcionario_run === c.funcionario_run)
+                            .filter(cp => cp.funcionario_run === f.run)
                             .reduce((sum, cp) => sum + cp.horas, 0);
 
-                          const vacantesHrs = Math.max(0, c.horas_totales - pedagogicas - dirHrs - tecHrs - otrasFuncionesHrs);
+                          const vacantesHrs = Math.max(0, totalHoras - pedagogicas - dirHrs - tecHrs - otrasFuncionesHrs);
                           const coursesString = cAsigs.map(a => `${a.curso} (${a.asignatura})`).join(', ');
                           const isDirector = f.cargo?.toUpperCase() === 'DIRECTOR';
-
-                          const isTitularOrIndefinido = c.calidad_juridica === 'Titular' || c.calidad_juridica === 'Indefinido';
-                          const pieTit = isTitularOrIndefinido ? pieHrs : 0;
-                          const pieCon = !isTitularOrIndefinido ? pieHrs : 0;
-                          const sepTit = isTitularOrIndefinido ? sepHrs : 0;
-                          const sepCon = !isTitularOrIndefinido ? sepHrs : 0;
+                          const calidadesList = Array.from(new Set(userConts.map(c => c.calidad_juridica))).join(', ');
 
                           return (
-                            <tr key={c.id} className={`hover:bg-slate-50 ${isDirector ? 'bg-rose-50/20 font-bold' : ''}`}>
+                            <tr key={f.run} className={`hover:bg-slate-50 ${isDirector ? 'bg-rose-50/20 font-bold' : ''}`}>
                               <td className="p-3 pl-4">
                                 <button
                                   onClick={() => handleOpenEditFuncionario(f)}
@@ -3427,27 +3439,29 @@ export default function EscuelaDashboard() {
                               <td className="p-3 text-slate-700 font-medium">{f.cargo || '--'}</td>
                               <td className="p-3 text-slate-500 font-medium">{f.titulo || 'No registrado'}</td>
                               <td className="p-3 text-center">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  isTitularOrIndefinido
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-250/60'
-                                    : 'bg-amber-100 text-amber-800 border border-amber-250/60'
-                                }`}>
-                                  {c.calidad_juridica || (subTabDotacion === 'docentes' ? 'A contrata' : 'Plazo fijo')}
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                  {calidadesList || (subTabDotacion === 'docentes' ? 'A contrata' : 'Plazo fijo')}
                                 </span>
                               </td>
-                              <td className="p-3 text-center font-bold text-slate-800">{c.horas_totales} hrs</td>
+                              <td className="p-3 text-center font-bold text-slate-800">{totalHoras} hrs</td>
                               <td className="p-3 text-center font-bold text-slep-blue">{pedagogicas} hrs</td>
                               <td className="p-3 text-center">
-                                {pieTit > 0 ? <span className="text-blue-600 font-bold">{pieTit} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                                {regTit > 0 ? <span className="text-slate-800 font-bold">{regTit} hrs</span> : <span className="text-slate-400">0 hrs</span>}
                               </td>
                               <td className="p-3 text-center">
-                                {pieCon > 0 ? <span className="text-blue-600 font-bold">{pieCon} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                                {regCon > 0 ? <span className="text-slate-800 font-bold">{regCon} hrs</span> : <span className="text-slate-400">0 hrs</span>}
                               </td>
                               <td className="p-3 text-center">
                                 {sepTit > 0 ? <span className="text-emerald-600 font-bold">{sepTit} hrs</span> : <span className="text-slate-400">0 hrs</span>}
                               </td>
                               <td className="p-3 text-center">
                                 {sepCon > 0 ? <span className="text-emerald-600 font-bold">{sepCon} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                              </td>
+                              <td className="p-3 text-center">
+                                {pieTit > 0 ? <span className="text-blue-600 font-bold">{pieTit} hrs</span> : <span className="text-slate-400">0 hrs</span>}
+                              </td>
+                              <td className="p-3 text-center">
+                                {pieCon > 0 ? <span className="text-blue-600 font-bold">{pieCon} hrs</span> : <span className="text-slate-400">0 hrs</span>}
                               </td>
                               <td className="p-3 text-center text-slate-500">{dirHrs} hrs</td>
                               <td className="p-3 text-center text-slate-500">{tecHrs} hrs</td>
@@ -3458,11 +3472,11 @@ export default function EscuelaDashboard() {
                                     {vacantesHrs.toFixed(1)} hrs
                                   </span>
                                 ) : (
-                                  <span className="text-slate-400">0 hrs</span>
+                                  <span className="text-slate-400 font-mono text-[10px]">0 hrs</span>
                                 )}
                               </td>
-                              <td className="p-3 text-slate-600 max-w-[200px] truncate" title={coursesString}>
-                                {coursesString || <span className="text-slate-400 italic">Ninguno</span>}
+                              <td className="p-3 text-slate-600 max-w-xs truncate" title={coursesString}>
+                                {coursesString || <span className="text-slate-300 italic">Sin clases asignadas</span>}
                               </td>
                             </tr>
                           );
