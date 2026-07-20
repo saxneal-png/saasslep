@@ -830,7 +830,7 @@ export const api = {
     for (let i = 0; i < sanitizedFins.length; i += batchSize) {
       const batch = sanitizedFins.slice(i, i + batchSize);
       if (batch.length > 0) {
-        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').upsert(batch, { onConflict: 'id' })));
+        const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').insert(batch)));
         if (error) {
           console.error("❌ ERROR PROFUNDO EN SUPABASE UPSERT FINANCIAMIENTOS:", error.message, JSON.stringify(error));
           throw new Error(`Error al guardar financiamientos: ${error.message}`);
@@ -1008,19 +1008,19 @@ export const api = {
     let delCrErr = null;
     let insCrErr = null;
 
-    // Only attempt children upsert if contract parent succeeded
+    // Only attempt children insert if contract parent succeeded
     if (!cErr) {
       const { error: dErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contrato.id);
       delErr = dErr;
       if (sanitizedFins.length > 0) {
-        const { error } = await supabase.from('financiamientos').upsert(sanitizedFins, { onConflict: 'id' });
+        const { error } = await supabase.from('financiamientos').insert(sanitizedFins);
         insErr = error;
       }
 
       const { error: dCrErr } = await supabase.from('horas_cronologicas_adicionales').delete().eq('contrato_id', contrato.id);
       delCrErr = dCrErr;
       if (horasCronologicas.length > 0) {
-        const { error } = await supabase.from('horas_cronologicas_adicionales').upsert(horasCronologicas, { onConflict: 'id' });
+        const { error } = await supabase.from('horas_cronologicas_adicionales').insert(horasCronologicas);
         insCrErr = error;
       }
     }
