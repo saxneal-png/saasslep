@@ -828,7 +828,7 @@ export const api = {
     const sanitizedFins = Array.from(finMapBulk.values());
 
     for (let i = 0; i < sanitizedFins.length; i += batchSize) {
-      const batch = sanitizedFins.slice(i, i + batchSize);
+      const batch = sanitizedFins.slice(i, i + batchSize).map(({ id, ...rest }) => rest);
       if (batch.length > 0) {
         const { error } = await withTimeout<any>(Promise.resolve(supabase.from('financiamientos').insert(batch)));
         if (error) {
@@ -1013,14 +1013,24 @@ export const api = {
       const { error: dErr } = await supabase.from('financiamientos').delete().eq('contrato_id', contrato.id);
       delErr = dErr;
       if (sanitizedFins.length > 0) {
-        const { error } = await supabase.from('financiamientos').insert(sanitizedFins);
+        // Strip explicit 'id' property so PostgREST pure INSERT is triggered without on_conflict=id header
+        const finsForInsert = sanitizedFins.map(({ id, ...rest }) => ({
+          ...rest,
+          contrato_id: contrato.id
+        }));
+        const { error } = await supabase.from('financiamientos').insert(finsForInsert);
         insErr = error;
       }
 
       const { error: dCrErr } = await supabase.from('horas_cronologicas_adicionales').delete().eq('contrato_id', contrato.id);
       delCrErr = dCrErr;
       if (horasCronologicas.length > 0) {
-        const { error } = await supabase.from('horas_cronologicas_adicionales').insert(horasCronologicas);
+        // Strip explicit 'id' property so PostgREST pure INSERT is triggered
+        const horasCronologicasForInsert = horasCronologicas.map(({ id, ...rest }: any) => ({
+          ...rest,
+          contrato_id: contrato.id
+        }));
+        const { error } = await supabase.from('horas_cronologicas_adicionales').insert(horasCronologicasForInsert);
         insCrErr = error;
       }
     }
