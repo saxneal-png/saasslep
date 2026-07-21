@@ -71,6 +71,7 @@ export interface FinanciamientoContrato {
   contrato_id: string;
   origen_fondo: OrigenFondo;
   horas: number;
+  codigo_accion_pme?: string;
 }
 
 export interface AsignacionAula {
@@ -79,6 +80,27 @@ export interface AsignacionAula {
   curso: string; // e.g. '3° Básico A'
   asignatura: string; // e.g. 'Matemática'
   horas: number;
+  es_co_ensenanza?: boolean;
+  es_apoyo_pie?: boolean;
+  codigo_accion_pme?: string;
+}
+
+export interface BrechaCargoVacante {
+  id: string;
+  rbd: string;
+  nombre_cargo: string;
+  estamento: EstamentoType;
+  horas_requeridas: number;
+  tipo_necesidad: 'Taller' | 'Reforzamiento' | 'Apoyo Pedagógico' | 'Cargo Especial' | 'Otro';
+  justificacion: string;
+  estado: 'Pendiente Sostenedor' | 'Aprobado' | 'Rechazado';
+  es_propuesta_excepcional: boolean;
+  profesional_externo?: {
+    run: string;
+    nombre: string;
+    titulo: string;
+  };
+  fecha_creacion: string;
 }
 
 export interface AlertaConciliacion {
@@ -86,11 +108,22 @@ export interface AlertaConciliacion {
   run: string;
   nombre_funcionario: string;
   rbd: string;
-  tipo: 'descalce_horas' | 'discrepancia_funcion' | 'infraccion_ley_20903' | 'sobrecarga_horas' | 'descalce_pie' | 'rbd_vacio';
+  tipo: 'descalce_horas' | 'discrepancia_funcion' | 'infraccion_ley_20903' | 'sobrecarga_horas' | 'descalce_pie' | 'rbd_vacio' | 'cargo_vacante_excepcional' | 'financiamiento_irregular_pie_sep';
   nivel_alerta: 'critica' | 'advertencia';
   mensaje: string;
   detalle: string;
   resuelta: boolean;
+  solicitud_vacante_id?: string;
+  datos_propuesta_excepcional?: {
+    nombre_cargo: string;
+    horas_solicitadas: number;
+    justificacion: string;
+    run_externo?: string;
+    nombre_externo?: string;
+    titulo_externo?: string;
+    es_propuesta_excepcional: boolean;
+    estado_solicitud: 'Pendiente Sostenedor' | 'Aprobado' | 'Rechazado';
+  };
 }
 
 // RBAC 3-roles definitions

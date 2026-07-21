@@ -1,4 +1,4 @@
-import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado, RegistroRemuneracion, Funcionario, CursoDinamico, HorasCronologicasAdicionales } from './types';
+import { Establecimiento, Contrato, AsignacionAula, CargoPersonalizado, RegistroRemuneracion, Funcionario, CursoDinamico, HorasCronologicasAdicionales, FinanciamientoContrato } from './types';
 import { calcularJornadaDocente, calcularJornadaDocenteMixta } from './jornadaDocente';
 
 export interface PlanEstudioNivel {
@@ -954,4 +954,90 @@ export function combinarDesgloses(desgloses: DesgloseContrato[]): DesgloseContra
 export function normalizarRun(run: string): string {
   if (!run) return '';
   return run.trim().toUpperCase().replace(/\./g, '').replace(/[^0-9K]/g, '');
+}
+
+export interface AuditFinanciamientoIrregularResult {
+  contratoId: string;
+  funcionarioRun: string;
+  funcionarioNombre: string;
+  rbd: string;
+  origenFondo: 'PIE' | 'SEP';
+  horasImputadas: number;
+  nivelAlerta: 'critica' | 'advertencia';
+  mensaje: string;
+  detalle: string;
+}
+
+/**
+ * Audits contracts with sensitive funding sources (PIE / SEP) assigned to standard classroom subjects without proper tags or PME action codes.
+ */
+export function auditarFinanciamientoIrregular(
+  contratos: Contrato[],
+  financiamientos: FinanciamientoContrato[],
+  asignaciones: AsignacionAula[],
+  funcionarios: Funcionario[]
+): AuditFinanciamientoIrregularResult[] {
+  const resultados: AuditFinanciamientoIrregularResult[] = [];
+
+  contratos.forEach(c => {
+    const f = funcionarios.find(fn => normalizarRun(fn.run) === normalizarRun(c.funcionario_run));
+    const funcNombre = f ? f.nombre : `RUN ${c.funcionario_run}`;
+
+    const cFins = financiamientos.filter(fi => fi.contrato_id === c.id);
+    const cAsigs = asignaciones.filter(a => a.contrato_id === c.id);
+
+    const horasPIE = cFins.filter(fi => fi.origen_fondo === 'PIE').reduce((s, fi) => s + fi.horas, 0);
+    const horasSEP = cFins.filter(fi => fi.origen_fondo === 'SEP').reduce((s, fi) => s + fi.horas, 0);
+
+    // 1. Audit PIE
+    if (horasPIE > 0) {
+      const tieneRespaldoPIE = cAsigs.some(a => 
+        a.es_co_ensenanza || 
+        a.es_apoyo_pie || 
+        (a.codigo_accion_pme && a.codigo_accion_pme.trim().length > 0) ||
+        a.asignatura.toLowerCase().includes('pie') || 
+        a.asignatura.toLowerCase().includes('apoyo') || 
+        a.asignatura.toLowerCase().includes('diferencial')
+      );
+
+      const cargoLower = (c.funcion_principal || '').toLowerCase();
+      const esDocenteEspecial = cargoLower.includes('diferencial') || cargoLower.includes('pie') || cargoLower.includes('psicopedagog');
+
+      if (!tieneRespaldoPIE && !esDocenteEspecial && cAsigs.length > 0) {
+        resultados.push({
+          contratoId: c.id,
+          funcionarioRun: c.funcionario_run,
+          funcionarioNombre: funcNombre,
+          rbd: c.rbd,
+          origenFondo: 'PIE',
+          horasImputadas: horasPIE,
+          nivelAlerta: 'critica',
+          mensaje: `⚠️ Imputación PIE Irregular: Docente registra ${horasPIE} hrs PIE destinadas a Plan Común sin acreditar Co-Enseñanza o Apoyo PIE.`,
+          detalle: `El contrato de ${funcNombre} en RBD ${c.rbd} registra ${horasPIE} hrs con fondo PIE, pero sus clases asignadas (${cAsigs.map(a => a.asignatura).join(', ')}) son del Plan Común general sin etiquetar Co-Enseñanza ni Apoyo Especialista.`
+        });
+      }
+    }
+
+    // 2. Audit SEP
+    if (horasSEP > 0) {
+      const tieneAccionPME = cFins.some(fi => fi.origen_fondo === 'SEP' && fi.codigo_accion_pme && fi.codigo_accion_pme.trim().length > 0) ||
+        cAsigs.some(a => (a.codigo_accion_pme && a.codigo_accion_pme.trim().length > 0) || a.asignatura.toLowerCase().includes('sep') || a.asignatura.toLowerCase().includes('reforzamiento') || a.asignatura.toLowerCase().includes('taller'));
+
+      if (!tieneAccionPME && cAsigs.length > 0) {
+        resultados.push({
+          contratoId: c.id,
+          funcionarioRun: c.funcionario_run,
+          funcionarioNombre: funcNombre,
+          rbd: c.rbd,
+          origenFondo: 'SEP',
+          horasImputadas: horasSEP,
+          nivelAlerta: 'advertencia',
+          mensaje: `⚠️ Subvención SEP Irregular: Contrato de ${horasSEP} hrs SEP imputado a Plan Común sin Código de Acción PME.`,
+          detalle: `El docente ${funcNombre} en RBD ${c.rbd} posee ${horasSEP} hrs financiadas por Ley SEP, pero sus clases asignadas no están vinculadas a ningún Código de Acción PME o taller/reforzamiento focalizado.`
+        });
+      }
+    }
+  });
+
+  return resultados;
 }

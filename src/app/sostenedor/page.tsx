@@ -20,9 +20,10 @@ import {
   OrigenFondo,
   RegistroRemuneracion,
   CursoDinamico,
-  AsignaturaDinamica
+  AsignaturaDinamica,
+  BrechaCargoVacante
 } from '@/lib/types';
-import { validarCargaDocente, conciliarFuncionario, calcularCargaDocente, calcularDesgloseContrato } from '@/lib/rulesEngine';
+import { validarCargaDocente, conciliarFuncionario, calcularCargaDocente, calcularDesgloseContrato, auditarFinanciamientoIrregular } from '@/lib/rulesEngine';
 
 const formatDecHours = (hours: number): string => {
   if (hours <= 0) return "0 h 0 m";
@@ -3039,14 +3040,213 @@ export default function SostenedorDashboard() {
 
       {activeTab === 'conciliacion' && (
         <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full text-xs">
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <h2 className="text-base font-bold text-slate-800">⚖️ Conciliación de Carga Horaria Docente (Ley 20.903)</h2>
-            <p className="text-xs text-slate-500 mt-1 font-medium">
-              Listado de docentes con horas de contrato vacantes (horas sin destinar a aula ni a planificación proporcional).
-            </p>
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-800">⚖️ Consola de Conciliación, Auditoría Subvenciones y Solicitudes P02</h2>
+              <p className="text-xs text-slate-500 mt-1 font-medium">
+                Auditoría preventiva de imputaciones PIE/SEP, aprobación de propuestas excepcionales de directores y conciliación Ley 20.903.
+              </p>
+            </div>
           </div>
 
+          {/* SECTION 1: Motor de Fiscalización Preventiva PIE / SEP */}
+          {(() => {
+            const auditIrregular = auditarFinanciamientoIrregular(contratos, financiamientos, asignaciones, funcionarios);
+            return (
+              <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+                <div className="p-4 border-b bg-rose-50/60 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-rose-900 flex items-center gap-2">
+                      <span>🛡️</span> Motor de Detección de Financiamiento Irregular (Auditoría Superintendencia)
+                    </h3>
+                    <p className="text-[10px] text-rose-700 mt-0.5">
+                      Auditoría preventiva de contratos con fondos PIE / SEP imputados a Plan Común sin acreditar Co-Enseñanza o Código Acción PME.
+                    </p>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] ${
+                    auditIrregular.length > 0 ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {auditIrregular.length > 0 ? `⚠️ ${auditIrregular.length} Observaciones Preventivas` : '✓ 0 Observaciones'}
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  {auditIrregular.length === 0 ? (
+                    <div className="p-8 text-center text-emerald-700 font-bold bg-emerald-50/20">
+                      ✓ Todas las imputaciones a fondos PIE y SEP se encuentran acreditadas con Co-Enseñanza o Códigos PME validados.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b text-[10px] text-slate-400 uppercase font-black">
+                          <th className="p-3 pl-6">Establecimiento</th>
+                          <th className="p-3">Docente / Funcionario</th>
+                          <th className="p-3 text-center">Subvención Sensible</th>
+                          <th className="p-3 text-center">Horas Imputadas</th>
+                          <th className="p-3">Detalle del Hallazgo</th>
+                          <th className="p-3 text-center">Riesgo Fiscalización</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                        {auditIrregular.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-rose-50/30">
+                            <td className="p-3 pl-6 font-bold text-slate-800">
+                              {(() => {
+                                const est = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(item.rbd)));
+                                return est ? est.nombre : `RBD ${item.rbd}`;
+                              })()}
+                            </td>
+                            <td className="p-3">
+                              <p className="font-bold text-slate-800">{item.funcionarioNombre}</p>
+                              <p className="text-[9px] text-slate-400 font-mono mt-0.5">{item.funcionarioRun}</p>
+                            </td>
+                            <td className="p-3 text-center">
+                              <span className={`px-2 py-0.5 rounded font-black text-[10px] border ${
+                                item.origenFondo === 'PIE' ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-orange-100 text-orange-800 border-orange-200'
+                              }`}>
+                                {item.origenFondo}
+                              </span>
+                            </td>
+                            <td className="p-3 text-center font-mono font-bold text-slate-800">{item.horasImputadas} hrs</td>
+                            <td className="p-3 text-slate-600 text-[11px] leading-snug">{item.detalle}</td>
+                            <td className="p-3 text-center">
+                              {item.nivelAlerta === 'critica' ? (
+                                <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded font-black text-[10px]">
+                                  🚨 Alto Riesgo
+                                </span>
+                              ) : (
+                                <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold text-[10px]">
+                                  ⚠️ Advertencia
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* SECTION 2: Solicitudes de Brechas y Propuestas Excepcionales del Director */}
+          {(() => {
+            const pendingVacantes = alertas.filter(a => a.tipo === 'cargo_vacante_excepcional' && !a.resuelta);
+            return (
+              <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+                <div className="p-4 border-b bg-amber-50/60 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-amber-900 flex items-center gap-2">
+                      <span>📋</span> Solicitudes de Cargos Vacantes y Propuestas Excepcionales del Director
+                    </h3>
+                    <p className="text-[10px] text-amber-700 mt-0.5">
+                      Revisiones pendientes de UATP / RR.HH. para contratación directa o habilitación de horas en P02.
+                    </p>
+                  </div>
+                  <span className="bg-amber-200 text-amber-900 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
+                    {pendingVacantes.length} Solicitudes Pendientes
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  {pendingVacantes.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 italic">
+                      ✓ No hay solicitudes de cargos vacantes ni propuestas excepcionales pendientes de revisión.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b text-[10px] text-slate-400 uppercase font-black">
+                          <th className="p-3 pl-6">Establecimiento</th>
+                          <th className="p-3">Cargo / Taller</th>
+                          <th className="p-3 text-center">Horas</th>
+                          <th className="p-3">Propuesta del Director</th>
+                          <th className="p-3">Justificación Técnica</th>
+                          <th className="p-3 text-center pr-6">Acción Sostenedor</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                        {pendingVacantes.map(alt => {
+                          const datos = alt.datos_propuesta_excepcional;
+                          const est = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(alt.rbd)));
+                          const schoolName = est ? est.nombre : `RBD ${alt.rbd}`;
+
+                          return (
+                            <tr key={alt.id} className="hover:bg-amber-50/30">
+                              <td className="p-3 pl-6 font-bold text-slate-800">{schoolName}</td>
+                              <td className="p-3">
+                                <p className="font-bold text-slate-800">{datos?.nombre_cargo || alt.mensaje}</p>
+                                <p className="text-[9px] text-slate-400 font-mono mt-0.5">RBD {alt.rbd}</p>
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-slate-800">{datos?.horas_solicitadas || 0} hrs</td>
+                              <td className="p-3">
+                                {datos?.nombre_externo ? (
+                                  <div>
+                                    <p className="font-bold text-slate-800 flex items-center gap-1">
+                                      <span>{datos.es_propuesta_excepcional ? '✨ Propuesta Excepcional:' : '👤 Candidato Interno:'}</span>
+                                      <span>{datos.nombre_externo}</span>
+                                    </p>
+                                    <p className="text-[9px] text-slate-400 mt-0.5">RUN {datos.run_externo} • {datos.titulo_externo}</p>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 italic">Búsqueda Interna</span>
+                                )}
+                              </td>
+                              <td className="p-3 text-slate-600 text-[11px] max-w-xs leading-snug">{datos?.justificacion || alt.detalle}</td>
+                              <td className="p-3 text-center pr-6">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm(`¿Aprobar e integrar a P02 la propuesta para "${datos?.nombre_cargo || 'Cargo'}" en ${schoolName}?`)) {
+                                        if (alt.solicitud_vacante_id) {
+                                          await api.responderSolicitudVacante(alt.solicitud_vacante_id, 'Aprobado');
+                                        } else {
+                                          await api.resolverAlerta(alt.id);
+                                        }
+                                        await loadAllData();
+                                        alert('✅ Solicitud aprobada e integrada exitosamente a P02.');
+                                      }
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-3 py-1.5 rounded shadow cursor-pointer transition-colors"
+                                  >
+                                    ✓ Aprobar e Integrar P02
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm(`¿Rechazar la solicitud de vacante para ${schoolName}?`)) {
+                                        if (alt.solicitud_vacante_id) {
+                                          await api.responderSolicitudVacante(alt.solicitud_vacante_id, 'Rechazado');
+                                        } else {
+                                          await api.resolverAlerta(alt.id);
+                                        }
+                                        await loadAllData();
+                                        alert('✕ Solicitud rechazada.');
+                                      }
+                                    }}
+                                    className="bg-red-500 hover:bg-red-600 text-white font-bold text-[10px] px-2.5 py-1.5 rounded shadow cursor-pointer transition-colors"
+                                  >
+                                    ✕ Rechazar
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* SECTION 3: Conciliación de Carga Horaria Docente (Ley 20.903) */}
           <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+            <div className="p-4 border-b bg-slate-50">
+              <h3 className="font-bold text-slate-800">Conciliación de Carga Horaria Docente (Ley 20.903)</h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">Listado de docentes con horas de contrato vacantes (horas sin destinar a aula ni a planificación proporcional).</p>
+            </div>
             <div className="overflow-x-auto">
               {(() => {
                 const docDocs = funcionarios.filter(f => f.estamento === 'Docente');

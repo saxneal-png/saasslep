@@ -16,7 +16,8 @@ import {
   RegistroRemuneracion,
   TareaReemplazo,
   ReemplazoDetalle,
-  HorasCronologicasAdicionales
+  HorasCronologicasAdicionales,
+  BrechaCargoVacante
 } from './types';
 import { normalizarRbd } from './csvParser';
 import { validarHardCap44Horas, normalizarRun } from './rulesEngine';
@@ -381,6 +382,14 @@ class DatabaseLocal {
 
   set horasCronologicasAdicionales(val: HorasCronologicasAdicionales[]) {
     this.setStorageItem('horas_cronologicas_adicionales', val);
+  }
+
+  get brechasVacantes(): BrechaCargoVacante[] {
+    return this.getStorageItem('brechas_vacantes', []);
+  }
+
+  set brechasVacantes(val: BrechaCargoVacante[]) {
+    this.setStorageItem('brechas_vacantes', val);
   }
 }
 
@@ -1679,6 +1688,91 @@ export const api = {
         ? dbLocal.horasCronologicasAdicionales.filter(h => h.contrato_id === contratoId)
         : dbLocal.horasCronologicasAdicionales;
       return handleFallback(error, fallback, 'horas_cronologicas_adicionales');
+    }
+  },
+
+  getBrechasVacantes: async (rbd?: string): Promise<BrechaCargoVacante[]> => {
+    try {
+      let query = supabase.from('brechas_vacantes').select('*');
+      if (rbd) {
+        query = query.eq('rbd', rbd);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      const fallback = rbd ? dbLocal.brechasVacantes.filter(b => b.rbd === rbd) : dbLocal.brechasVacantes;
+      return handleFallback(error, fallback, 'brechas_vacantes');
+    }
+  },
+
+  crearSolicitudVacante: async (vacante: BrechaCargoVacante): Promise<void> => {
+    const current = dbLocal.brechasVacantes;
+    const idx = current.findIndex(b => b.id === vacante.id);
+    if (idx >= 0) {
+      current[idx] = vacante;
+    } else {
+      current.push(vacante);
+    }
+    dbLocal.brechasVacantes = current;
+
+    const alerta: AlertaConciliacion = {
+      id: `alt-vac-${vacante.id}`,
+      run: vacante.profesional_externo?.run || 'EXTERNO',
+      nombre_funcionario: vacante.profesional_externo?.nombre || `Vacante ${vacante.nombre_cargo}`,
+      rbd: vacante.rbd,
+      tipo: 'cargo_vacante_excepcional',
+      nivel_alerta: 'advertencia',
+      mensaje: `📋 Solicitud de Vacante / Propuesta Excepcional (${vacante.nombre_cargo}) - ${vacante.horas_requeridas} hrs`,
+      detalle: `El Director solicita cobertura para "${vacante.nombre_cargo}" (${vacante.horas_requeridas} hrs). Justificación: ${vacante.justificacion}. ${
+        vacante.es_propuesta_excepcional 
+          ? `Propuesta Excepcional Externa: ${vacante.profesional_externo?.nombre} (RUN: ${vacante.profesional_externo?.run}, Título: ${vacante.profesional_externo?.titulo}).` 
+          : 'Búsqueda en red interna finalizada sin coincidencia.'
+      }`,
+      resuelta: false,
+      solicitud_vacante_id: vacante.id,
+      datos_propuesta_excepcional: {
+        nombre_cargo: vacante.nombre_cargo,
+        horas_solicitadas: vacante.horas_requeridas,
+        justificacion: vacante.justificacion,
+        run_externo: vacante.profesional_externo?.run,
+        nombre_externo: vacante.profesional_externo?.nombre,
+        titulo_externo: vacante.profesional_externo?.titulo,
+        es_propuesta_excepcional: vacante.es_propuesta_excepcional,
+        estado_solicitud: vacante.estado
+      }
+    };
+
+    await api.crearAlerta(alerta);
+
+    const { error } = await supabase.from('brechas_vacantes').upsert(vacante);
+    if (error) {
+      console.warn("⚠️ Error guardando brechas_vacantes en Supabase:", error);
+    }
+  },
+
+  responderSolicitudVacante: async (id: string, respuesta: 'Aprobado' | 'Rechazado'): Promise<void> => {
+    const current = dbLocal.brechasVacantes;
+    const item = current.find(b => b.id === id);
+    if (item) {
+      item.estado = respuesta;
+      dbLocal.brechasVacantes = current;
+    }
+
+    const alertas = dbLocal.alertas;
+    const alt = alertas.find(a => a.solicitud_vacante_id === id);
+    if (alt) {
+      alt.resuelta = true;
+      if (alt.datos_propuesta_excepcional) {
+        alt.datos_propuesta_excepcional.estado_solicitud = respuesta;
+      }
+      dbLocal.alertas = alertas;
+      await supabase.from('alertas_conciliacion').upsert(alt);
+    }
+
+    const { error } = await supabase.from('brechas_vacantes').update({ estado: respuesta }).eq('id', id);
+    if (error) {
+      console.warn("⚠️ Error actualizando brechas_vacantes en Supabase:", error);
     }
   },
 

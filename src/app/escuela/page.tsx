@@ -25,7 +25,8 @@ import {
   ReemplazoDetalle,
   CalidadJuridica,
   HorasCronologicasAdicionales,
-  TipoCursoModalidad
+  TipoCursoModalidad,
+  BrechaCargoVacante
 } from '@/lib/types';
 
 import { normalizarRun, normalizarRbd } from '@/lib/csvParser';
@@ -112,11 +113,23 @@ export default function EscuelaDashboard() {
   const [planesEstudio, setPlanesEstudio] = useState<PlanEstudioNorm[]>([]);
   const [allCronoHours, setAllCronoHours] = useState<HorasCronologicasAdicionales[]>([]);
 
-  // Navigation tab state: 'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'especial'
-  const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'dotacion' | 'conciliacion' | 'especial'>('docentes');
+  // Navigation tab state: 'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'especial' | 'vacantes'
+  const [activeTab, setActiveTab] = useState<'docentes' | 'asistentes' | 'cursos' | 'compendio' | 'dotacion' | 'conciliacion' | 'especial' | 'vacantes'>('docentes');
   const [subTabDotacion, setSubTabDotacion] = useState<'docentes' | 'asistentes'>('docentes');
   const [tareasReemplazo, setTareasReemplazo] = useState<TareaReemplazo[]>([]);
   const [taskReemplazoRun, setTaskReemplazoRun] = useState<{[key: string]: string}>({});
+  
+  // Brechas & Cargos Vacantes State
+  const [brechasVacantes, setBrechasVacantes] = useState<BrechaCargoVacante[]>([]);
+  const [vacNombreCargo, setVacNombreCargo] = useState('');
+  const [vacEstamento, setVacEstamento] = useState<EstamentoType>('Docente');
+  const [vacHoras, setVacHoras] = useState(6);
+  const [vacTipoNecesidad, setVacTipoNecesidad] = useState<'Taller' | 'Reforzamiento' | 'Apoyo Pedagógico' | 'Cargo Especial' | 'Otro'>('Taller');
+  const [vacJustificacion, setVacJustificacion] = useState('');
+  const [showPropuestaModal, setShowPropuestaModal] = useState(false);
+  const [extRun, setExtRun] = useState('');
+  const [extNombre, setExtNombre] = useState('');
+  const [extTitulo, setExtTitulo] = useState('');
 
   // PIE Program & Calculator States
   const [pieNeetCount, setPieNeetCount] = useState<number>(5);
@@ -367,7 +380,8 @@ export default function EscuelaDashboard() {
       tasks,
       reemps,
       allConts,
-      cronosList
+      cronosList,
+      vacs
     ] = await Promise.all([
       api.getEstablecimientoByRbd(selectedRbd),
       api.getContratos(selectedRbd),
@@ -380,7 +394,8 @@ export default function EscuelaDashboard() {
       api.getTareasReemplazo(),
       api.getReemplazosLicencias(),
       api.getContratos(),
-      api.getHorasCronologicasAdicionales()
+      api.getHorasCronologicasAdicionales(),
+      api.getBrechasVacantes(selectedRbd)
     ]);
 
     setColegio(est || null);
@@ -391,6 +406,7 @@ export default function EscuelaDashboard() {
     setAlertas(alts);
     setCursosDinamicos(dynCursos);
     setCargosPersonalizados(customCargs);
+    setBrechasVacantes(vacs);
     setPlanesEstudio(plans);
     setTareasReemplazo(tasks);
     setReemplazosList(reemps);
@@ -1954,6 +1970,17 @@ export default function EscuelaDashboard() {
             }`}
           >
             🧩 Ed. Especial (PIE)
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('vacantes')}
+            className={`flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all ${
+              activeTab === 'vacantes' 
+                ? 'bg-slep-blue text-white shadow-sm' 
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            📋 Brechas & Vacantes {brechasVacantes.filter(b => b.estado === 'Pendiente Sostenedor').length > 0 && `(${brechasVacantes.filter(b => b.estado === 'Pendiente Sostenedor').length})`}
           </button>
         </div>
 
@@ -4437,6 +4464,379 @@ export default function EscuelaDashboard() {
                   </div>
                 </div>
 
+              </div>
+            )}
+
+            {activeTab === 'vacantes' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Header & Create Vacancy Form */}
+                <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 gap-4">
+                    <div>
+                      <h2 className="text-base font-bold text-slate-800">📋 Declaración de Brechas Horarias y Cargos Vacantes</h2>
+                      <p className="text-xs text-slate-500 mt-1 font-medium">
+                        Registre necesidades de talleres, reforzamientos o cargos especiales sin cobertura horaria para cruce con la red SLEP o Propuesta Excepcional.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Nombre del Cargo / Taller *</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej. Taller de Robótica / Coordinador PIE" 
+                        className="w-full px-3 py-2 border rounded-lg bg-white"
+                        value={vacNombreCargo}
+                        onChange={(e) => setVacNombreCargo(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Horas Requeridas *</label>
+                      <input 
+                        type="number" 
+                        className="w-full px-3 py-2 border rounded-lg bg-white font-mono font-bold"
+                        value={vacHoras}
+                        onChange={(e) => setVacHoras(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Estamento *</label>
+                      <select 
+                        className="w-full px-3 py-2 border rounded-lg bg-white font-semibold"
+                        value={vacEstamento}
+                        onChange={(e) => setVacEstamento(e.target.value as EstamentoType)}
+                      >
+                        <option value="Docente">Docente</option>
+                        <option value="Asistente de la Educación">Asistente de la Educación</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Tipo de Necesidad</label>
+                      <select 
+                        className="w-full px-3 py-2 border rounded-lg bg-white font-semibold"
+                        value={vacTipoNecesidad}
+                        onChange={(e) => setVacTipoNecesidad(e.target.value as any)}
+                      >
+                        <option value="Taller">Taller Extracurricular</option>
+                        <option value="Reforzamiento">Reforzamiento / Apoyo</option>
+                        <option value="Apoyo Pedagógico">Apoyo Pedagógico</option>
+                        <option value="Cargo Especial">Cargo Especial</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2 lg:col-span-4">
+                      <label className="block font-bold text-slate-700 mb-1">Justificación Técnica / Pedagógica del Director *</label>
+                      <textarea 
+                        rows={2} 
+                        placeholder="Describa los objetivos del taller o la fundamentación de la necesidad operativa..." 
+                        className="w-full px-3 py-2 border rounded-lg bg-white"
+                        value={vacJustificacion}
+                        onChange={(e) => setVacJustificacion(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Internal Red Matcher Results */}
+                  {vacNombreCargo.trim().length > 0 && (
+                    <div className="mt-6 border border-blue-200 bg-blue-50/40 rounded-xl p-5 space-y-3">
+                      <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wide flex items-center gap-2">
+                        <span>🔍</span> Motor de Búsqueda de Coincidencias en Red SLEP (Bolsa de Disponibilidad)
+                      </h4>
+                      {(() => {
+                        const availableInternalTeachers = funcionarios.filter(f => {
+                          if (f.estamento !== vacEstamento) return false;
+                          const teacherConts = todosLosContratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run));
+                          if (teacherConts.length === 0) return false;
+                          const totalCont = teacherConts.reduce((sum, c) => sum + c.horas_totales, 0);
+                          const totalAsig = asignaciones.filter(a => teacherConts.some(c => c.id === a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
+                          const totalCargs = cargosPersonalizados.filter(cg => normalizarRun(cg.funcionario_run) === normalizarRun(f.run)).reduce((sum, cg) => sum + cg.horas, 0);
+                          const spare = totalCont - (totalAsig + totalCargs);
+                          return spare >= 1;
+                        });
+
+                        return (
+                          <div className="space-y-3 text-xs">
+                            <p className="text-slate-600 font-medium">
+                              Se encontraron <strong className="text-slate-800">{availableInternalTeachers.length} profesionales</strong> en la red interna con disponibilidad o bolsa de horas sobrantes.
+                            </p>
+
+                            {availableInternalTeachers.length > 0 ? (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-1">
+                                {availableInternalTeachers.slice(0, 6).map(f => {
+                                  const tConts = todosLosContratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run));
+                                  const mainRbd = tConts.length > 0 ? tConts[0].rbd : 'N/A';
+                                  const totalCont = tConts.reduce((sum, c) => sum + c.horas_totales, 0);
+                                  const totalAsig = asignaciones.filter(a => tConts.some(c => c.id === a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
+                                  const totalCargs = cargosPersonalizados.filter(cg => normalizarRun(cg.funcionario_run) === normalizarRun(f.run)).reduce((sum, cg) => sum + cg.horas, 0);
+                                  const spare = totalCont - (totalAsig + totalCargs);
+
+                                  return (
+                                    <div key={f.run} className="p-3 bg-white border border-blue-100 rounded-lg shadow-sm flex items-center justify-between">
+                                      <div>
+                                        <p className="font-bold text-slate-800">{f.nombre}</p>
+                                        <p className="text-[10px] text-slate-500">{f.titulo || f.cargo || 'Docente'} • RBD {mainRbd}</p>
+                                        <span className="inline-block mt-1 bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-mono text-[10px] font-bold">
+                                          Disponibilidad: {spare.toFixed(1)} hrs
+                                        </span>
+                                      </div>
+                                      <button 
+                                        type="button"
+                                        onClick={async () => {
+                                          if (!vacJustificacion.trim()) {
+                                            alert('Por favor ingrese una justificación técnica antes de solicitar la asignación.');
+                                            return;
+                                          }
+                                          const vac: BrechaCargoVacante = {
+                                            id: `vac-${Date.now()}`,
+                                            rbd: selectedRbd,
+                                            nombre_cargo: vacNombreCargo.trim(),
+                                            estamento: vacEstamento,
+                                            horas_requeridas: vacHoras,
+                                            tipo_necesidad: vacTipoNecesidad,
+                                            justificacion: `Asignación interna propuesta para ${f.nombre} (${f.run}). Justificación: ${vacJustificacion.trim()}`,
+                                            estado: 'Pendiente Sostenedor',
+                                            es_propuesta_excepcional: false,
+                                            profesional_externo: {
+                                              run: f.run,
+                                              nombre: f.nombre,
+                                              titulo: f.titulo || f.cargo || 'Profesional Interno Red SLEP'
+                                            },
+                                            fecha_creacion: new Date().toISOString()
+                                          };
+                                          await api.crearSolicitudVacante(vac);
+                                          await loadAllSchoolData();
+                                          setVacNombreCargo('');
+                                          setVacJustificacion('');
+                                          alert('✅ Solicitud de asignación interna enviada al Sostenedor.');
+                                        }}
+                                        className="bg-slep-blue hover:bg-slep-blue-hover text-white text-[10px] font-bold px-2.5 py-1.5 rounded cursor-pointer transition-colors shadow-sm"
+                                      >
+                                        Solicitar Asignación
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p className="text-slate-500 italic">No se hallaron coincidencias directas en la bolsa interna para esta especialidad.</p>
+                            )}
+
+                            <div className="pt-2 border-t flex flex-col sm:flex-row justify-between items-center gap-3">
+                              <p className="text-[11px] text-slate-500 font-medium">
+                                ¿No encuentra candidato interno idóneo para cubrir este cargo o taller?
+                              </p>
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  if (!vacNombreCargo.trim() || !vacJustificacion.trim()) {
+                                    alert('Ingrese el nombre del cargo y la justificación técnica antes de activar la Propuesta Excepcional.');
+                                    return;
+                                  }
+                                  setShowPropuestaModal(true);
+                                }}
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow cursor-pointer transition-all flex items-center gap-1.5"
+                              >
+                                ✨ Ingresar Propuesta Excepcional del Director
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Table of Registered Vacancies */}
+                <div className="bg-white rounded-xl shadow border border-slate-200/60 overflow-hidden">
+                  <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-xs">Histórico de Brechas y Solicitudes Vacantes de la Escuela</h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Solicitudes enviadas al Sostenedor para aprobación y habilitación en P02.</p>
+                    </div>
+                    <span className="bg-slate-200 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      Total Solicitudes: {brechasVacantes.length}
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto text-xs">
+                    {brechasVacantes.length === 0 ? (
+                      <p className="text-slate-400 italic text-center py-8">No registra solicitudes de brechas horarias o cargos vacantes.</p>
+                    ) : (
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b text-[10px] text-slate-400 uppercase font-black">
+                            <th className="p-3 pl-6">Cargo / Taller</th>
+                            <th className="p-3">Tipo Necesidad</th>
+                            <th className="p-3 text-center">Horas</th>
+                            <th className="p-3">Candidato / Propuesta</th>
+                            <th className="p-3">Justificación</th>
+                            <th className="p-3 text-center">Estado Sostenedor</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                          {brechasVacantes.map(b => (
+                            <tr key={b.id} className="hover:bg-slate-50">
+                              <td className="p-3 pl-6">
+                                <p className="font-bold text-slate-800">{b.nombre_cargo}</p>
+                                <p className="text-[9px] text-slate-400 font-mono mt-0.5">{b.estamento}</p>
+                              </td>
+                              <td className="p-3">
+                                <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold text-[10px] border">
+                                  {b.tipo_necesidad}
+                                </span>
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-slate-800">{b.horas_requeridas} hrs</td>
+                              <td className="p-3">
+                                {b.profesional_externo ? (
+                                  <div>
+                                    <p className="font-bold text-slate-800 flex items-center gap-1">
+                                      <span>{b.es_propuesta_excepcional ? '✨ Excepcional:' : '👤 Interno:'}</span>
+                                      <span>{b.profesional_externo.nombre}</span>
+                                    </p>
+                                    <p className="text-[9px] text-slate-400 mt-0.5">RUN {b.profesional_externo.run} • {b.profesional_externo.titulo}</p>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 italic text-[11px]">Por Definir</span>
+                                )}
+                              </td>
+                              <td className="p-3 text-slate-600 max-w-xs truncate" title={b.justificacion}>{b.justificacion}</td>
+                              <td className="p-3 text-center">
+                                {b.estado === 'Pendiente Sostenedor' && (
+                                  <span className="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full font-bold text-[10px] border border-amber-200">
+                                    ⏳ Pendiente Sostenedor
+                                  </span>
+                                )}
+                                {b.estado === 'Aprobado' && (
+                                  <span className="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full font-bold text-[10px] border border-emerald-200">
+                                    ✓ Aprobado e Integrado P02
+                                  </span>
+                                )}
+                                {b.estado === 'Rechazado' && (
+                                  <span className="bg-red-100 text-red-800 px-2.5 py-1 rounded-full font-bold text-[10px] border border-red-200">
+                                    ✕ Rechazado
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Propuesta Excepcional Modal */}
+            {showPropuestaModal && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+                  <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <span>✨</span> Propuesta Excepcional del Director
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Ingreso de profesional externo para validación directa de UATP / RR.HH. SLEP.</p>
+                    </div>
+                    <button 
+                      onClick={() => setShowPropuestaModal(false)}
+                      className="text-slate-400 hover:text-slate-600 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-all cursor-pointer font-bold w-8 h-8 flex items-center justify-center"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="p-6 space-y-4 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">RUN del Profesional *</label>
+                      <input 
+                        type="text" 
+                        placeholder="12.345.678-9" 
+                        className="w-full px-3 py-2 border rounded-lg font-mono font-bold"
+                        value={extRun}
+                        onChange={(e) => setExtRun(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Nombre Completo *</label>
+                      <input 
+                        type="text" 
+                        placeholder="Juan Pérez Muñoz" 
+                        className="w-full px-3 py-2 border rounded-lg font-bold"
+                        value={extNombre}
+                        onChange={(e) => setExtNombre(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Título / Especialidad / Acreditación *</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej. Entrenador de Básquetbol / Lic. en Música" 
+                        className="w-full px-3 py-2 border rounded-lg font-bold"
+                        value={extTitulo}
+                        onChange={(e) => setExtTitulo(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Cargo / Taller a Cubrir</label>
+                      <input 
+                        type="text" 
+                        disabled 
+                        className="w-full px-3 py-2 border rounded-lg bg-slate-100 font-bold text-slate-700"
+                        value={`${vacNombreCargo} (${vacHoras} hrs)`}
+                      />
+                    </div>
+
+                    <div className="flex gap-3 pt-3 border-t">
+                      <button 
+                        type="button"
+                        onClick={() => setShowPropuestaModal(false)}
+                        className="flex-1 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold py-2.5 rounded-lg shadow cursor-pointer text-xs"
+                      >
+                        Cancelar
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={async () => {
+                          if (!extRun.trim() || !extNombre.trim() || !extTitulo.trim()) {
+                            alert('Complete todos los campos del profesional externo propuesto.');
+                            return;
+                          }
+                          const vac: BrechaCargoVacante = {
+                            id: `vac-exp-${Date.now()}`,
+                            rbd: selectedRbd,
+                            nombre_cargo: vacNombreCargo.trim(),
+                            estamento: vacEstamento,
+                            horas_requeridas: vacHoras,
+                            tipo_necesidad: vacTipoNecesidad,
+                            justificacion: vacJustificacion.trim(),
+                            estado: 'Pendiente Sostenedor',
+                            es_propuesta_excepcional: true,
+                            profesional_externo: {
+                              run: normalizarRun(extRun),
+                              nombre: extNombre.trim(),
+                              titulo: extTitulo.trim()
+                            },
+                            fecha_creacion: new Date().toISOString()
+                          };
+                          await api.crearSolicitudVacante(vac);
+                          await loadAllSchoolData();
+                          setShowPropuestaModal(false);
+                          setVacNombreCargo('');
+                          setVacJustificacion('');
+                          setExtRun('');
+                          setExtNombre('');
+                          setExtTitulo('');
+                          alert('✅ Propuesta Excepcional enviada exitosamente al Sostenedor para aprobación UATP/RR.HH.');
+                        }}
+                        className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 rounded-lg shadow cursor-pointer text-xs"
+                      >
+                        Confirmar Propuesta Excepcional
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
