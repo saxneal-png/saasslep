@@ -1113,25 +1113,29 @@ export const api = {
   },
 
   saveAsignacion: async (asignacion: AsignacionAula): Promise<void> => {
+    // Always keep local cache in sync
+    const asignaciones = dbLocal.asignacionesAula;
+    const idx = asignaciones.findIndex(a => a.id === asignacion.id);
+    if (idx >= 0) {
+      asignaciones[idx] = asignacion;
+    } else {
+      asignaciones.push(asignacion);
+    }
+    dbLocal.asignacionesAula = asignaciones;
+
     const { error } = await supabase.from('asignaciones_aula').upsert(asignacion);
     if (error) {
       console.warn("⚠️ Error en Supabase, guardando asignacion en local:", error);
-      const asignaciones = dbLocal.asignacionesAula;
-      const idx = asignaciones.findIndex(a => a.id === asignacion.id);
-      if (idx >= 0) {
-        asignaciones[idx] = asignacion;
-      } else {
-        asignaciones.push(asignacion);
-      }
-      dbLocal.asignacionesAula = asignaciones;
     }
   },
 
   deleteAsignacion: async (id: string): Promise<void> => {
+    // Always keep local cache in sync
+    dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.id !== id);
+
     const { error } = await supabase.from('asignaciones_aula').delete().eq('id', id);
     if (error) {
       console.warn("⚠️ Error en Supabase, eliminando asignacion en local:", error);
-      dbLocal.asignacionesAula = dbLocal.asignacionesAula.filter(a => a.id !== id);
     }
   },
 
@@ -1616,13 +1620,14 @@ export const api = {
   getTodasLasAsignaciones: async (): Promise<AsignacionAula[]> => {
     const { data, error } = await supabase.from('asignaciones_aula').select('*');
     if (error) return handleFallback(error, dbLocal.asignacionesAula, 'asignaciones_aula');
+    if (data) dbLocal.asignacionesAula = data;
     return data || [];
   },
 
   getTodosLosCursosDinamicos: async (): Promise<CursoDinamico[]> => {
     const { data, error } = await supabase.from('cursos_dinamicos').select('*');
     if (error) return handleFallback(error, dbLocal.cursosDinamicos, 'cursos_dinamicos');
-    return (data || []).map(c => ({
+    const result = (data || []).map(c => ({
       rbd: c.rbd,
       nombre: c.nombre,
       nivel: c.nivel,
@@ -1631,22 +1636,27 @@ export const api = {
       profesor_jefe_run: c.profesor_jefe_run,
       concentracion_prioritarios: c.concentracion_prioritarios
     }));
+    if (result.length > 0) dbLocal.cursosDinamicos = result;
+    return result;
   },
 
   getTodasLasAsignaturasDinamicas: async (): Promise<AsignaturaDinamica[]> => {
     const { data, error } = await supabase.from('asignaturas_dinamicas').select('*');
     if (error) return handleFallback(error, dbLocal.asignaturasDinamicas, 'asignaturas_dinamicas');
-    return (data || []).map(a => ({
+    const result = (data || []).map(a => ({
       rbd: a.rbd,
       cursoNombre: a.curso_nombre,
       nombre: a.nombre,
       horasSugeridas: a.horas_sugeridas
     }));
+    if (result.length > 0) dbLocal.asignaturasDinamicas = result;
+    return result;
   },
 
   getTodosLosCargosPersonalizados: async (): Promise<CargoPersonalizado[]> => {
     const { data, error } = await supabase.from('cargos_personalizados').select('*');
     if (error) return handleFallback(error, dbLocal.cargosPersonalizados, 'cargos_personalizados');
+    if (data) dbLocal.cargosPersonalizados = data;
     return data || [];
   },
 

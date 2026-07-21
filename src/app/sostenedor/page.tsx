@@ -242,6 +242,30 @@ export default function SostenedorDashboard() {
           loadAllData();
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cargos_personalizados' },
+        (payload: any) => {
+          console.log('🔥 Cambios en cargos recibidos por canal realtime (Sostenedor):', payload);
+          loadAllData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cursos_dinamicos' },
+        (payload: any) => {
+          console.log('🔥 Cambios en cursos recibidos por canal realtime (Sostenedor):', payload);
+          loadAllData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'financiamientos' },
+        (payload: any) => {
+          console.log('🔥 Cambios en financiamientos recibidos por canal realtime (Sostenedor):', payload);
+          loadAllData();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -262,7 +286,10 @@ export default function SostenedorDashboard() {
       plans,
       coms,
       fins,
-      cursos
+      cursos,
+      asigs,
+      cargs,
+      asigDins
     ] = await Promise.all([
       api.getEstablecimientos(),
       api.getContratos(),
@@ -273,12 +300,11 @@ export default function SostenedorDashboard() {
       api.getPlanesEstudio(),
       api.getComunas(),
       api.getFinanciamientos(),
-      api.getTodosLosCursosDinamicos()
+      api.getTodosLosCursosDinamicos(),
+      api.getTodasLasAsignaciones(),
+      api.getTodosLosCargosPersonalizados(),
+      api.getTodasLasAsignaturasDinamicas()
     ]);
-
-    // Fetch dyn elements
-    const asigs = dbLocal.asignacionesAula;
-    const cargs = dbLocal.cargosPersonalizados;
 
     setEstablecimientos(ests);
     setContratos(conts);
@@ -289,6 +315,8 @@ export default function SostenedorDashboard() {
     setSupervisores(sups);
     setPlanesEstudio(plans);
     setCursosDinamicos(cursos);
+    setTodosLosCursos(cursos);
+    setTodasLasAsignaturas(asigDins);
     
     setAsignaciones(asigs);
     setCargosPersonalizados(cargs);
@@ -1127,7 +1155,7 @@ export default function SostenedorDashboard() {
 
   // Territory-wide hours calculations
   const getEstamentoTerritorial = (c: Contrato) => {
-    const f = funcionarios.find(func => func.run === c.funcionario_run);
+    const f = funcionarios.find(func => normalizarRun(func.run) === normalizarRun(c.funcionario_run));
     if (f?.estamento) return f.estamento;
     if (c.legislacion_laboral === 'Asistentes de la educación') return 'Asistente de la Educación';
     if (c.legislacion_laboral === 'Estatuto docente') return 'Docente';
@@ -1429,12 +1457,12 @@ export default function SostenedorDashboard() {
                     const escFins = financiamientos.filter(f => escContsIds.includes(f.contrato_id));
                     
                     const docenteCount = new Set(escConts.map(c => c.funcionario_run).filter(run => {
-                      const f = funcionarios.find(func => func.run === run);
+                      const f = funcionarios.find(func => normalizarRun(func.run) === normalizarRun(run));
                       return f?.estamento === 'Docente';
                     })).size;
 
                     const asistenteCount = new Set(escConts.map(c => c.funcionario_run).filter(run => {
-                      const f = funcionarios.find(func => func.run === run);
+                      const f = funcionarios.find(func => normalizarRun(func.run) === normalizarRun(run));
                       return f?.estamento === 'Asistente de la Educación';
                     })).size;
 
@@ -2426,13 +2454,13 @@ export default function SostenedorDashboard() {
           {(() => {
             const totalEstablecimientos = establecimientos.length;
             const totalContratosDocentes = contratos.filter(c => {
-              const f = funcionarios.find(fn => fn.run === c.funcionario_run);
+              const f = funcionarios.find(fn => normalizarRun(fn.run) === normalizarRun(c.funcionario_run));
               return f && f.estamento === 'Docente';
             });
             const totalHorasContratadasDocentes = totalContratosDocentes.reduce((sum, c) => sum + c.horas_totales, 0);
 
             const totalContratosAsistentes = contratos.filter(c => {
-              const f = funcionarios.find(fn => fn.run === c.funcionario_run);
+              const f = funcionarios.find(fn => normalizarRun(fn.run) === normalizarRun(c.funcionario_run));
               return f && f.estamento === 'Asistente de la Educación';
             });
             const totalHorasContratadasAsistentes = totalContratosAsistentes.reduce((sum, c) => sum + c.horas_totales, 0);
@@ -2449,18 +2477,18 @@ export default function SostenedorDashboard() {
             // Comunas Breakdown
             const comunasSummary = comunasList.map(comName => {
               const comunaEsts = establecimientos.filter(e => e.comuna === comName);
-              const rbds = comunaEsts.map(e => e.rbd);
+              const rbds = comunaEsts.map(e => normalizarRbd(String(e.rbd)));
               
-              const comunaConts = contratos.filter(c => rbds.includes(c.rbd));
+              const comunaConts = contratos.filter(c => rbds.includes(normalizarRbd(String(c.rbd))));
               const comunaContIds = comunaConts.map(c => c.id);
               
               const horasContratoDocente = comunaConts.filter(c => {
-                const f = funcionarios.find(fn => fn.run === c.funcionario_run);
+                const f = funcionarios.find(fn => normalizarRun(fn.run) === normalizarRun(c.funcionario_run));
                 return f && f.estamento === 'Docente';
               }).reduce((sum, c) => sum + c.horas_totales, 0);
 
               const horasContratoAsistente = comunaConts.filter(c => {
-                const f = funcionarios.find(fn => fn.run === c.funcionario_run);
+                const f = funcionarios.find(fn => normalizarRun(fn.run) === normalizarRun(c.funcionario_run));
                 return f && f.estamento === 'Asistente de la Educación';
               }).reduce((sum, c) => sum + c.horas_totales, 0);
               
@@ -2507,12 +2535,12 @@ export default function SostenedorDashboard() {
             const teachersWithSpare = funcionarios
               .filter(f => f.estamento === 'Docente')
               .map(f => {
-                const teacherConts = contratos.filter(c => c.funcionario_run === f.run);
+                const teacherConts = contratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run));
                 const contractIds = teacherConts.map(c => c.id);
                 const totalCont = teacherConts.reduce((sum, c) => sum + c.horas_totales, 0);
                 
                 const totalAsig = asignaciones.filter(a => contractIds.includes(a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
-                const totalCargs = cargosPersonalizados.filter(cg => cg.funcionario_run === f.run).reduce((sum, cg) => sum + cg.horas, 0);
+                const totalCargs = cargosPersonalizados.filter(cg => normalizarRun(cg.funcionario_run) === normalizarRun(f.run)).reduce((sum, cg) => sum + cg.horas, 0);
                 
                 const spareHours = totalCont - (totalAsig + totalCargs);
                 const mainRbd = teacherConts.length > 0 ? teacherConts[0].rbd : 'Desconocido';
@@ -2537,7 +2565,7 @@ export default function SostenedorDashboard() {
             const totalSobrantesTerritorio = teachersWithSpare.reduce((sum, t) => sum + t.horasSobrantes, 0);
 
             // Course study plan overflow alerts
-            const courseAlerts = todosLosCursos.map(curso => {
+            const courseAlerts = cursosDinamicos.map(curso => {
               const plan = planesEstudio.find(p => p.nivel === curso.nivel && p.regimen === curso.regimen);
               const limit = plan ? plan.horasObligatorias : 38;
               
@@ -3023,7 +3051,7 @@ export default function SostenedorDashboard() {
               {(() => {
                 const docDocs = funcionarios.filter(f => f.estamento === 'Docente');
                 const listWithVacantes = docDocs.map(f => {
-                  const carga = calcularCargaDocente(f, contratos, establecimientos, asignaciones);
+                  const carga = calcularCargaDocente(f, contratos, establecimientos, asignaciones, cursosDinamicos);
                   return {
                     funcionario: f,
                     ...carga
