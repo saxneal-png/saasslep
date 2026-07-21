@@ -979,26 +979,85 @@ export function auditarFinanciamientoIrregular(
 ): AuditFinanciamientoIrregularResult[] {
   const resultados: AuditFinanciamientoIrregularResult[] = [];
 
-  contratos.forEach(c => {
-    const f = funcionarios.find(fn => normalizarRun(fn.run) === normalizarRun(c.funcionario_run));
+  // Indexación O(1) de asignaciones por contrato_id
+  const asignacionesMap = new Map<string, AsignacionAula[]>();
+  for (let i = 0; i < asignaciones.length; i++) {
+    const a = asignaciones[i];
+    let list = asignacionesMap.get(a.contrato_id);
+    if (!list) {
+      list = [];
+      asignacionesMap.set(a.contrato_id, list);
+    }
+    list.push(a);
+  }
+
+  // Indexación O(1) de financiamientos por contrato_id
+  const financiamientosMap = new Map<string, FinanciamientoContrato[]>();
+  for (let i = 0; i < financiamientos.length; i++) {
+    const f = financiamientos[i];
+    let list = financiamientosMap.get(f.contrato_id);
+    if (!list) {
+      list = [];
+      financiamientosMap.set(f.contrato_id, list);
+    }
+    list.push(f);
+  }
+
+  // Indexación O(1) de funcionarios por RUN normalizado
+  const funcionariosMap = new Map<string, Funcionario>();
+  for (let i = 0; i < funcionarios.length; i++) {
+    const fn = funcionarios[i];
+    if (fn.run) {
+      funcionariosMap.set(normalizarRun(fn.run), fn);
+    }
+  }
+
+  for (let i = 0; i < contratos.length; i++) {
+    const c = contratos[i];
+    const cFins = financiamientosMap.get(c.id) || [];
+    if (cFins.length === 0) continue;
+
+    let horasPIE = 0;
+    let horasSEP = 0;
+    let tieneAccionPMESEP = false;
+
+    for (let j = 0; j < cFins.length; j++) {
+      const fi = cFins[j];
+      if (fi.origen_fondo === 'PIE') {
+        horasPIE += fi.horas;
+      } else if (fi.origen_fondo === 'SEP') {
+        horasSEP += fi.horas;
+        if (fi.codigo_accion_pme && fi.codigo_accion_pme.trim().length > 0) {
+          tieneAccionPMESEP = true;
+        }
+      }
+    }
+
+    if (horasPIE === 0 && horasSEP === 0) continue;
+
+    const f = funcionariosMap.get(normalizarRun(c.funcionario_run));
     const funcNombre = f ? f.nombre : `RUN ${c.funcionario_run}`;
-
-    const cFins = financiamientos.filter(fi => fi.contrato_id === c.id);
-    const cAsigs = asignaciones.filter(a => a.contrato_id === c.id);
-
-    const horasPIE = cFins.filter(fi => fi.origen_fondo === 'PIE').reduce((s, fi) => s + fi.horas, 0);
-    const horasSEP = cFins.filter(fi => fi.origen_fondo === 'SEP').reduce((s, fi) => s + fi.horas, 0);
+    const cAsigs = asignacionesMap.get(c.id) || [];
 
     // 1. Audit PIE
     if (horasPIE > 0) {
-      const tieneRespaldoPIE = cAsigs.some(a => 
-        a.es_co_ensenanza || 
-        a.es_apoyo_pie || 
-        (a.codigo_accion_pme && a.codigo_accion_pme.trim().length > 0) ||
-        a.asignatura.toLowerCase().includes('pie') || 
-        a.asignatura.toLowerCase().includes('apoyo') || 
-        a.asignatura.toLowerCase().includes('diferencial')
-      );
+      let tieneRespaldoPIE = false;
+      for (let j = 0; j < cAsigs.length; j++) {
+        const a = cAsigs[j];
+        if (
+          a.es_co_ensenanza ||
+          a.es_apoyo_pie ||
+          (a.codigo_accion_pme && a.codigo_accion_pme.trim().length > 0)
+        ) {
+          tieneRespaldoPIE = true;
+          break;
+        }
+        const asigLower = a.asignatura.toLowerCase();
+        if (asigLower.includes('pie') || asigLower.includes('apoyo') || asigLower.includes('diferencial')) {
+          tieneRespaldoPIE = true;
+          break;
+        }
+      }
 
       const cargoLower = (c.funcion_principal || '').toLowerCase();
       const esDocenteEspecial = cargoLower.includes('diferencial') || cargoLower.includes('pie') || cargoLower.includes('psicopedagog');
@@ -1020,8 +1079,21 @@ export function auditarFinanciamientoIrregular(
 
     // 2. Audit SEP
     if (horasSEP > 0) {
-      const tieneAccionPME = cFins.some(fi => fi.origen_fondo === 'SEP' && fi.codigo_accion_pme && fi.codigo_accion_pme.trim().length > 0) ||
-        cAsigs.some(a => (a.codigo_accion_pme && a.codigo_accion_pme.trim().length > 0) || a.asignatura.toLowerCase().includes('sep') || a.asignatura.toLowerCase().includes('reforzamiento') || a.asignatura.toLowerCase().includes('taller'));
+      let tieneAccionPME = tieneAccionPMESEP;
+      if (!tieneAccionPME) {
+        for (let j = 0; j < cAsigs.length; j++) {
+          const a = cAsigs[j];
+          if (a.codigo_accion_pme && a.codigo_accion_pme.trim().length > 0) {
+            tieneAccionPME = true;
+            break;
+          }
+          const asigLower = a.asignatura.toLowerCase();
+          if (asigLower.includes('sep') || asigLower.includes('reforzamiento') || asigLower.includes('taller')) {
+            tieneAccionPME = true;
+            break;
+          }
+        }
+      }
 
       if (!tieneAccionPME && cAsigs.length > 0) {
         resultados.push({
@@ -1037,7 +1109,7 @@ export function auditarFinanciamientoIrregular(
         });
       }
     }
-  });
+  }
 
   return resultados;
 }

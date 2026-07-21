@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -130,6 +130,70 @@ export default function EscuelaDashboard() {
   const [extRun, setExtRun] = useState('');
   const [extNombre, setExtNombre] = useState('');
   const [extTitulo, setExtTitulo] = useState('');
+
+  // Memoized available internal teachers pool for vacancy matcher (Lazy O(N))
+  const availableInternalTeachers = useMemo(() => {
+    if (activeTab !== 'vacantes' || !vacNombreCargo.trim()) return [];
+
+    const contsByRun = new Map<string, Contrato[]>();
+    for (let i = 0; i < todosLosContratos.length; i++) {
+      const c = todosLosContratos[i];
+      const normRun = normalizarRun(c.funcionario_run);
+      let list = contsByRun.get(normRun);
+      if (!list) {
+        list = [];
+        contsByRun.set(normRun, list);
+      }
+      list.push(c);
+    }
+
+    const asigHoursByContId = new Map<string, number>();
+    for (let i = 0; i < asignaciones.length; i++) {
+      const a = asignaciones[i];
+      const prev = asigHoursByContId.get(a.contrato_id) || 0;
+      asigHoursByContId.set(a.contrato_id, prev + a.horas);
+    }
+
+    const cargsHoursByRun = new Map<string, number>();
+    for (let i = 0; i < cargosPersonalizados.length; i++) {
+      const cg = cargosPersonalizados[i];
+      const normRun = normalizarRun(cg.funcionario_run);
+      const prev = cargsHoursByRun.get(normRun) || 0;
+      cargsHoursByRun.set(normRun, prev + cg.horas);
+    }
+
+    const result: { funcionario: Funcionario; mainRbd: string; spare: number }[] = [];
+
+    for (let i = 0; i < funcionarios.length; i++) {
+      const f = funcionarios[i];
+      if (f.estamento !== vacEstamento) continue;
+
+      const normRun = normalizarRun(f.run);
+      const teacherConts = contsByRun.get(normRun);
+      if (!teacherConts || teacherConts.length === 0) continue;
+
+      let totalCont = 0;
+      let totalAsig = 0;
+      for (let j = 0; j < teacherConts.length; j++) {
+        const c = teacherConts[j];
+        totalCont += c.horas_totales;
+        totalAsig += asigHoursByContId.get(c.id) || 0;
+      }
+
+      const totalCargs = cargsHoursByRun.get(normRun) || 0;
+      const spare = totalCont - (totalAsig + totalCargs);
+
+      if (spare >= 1) {
+        result.push({
+          funcionario: f,
+          mainRbd: teacherConts[0].rbd || 'N/A',
+          spare
+        });
+      }
+    }
+
+    return result;
+  }, [activeTab, vacNombreCargo, vacEstamento, funcionarios, todosLosContratos, asignaciones, cargosPersonalizados]);
 
   // PIE Program & Calculator States
   const [pieNeetCount, setPieNeetCount] = useState<number>(5);
@@ -4543,19 +4607,6 @@ export default function EscuelaDashboard() {
                       <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wide flex items-center gap-2">
                         <span>🔍</span> Motor de Búsqueda de Coincidencias en Red SLEP (Bolsa de Disponibilidad)
                       </h4>
-                      {(() => {
-                        const availableInternalTeachers = funcionarios.filter(f => {
-                          if (f.estamento !== vacEstamento) return false;
-                          const teacherConts = todosLosContratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run));
-                          if (teacherConts.length === 0) return false;
-                          const totalCont = teacherConts.reduce((sum, c) => sum + c.horas_totales, 0);
-                          const totalAsig = asignaciones.filter(a => teacherConts.some(c => c.id === a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
-                          const totalCargs = cargosPersonalizados.filter(cg => normalizarRun(cg.funcionario_run) === normalizarRun(f.run)).reduce((sum, cg) => sum + cg.horas, 0);
-                          const spare = totalCont - (totalAsig + totalCargs);
-                          return spare >= 1;
-                        });
-
-                        return (
                           <div className="space-y-3 text-xs">
                             <p className="text-slate-600 font-medium">
                               Se encontraron <strong className="text-slate-800">{availableInternalTeachers.length} profesionales</strong> en la red interna con disponibilidad o bolsa de horas sobrantes.
@@ -4563,14 +4614,7 @@ export default function EscuelaDashboard() {
 
                             {availableInternalTeachers.length > 0 ? (
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-1">
-                                {availableInternalTeachers.slice(0, 6).map(f => {
-                                  const tConts = todosLosContratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run));
-                                  const mainRbd = tConts.length > 0 ? tConts[0].rbd : 'N/A';
-                                  const totalCont = tConts.reduce((sum, c) => sum + c.horas_totales, 0);
-                                  const totalAsig = asignaciones.filter(a => tConts.some(c => c.id === a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
-                                  const totalCargs = cargosPersonalizados.filter(cg => normalizarRun(cg.funcionario_run) === normalizarRun(f.run)).reduce((sum, cg) => sum + cg.horas, 0);
-                                  const spare = totalCont - (totalAsig + totalCargs);
-
+                                {availableInternalTeachers.slice(0, 6).map(({ funcionario: f, mainRbd, spare }) => {
                                   return (
                                     <div key={f.run} className="p-3 bg-white border border-blue-100 rounded-lg shadow-sm flex items-center justify-between">
                                       <div>
@@ -4641,8 +4685,6 @@ export default function EscuelaDashboard() {
                               </button>
                             </div>
                           </div>
-                        );
-                      })()}
                     </div>
                   )}
                 </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -78,6 +78,152 @@ export default function SostenedorDashboard() {
     tab: '',
     columns: []
   });
+
+  // Memoized PIE/SEP Audit Result (Lazy & Indexed O(N))
+  const auditIrregular = useMemo(() => {
+    if (activeTab !== 'conciliacion' || contratos.length === 0) return [];
+    return auditarFinanciamientoIrregular(contratos, financiamientos, asignaciones, funcionarios);
+  }, [activeTab, contratos, financiamientos, asignaciones, funcionarios]);
+
+  // Memoized Resumenes & Analysis Calculations (Lazy & Indexed O(N))
+  const resumenCalculations = useMemo(() => {
+    if (activeTab !== 'resumenes') {
+      return { teachersWithSpare: [], totalSobrantesTerritorio: 0, courseAlerts: [] };
+    }
+
+    const estByRbdMap = new Map<string, Establecimiento>();
+    for (let i = 0; i < establecimientos.length; i++) {
+      const e = establecimientos[i];
+      estByRbdMap.set(normalizarRbd(String(e.rbd)), e);
+    }
+
+    const contsByRunMap = new Map<string, Contrato[]>();
+    for (let i = 0; i < contratos.length; i++) {
+      const c = contratos[i];
+      const normRun = normalizarRun(c.funcionario_run);
+      let list = contsByRunMap.get(normRun);
+      if (!list) {
+        list = [];
+        contsByRunMap.set(normRun, list);
+      }
+      list.push(c);
+    }
+
+    const asigHoursByContIdMap = new Map<string, number>();
+    for (let i = 0; i < asignaciones.length; i++) {
+      const a = asignaciones[i];
+      const prev = asigHoursByContIdMap.get(a.contrato_id) || 0;
+      asigHoursByContIdMap.set(a.contrato_id, prev + a.horas);
+    }
+
+    const cargsHoursByRunMap = new Map<string, number>();
+    for (let i = 0; i < cargosPersonalizados.length; i++) {
+      const cg = cargosPersonalizados[i];
+      const normRun = normalizarRun(cg.funcionario_run);
+      const prev = cargsHoursByRunMap.get(normRun) || 0;
+      cargsHoursByRunMap.set(normRun, prev + cg.horas);
+    }
+
+    const teachersWithSpare = [];
+    for (let i = 0; i < funcionarios.length; i++) {
+      const f = funcionarios[i];
+      if (f.estamento !== 'Docente') continue;
+
+      const normRun = normalizarRun(f.run);
+      const teacherConts = contsByRunMap.get(normRun);
+      if (!teacherConts || teacherConts.length === 0) continue;
+
+      let totalCont = 0;
+      let totalAsig = 0;
+      for (let j = 0; j < teacherConts.length; j++) {
+        const c = teacherConts[j];
+        totalCont += c.horas_totales;
+        totalAsig += asigHoursByContIdMap.get(c.id) || 0;
+      }
+
+      const totalCargs = cargsHoursByRunMap.get(normRun) || 0;
+      const spareHours = totalCont - (totalAsig + totalCargs);
+
+      if (spareHours > 0.1) {
+        const mainRbd = teacherConts[0].rbd || 'Desconocido';
+        const school = estByRbdMap.get(normalizarRbd(String(mainRbd)));
+        const schoolName = school ? school.nombre : `RBD ${mainRbd}`;
+        const schoolComuna = school ? school.comuna : '';
+
+        if (schoolComuna && (resumenSelectedComunas.length === 0 || resumenSelectedComunas.includes(schoolComuna))) {
+          teachersWithSpare.push({
+            run: f.run,
+            nombre: f.nombre,
+            escuela: schoolName,
+            comuna: schoolComuna,
+            horasContrato: totalCont,
+            horasAsignadas: totalAsig,
+            horasCargos: totalCargs,
+            horasSobrantes: Number(spareHours.toFixed(1))
+          });
+        }
+      }
+    }
+    teachersWithSpare.sort((a, b) => b.horasSobrantes - a.horasSobrantes);
+
+    const totalSobrantesTerritorio = teachersWithSpare.reduce((sum, t) => sum + t.horasSobrantes, 0);
+
+    // Course study plan overflow alerts
+    const planMap = new Map<string, number>();
+    for (let i = 0; i < planesEstudio.length; i++) {
+      const p = planesEstudio[i];
+      planMap.set(`${p.nivel}_${p.regimen}`, p.horasObligatorias);
+    }
+
+    const courseHoursMap = new Map<string, number>(); // key: "RBD_cursoNombre"
+    const contIdToRbdMap = new Map<string, string>();
+    for (let i = 0; i < contratos.length; i++) {
+      const c = contratos[i];
+      contIdToRbdMap.set(c.id, normalizarRbd(String(c.rbd)));
+    }
+
+    for (let i = 0; i < asignaciones.length; i++) {
+      const a = asignaciones[i];
+      const normRbd = contIdToRbdMap.get(a.contrato_id);
+      if (normRbd) {
+        const key = `${normRbd}_${a.curso}`;
+        const prev = courseHoursMap.get(key) || 0;
+        courseHoursMap.set(key, prev + a.horas);
+      }
+    }
+
+    const courseAlerts = [];
+    for (let i = 0; i < cursosDinamicos.length; i++) {
+      const curso = cursosDinamicos[i];
+      const normRbd = normalizarRbd(String(curso.rbd));
+      const school = estByRbdMap.get(normRbd);
+      const comuna = school ? school.comuna : '';
+
+      if (resumenSelectedComunas.length > 0 && (!comuna || !resumenSelectedComunas.includes(comuna))) continue;
+
+      const limit = planMap.get(`${curso.nivel}_${curso.regimen}`) || 38;
+      const key = `${normRbd}_${curso.nombre}`;
+      const assignedHours = courseHoursMap.get(key) || 0;
+      const delta = assignedHours - limit;
+
+      if (delta > 0.1) {
+        courseAlerts.push({
+          rbd: curso.rbd,
+          escuela: school ? school.nombre : `RBD ${curso.rbd}`,
+          comuna: comuna,
+          curso: curso.nombre,
+          nivel: curso.nivel,
+          regimen: curso.regimen,
+          limitePlan: limit,
+          horasAsignadas: assignedHours,
+          diferencia: delta,
+          esExceso: true
+        });
+      }
+    }
+
+    return { teachersWithSpare, totalSobrantesTerritorio, courseAlerts };
+  }, [activeTab, establecimientos, contratos, asignaciones, cargosPersonalizados, funcionarios, cursosDinamicos, planesEstudio, resumenSelectedComunas]);
 
   const triggerExport = (tab: string, format: 'xlsx' | 'pdf') => {
     let cols: { key: string; label: string; checked: boolean }[] = [];
@@ -2533,64 +2679,7 @@ export default function SostenedorDashboard() {
               .sort((a, b) => b.horas - a.horas);
 
             // Spare Hours (Docentes con horas de contrato sobrantes)
-            const teachersWithSpare = funcionarios
-              .filter(f => f.estamento === 'Docente')
-              .map(f => {
-                const teacherConts = contratos.filter(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run));
-                const contractIds = teacherConts.map(c => c.id);
-                const totalCont = teacherConts.reduce((sum, c) => sum + c.horas_totales, 0);
-                
-                const totalAsig = asignaciones.filter(a => contractIds.includes(a.contrato_id)).reduce((sum, a) => sum + a.horas, 0);
-                const totalCargs = cargosPersonalizados.filter(cg => normalizarRun(cg.funcionario_run) === normalizarRun(f.run)).reduce((sum, cg) => sum + cg.horas, 0);
-                
-                const spareHours = totalCont - (totalAsig + totalCargs);
-                const mainRbd = teacherConts.length > 0 ? teacherConts[0].rbd : 'Desconocido';
-                const school = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(mainRbd)));
-                const schoolName = school ? school.nombre : `RBD ${mainRbd}`;
-                const schoolComuna = school ? school.comuna : '';
-                
-                return {
-                  run: f.run,
-                  nombre: f.nombre,
-                  escuela: schoolName,
-                  comuna: schoolComuna,
-                  horasContrato: totalCont,
-                  horasAsignadas: totalAsig,
-                  horasCargos: totalCargs,
-                  horasSobrantes: spareHours > 0 ? Number(spareHours.toFixed(1)) : 0
-                };
-              })
-              .filter(t => t.horasSobrantes > 0.1 && t.comuna && resumenSelectedComunas.includes(t.comuna))
-              .sort((a, b) => b.horasSobrantes - a.horasSobrantes);
-
-            const totalSobrantesTerritorio = teachersWithSpare.reduce((sum, t) => sum + t.horasSobrantes, 0);
-
-            // Course study plan overflow alerts
-            const courseAlerts = cursosDinamicos.map(curso => {
-              const plan = planesEstudio.find(p => p.nivel === curso.nivel && p.regimen === curso.regimen);
-              const limit = plan ? plan.horasObligatorias : 38;
-              
-              const school = establecimientos.find(e => normalizarRbd(String(e.rbd)) === normalizarRbd(String(curso.rbd)));
-              
-              const schoolConts = contratos.filter(c => normalizarRbd(String(c.rbd)) === normalizarRbd(String(curso.rbd)));
-              const schoolContIds = schoolConts.map(c => c.id);
-              const courseAsigs = asignaciones.filter(a => schoolContIds.includes(a.contrato_id) && a.curso === curso.nombre);
-              const assignedHours = courseAsigs.reduce((sum, a) => sum + a.horas, 0);
-              
-              const delta = assignedHours - limit;
-              return {
-                rbd: curso.rbd,
-                escuela: school ? school.nombre : `RBD ${curso.rbd}`,
-                comuna: school ? school.comuna : '',
-                curso: curso.nombre,
-                nivel: curso.nivel,
-                regimen: curso.regimen,
-                limitePlan: limit,
-                horasAsignadas: assignedHours,
-                diferencia: delta,
-                esExceso: delta > 0.1
-              };
-            }).filter(c => c.esExceso && c.comuna && resumenSelectedComunas.includes(c.comuna));
+            const { teachersWithSpare, totalSobrantesTerritorio, courseAlerts } = resumenCalculations;
 
             return (
               <div className="space-y-6">
@@ -3050,10 +3139,7 @@ export default function SostenedorDashboard() {
           </div>
 
           {/* SECTION 1: Motor de Fiscalización Preventiva PIE / SEP */}
-          {(() => {
-            const auditIrregular = auditarFinanciamientoIrregular(contratos, financiamientos, asignaciones, funcionarios);
-            return (
-              <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+          <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
                 <div className="p-4 border-b bg-rose-50/60 flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-rose-900 flex items-center gap-2">
@@ -3127,8 +3213,6 @@ export default function SostenedorDashboard() {
                   )}
                 </div>
               </div>
-            );
-          })()}
 
           {/* SECTION 2: Solicitudes de Brechas y Propuestas Excepcionales del Director */}
           {(() => {
