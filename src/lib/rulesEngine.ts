@@ -821,7 +821,11 @@ export function validarHardCap44Horas(
   
   let activeConts = contratos.filter(c => normalizarRun(c.funcionario_run) === normRun);
   if (contratoEditado) {
-    activeConts = activeConts.filter(c => c.id !== contratoEditado.id);
+    const editRbdNorm = normalizarRbd(String(contratoEditado.rbd));
+    activeConts = activeConts.filter(c => 
+      c.id !== contratoEditado.id && 
+      !(normalizarRbd(String(c.rbd)) === editRbdNorm && c.calidad_juridica === contratoEditado.calidad_juridica)
+    );
     activeConts.push(contratoEditado);
   }
 

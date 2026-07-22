@@ -1102,9 +1102,8 @@ export default function EscuelaDashboard() {
       const calidadesUnicas = Array.from(new Set(editContFins.map(sl => sl.calidad)));
       const oldCont = relatedConts[0];
 
-      // Delete contracts whose quality is no longer present (avoids deleting active contracts that are being soft-updated)
-      const toDelete = relatedConts.filter(c => !calidadesUnicas.includes(c.calidad_juridica));
-      for (const oldC of toDelete) {
+      // Delete all existing contracts for this funcionario at this school to prevent stale or duplicate IDs
+      for (const oldC of relatedConts) {
         await api.deleteContrato(oldC.id);
       }
 
@@ -1114,8 +1113,7 @@ export default function EscuelaDashboard() {
         const linesForCal = editContFins.filter(l => l.calidad === cal);
         const totalHorasCal = linesForCal.reduce((sum, l) => sum + l.horas, 0);
 
-        const existingMatch = relatedConts.find(c => c.calidad_juridica === cal);
-        const contractId = existingMatch?.id || `c-school-edit-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-${selectedRbd}-${cal.toLowerCase().replace(/[^a-z]/g, '')}-${cIdx}`;
+        const contractId = `c-school-edit-${cleanRun.replace(/[^a-zA-Z0-9]/g, '')}-${selectedRbd}-${cal.toLowerCase().replace(/[^a-z]/g, '')}-${cIdx}`;
 
         const nuevoContrato: Contrato = {
           id: contractId,
