@@ -1120,16 +1120,16 @@ export default function EscuelaDashboard() {
           funcionario_run: cleanRun,
           rbd: selectedRbd,
           calidad_juridica: cal,
-          funcion_principal: editFuncCargo || existingMatch?.funcion_principal || oldCont?.funcion_principal || 'Docente de Aula',
-          estado: existingMatch?.estado || oldCont?.estado || 'Activo',
+          funcion_principal: editFuncCargo || oldCont?.funcion_principal || 'Docente de Aula',
+          estado: oldCont?.estado || 'Activo',
           horas_totales: totalHorasCal,
           horas_aula: calidadesUnicas.length === 1 ? calculatedAula : parseFloat((totalHorasCal * 0.65).toFixed(2)),
           horas_colaborativas: calidadesUnicas.length === 1 ? calculatedColab : parseFloat((totalHorasCal * 0.35).toFixed(2)),
           es_uniprofesional: editContEsUniprofesional,
           horas_directivas: editContHorasDirectivas || 0,
           horas_tecnico_pedagogicas: editContHorasTecPed || 0,
-          fecha_inicio_licencia: existingMatch?.fecha_inicio_licencia || oldCont?.fecha_inicio_licencia,
-          fecha_termino_licencia: existingMatch?.fecha_termino_licencia || oldCont?.fecha_termino_licencia
+          fecha_inicio_licencia: oldCont?.fecha_inicio_licencia,
+          fecha_termino_licencia: oldCont?.fecha_termino_licencia
         };
 
         const newFins = linesForCal.map((l) => ({
