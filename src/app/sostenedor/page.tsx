@@ -5,7 +5,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { api, dbLocal, supabase } from '@/lib/supabase';
-import { NavbarContextual, UserRoleContext } from '@/components/ui/NavbarContextual';
 import { parsearNominaCsv, normalizarRun, normalizarRbd, parsearRemuneracionesCsv, parsearArchivoExcelOJson, descargarPlantillaExcel } from '@/lib/csvParser';
 import { 
   Establecimiento, 
@@ -1490,21 +1489,12 @@ export default function SostenedorDashboard() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
-        <NavbarContextual
-          rolActivo="sostenedor"
-          pestañaActiva={activeTab === 'dashboard' ? 'macro' : activeTab}
-          onCambiarPestaña={(tabId) => {
-            if (tabId === 'macro') setActiveTab('dashboard');
-            else if (tabId === 'finanzas') router.push('/sostenedor/finanzas');
-            else if (tabId === 'rrhh' || tabId === 'uatp' || tabId === 'resoluciones') router.push('/sostenedor/rrhh');
-            else setActiveTab(tabId as any);
-          }}
-          onCambiarRol={(newRol) => {
-            if (newRol === 'escuela') router.push('/escuela');
-            else if (newRol === 'profesional') router.push('/profesional');
-          }}
-          alertasRiesgoCount={alertas.length}
-        />
+        <header className="bg-white border-b py-4 px-6 flex items-center justify-between shadow-sm">
+          <div>
+            <h1 className="text-base font-bold text-slate-800">Consola de Gobernanza Territorial</h1>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">Gestión unificada SLEP del Sostenedor</p>
+          </div>
+        </header>
 
         {activeTab === 'compendio' && (
         <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full">
