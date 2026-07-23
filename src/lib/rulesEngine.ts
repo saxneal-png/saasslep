@@ -524,14 +524,27 @@ export function calcularDesgloseContrato(
     : horasCronologicasList.filter(h => h.contrato_id === contrato.id);
   const horasCronAdic = cronList.reduce((sum, h) => sum + h.horas, 0);
 
-  let horasDirectivas = contrato.horas_directivas || 0;
+  // Extraer horas directivas ingresadas en horas cronológicas adicionales
+  const horasDirectivasAdicionales = cronList
+    .filter(h => h.tipo.includes('Horas Directivas'))
+    .reduce((sum, h) => sum + h.horas, 0);
+
+  let horasDirectivas = (contrato.horas_directivas || 0) + horasDirectivasAdicionales;
   if (contrato.es_uniprofesional) {
     horasDirectivas = Math.min(10, horasDirectivas);
   }
   const horasTecnicoPedagogicas = contrato.horas_tecnico_pedagogicas || 0;
 
+  // Verificación de beneficio Artículo 69 Ley N° 19.070 (Reducción docentes con 30+ años de servicio a máximo 24h cronológicas aula)
+  const tieneArticulo69 = cronList.some(h => h.tipo.includes('Artículo 69') || h.tipo.includes('Ley 19.070') || h.tipo.includes('19070'));
+
   const baseTope = esExcepcion ? 26.25 : 28.5;
-  const topeMaximoDocencia = calculatedTopeMaxDoc > 0 ? calculatedTopeMaxDoc : parseFloat((baseTope * (horasTotales / 44)).toFixed(2));
+  let topeMaximoDocencia = calculatedTopeMaxDoc > 0 ? calculatedTopeMaxDoc : parseFloat((baseTope * (horasTotales / 44)).toFixed(2));
+
+  if (tieneArticulo69) {
+    // Reducción legal estricta de docencia efectiva a máximo 24 horas cronológicas (18 horas pedagógicas o 24h cronológicas)
+    topeMaximoDocencia = Math.min(topeMaximoDocencia, 24.0);
+  }
 
   return {
     horasAula,

@@ -5465,8 +5465,12 @@ export default function EscuelaDashboard() {
                           <option value="Trabajo Colaborativo">Trabajo Colaborativo</option>
                           <option value="Técnicas">Técnicas</option>
                           <option value="Apoyo UTP">Apoyo UTP</option>
+                          <option value="Horas Directivas">Horas Directivas</option>
+                          <option value="Artículo 69 Ley 19.070 (Reducción por 30 o más años de servicio)">Artículo 69 Ley 19.070 (Reducción por 30+ años de servicio)</option>
+                          <option value="Coordinación CRA">Coordinación CRA</option>
                           <option value="Taller Extracurricular">Taller Extracurricular</option>
                           <option value="Reforzamiento Pedagógico">Reforzamiento Pedagógico</option>
+                          <option value="Otras">Otras</option>
                         </select>
 
                         {/* Subvención / Calidad selection */}
@@ -5512,6 +5516,18 @@ export default function EscuelaDashboard() {
                           ➕ Agregar
                         </button>
                       </div>
+
+                      {/* Tooltip / Etiqueta Informativa Legal para Artículo 69 Ley N° 19.070 */}
+                      {newEditCronoType.includes('Artículo 69') && (
+                        <div className="p-3 bg-blue-50/80 border border-blue-200 text-blue-950 rounded-lg text-[11px] space-y-1 mt-2">
+                          <div className="flex items-center space-x-1 font-bold text-blue-900">
+                            <span>⚖️ Fundamentación Legal - Artículo 69 Ley N° 19.070:</span>
+                          </div>
+                          <p className="leading-relaxed">
+                            Faculta a los docentes con 30 o más años de servicio a solicitar la reducción de su docencia de aula efectiva a un máximo de 24 horas cronológicas semanales, destinando el resto de su horario a actividades curriculares no lectivas (conforme al artículo 69 inciso 6 de la Ley N° 19.070 y el artículo 130 de su Reglamento).
+                          </p>
+                        </div>
+                      )}
 
                       {editContCronoHours.length > 0 ? (
                         <div className="flex flex-wrap gap-2 pt-1">

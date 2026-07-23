@@ -32,10 +32,25 @@ export interface Funcionario {
   fecha_ingreso_establecimiento?: string;
 }
 
+export const CATEGORIAS_HORAS_CRONOLOGICAS = [
+  'Trabajo Colaborativo',
+  'Técnicas',
+  'Apoyo UTP',
+  'Horas Directivas',
+  'Artículo 69 Ley 19.070 (Reducción por 30 o más años de servicio)',
+  'Coordinación CRA',
+  'Taller Extracurricular',
+  'Reforzamiento Pedagógico',
+  'Otras'
+] as const;
+
+export const DESCRIPCION_LEGAL_ART_69 = 
+  'Faculta a los docentes con 30 o más años de servicio a solicitar la reducción de su docencia de aula efectiva a un máximo de 24 horas cronológicas semanales, destinando el resto de su horario a actividades curriculares no lectivas (conforme al artículo 69 inciso 6 de la Ley N° 19.070 y el artículo 130 de su Reglamento).';
+
 export interface HorasCronologicasAdicionales {
   id: string; // UUID
   contrato_id: string;
-  tipo: string; // e.g. "Trabajo Colaborativo", "Técnicas", "Apoyo UTP", "Otros"
+  tipo: string; // e.g. "Horas Directivas", "Artículo 69 Ley 19.070 (Reducción por 30 o más años de servicio)", "Coordinación CRA", "Otras", etc.
   horas: number;
 }
 
