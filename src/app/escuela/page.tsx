@@ -1352,7 +1352,10 @@ export default function EscuelaDashboard() {
         const sepTit = isTitularOrIndefinido ? sepHrs : 0;
         const sepCon = !isTitularOrIndefinido ? sepHrs : 0;
 
-        const dirHrs = c.horas_directivas || 0;
+        const directivasAdic = (allCronoHours || [])
+          .filter(h => h.contrato_id === c.id && h.tipo.includes('Horas Directivas'))
+          .reduce((sum, h) => sum + h.horas, 0);
+        const dirHrs = (c.horas_directivas || 0) + directivasAdic;
         const tecHrs = c.horas_tecnico_pedagogicas || 0;
         const otrasFuncionesHrs = cargosPersonalizados
           .filter(cp => cp.funcionario_run === c.funcionario_run)
@@ -3114,7 +3117,7 @@ export default function EscuelaDashboard() {
                       <label className="block font-bold text-slate-500 mb-1">Cargo Personalizado Escuela</label>
                       <input 
                         type="text" 
-                        placeholder="Ej: Encargado Convivencia" 
+                        placeholder="Ej: Coordinador de Convivencia Educativa" 
                         className="w-full p-2 border rounded"
                         value={customCargoNombre}
                         onChange={(e) => setCustomCargoNombre(e.target.value)}
@@ -3675,7 +3678,10 @@ export default function EscuelaDashboard() {
                           });
 
                           const totalHoras = userConts.reduce((sum, c) => sum + (c.horas_totales || 0), 0);
-                          const dirHrs = userConts.reduce((sum, c) => sum + (c.horas_directivas || 0), 0);
+                          const directivasAdic = (allCronoHours || [])
+                            .filter(h => userConts.some(c => c.id === h.contrato_id) && h.tipo.includes('Horas Directivas'))
+                            .reduce((sum, h) => sum + h.horas, 0);
+                          const dirHrs = userConts.reduce((sum, c) => sum + (c.horas_directivas || 0), 0) + directivasAdic;
                           const tecHrs = userConts.reduce((sum, c) => sum + (c.horas_tecnico_pedagogicas || 0), 0);
                           const otrasFuncionesHrs = cargosPersonalizados
                             .filter(cp => cp.funcionario_run === f.run)
@@ -5051,7 +5057,7 @@ export default function EscuelaDashboard() {
                       <label className="block font-bold text-slate-500 mb-1">Nombre del Cargo</label>
                       <input 
                         type="text" 
-                        placeholder="Ej: Encargado Convivencia" 
+                        placeholder="Ej: Coordinador de Convivencia Educativa" 
                         className="w-full p-2 border rounded bg-white text-slate-800 text-xs"
                         value={customCargoNombre}
                         onChange={(e) => setCustomCargoNombre(e.target.value)}
@@ -5573,7 +5579,7 @@ export default function EscuelaDashboard() {
                     const desglose = calcularDesgloseContrato(tempContForIndicators, cursosDinamicos, teacherAsigs, tempCrono, undefined, editFuncCargo);
 
                     const pedagogicasAsignadas = teacherAsigs.reduce((sum, a) => sum + a.horas, 0); 
-                    const dirHrs = editContHorasDirectivas || 0;
+                    const dirHrs = desglose.horasDirectivas;
                     const tecHrs = editContHorasTecPed || 0;
                     const otrasFuncionesHrs = cargosPersonalizados
                       .filter(cp => cp.funcionario_run === editingFuncionario.run)

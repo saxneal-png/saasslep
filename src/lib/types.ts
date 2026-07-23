@@ -228,6 +228,7 @@ export const CARGOS_DOCENTES_LIST = [
   'DOCENTE DE AULA',
   'DOCENTE DIFERENCIAL',
   'DIRECTOR/A',
+  'SUBDIRECTOR/A',
   'JEFE/A UTP',
   'DOCENTE ENCARGADO',
   'EDUCADORA DE PARVULOS',
@@ -235,7 +236,7 @@ export const CARGOS_DOCENTES_LIST = [
   'DOCENTE TECNICO',
   'COORDINADOR/A PIE',
   'ORIENTADOR/A',
-  'ENCARGADO/A DE CONVIVENCIA',
+  'COORDINADOR/A DE CONVIVENCIA EDUCATIVA',
   'OTRO'
 ] as const;
 
@@ -251,6 +252,9 @@ export function normalizarCargoDocente(rawCargo: string): string {
   }
   if (clean.includes("DOCENTE DIFERENCIAL") || clean.includes("DIFERENCIAL") || clean.includes("PSICOPEDAGOGO") || clean.includes("EDUCADORA DIFERENCIAL") || clean.includes("PSICOPEDAGOGA")) {
     return "DOCENTE DIFERENCIAL";
+  }
+  if (clean.includes("SUBDIRECTOR") || clean.includes("SUBDIRECTORA")) {
+    return "SUBDIRECTOR/A";
   }
   if (clean.includes("DIRECTOR") || clean.includes("DIRECTORA")) {
     return "DIRECTOR/A";
@@ -276,12 +280,11 @@ export function normalizarCargoDocente(rawCargo: string): string {
   if (clean.includes("ORIENTADOR") || clean.includes("ORIENTADORA")) {
     return "ORIENTADOR/A";
   }
-  if (clean.includes("CONVIVENCIA") || clean.includes("CONVIVENCIA ESCOLAR") || clean.includes("ENCARGADO DE CONVIVENCIA") || clean.includes("ENCARGADA DE CONVIVENCIA")) {
-    return "ENCARGADO/A DE CONVIVENCIA";
+  if (clean.includes("CONVIVENCIA") || clean.includes("CONVIVENCIA EDUCATIVA") || clean.includes("CONVIVENCIA ESCOLAR") || clean.includes("ENCARGADO DE CONVIVENCIA") || clean.includes("COORDINADOR DE CONVIVENCIA") || clean.includes("COORDINADORA DE CONVIVENCIA")) {
+    return "COORDINADOR/A DE CONVIVENCIA EDUCATIVA";
   }
   
-  // Return the original clean uppercase version if it doesn't match, or return rawCargo
-  return rawCargo;
+  return "OTRO";
 }
 
 export interface ReemplazoDetalle {
