@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { api, dbLocal, supabase } from '@/lib/supabase';
+import { NavbarContextual, UserRoleContext } from '@/components/ui/NavbarContextual';
 import { parsearNominaCsv, normalizarRun, normalizarRbd, parsearRemuneracionesCsv, parsearArchivoExcelOJson, descargarPlantillaExcel } from '@/lib/csvParser';
 import { 
   Establecimiento, 
@@ -469,6 +470,27 @@ export default function SostenedorDashboard() {
     setCargosPersonalizados(cargs);
     setComunasList(coms);
     setResumenSelectedComunas(coms);
+
+    // Determinar la comuna con mayor cantidad de establecimientos como predeterminada
+    const comunaCounts: Record<string, number> = {};
+    ests.forEach(e => {
+      if (e.comuna) {
+        comunaCounts[e.comuna] = (comunaCounts[e.comuna] || 0) + 1;
+      }
+    });
+
+    let topComuna = 'Todas';
+    let maxCount = 0;
+    Object.entries(comunaCounts).forEach(([com, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        topComuna = com;
+      }
+    });
+
+    if (topComuna !== 'Todas') {
+      setSelectedComuna(topComuna);
+    }
 
     if (sups.length > 0) {
       setSelectedProfRun(sups[0].run);
@@ -1468,12 +1490,21 @@ export default function SostenedorDashboard() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
-        <header className="bg-white border-b py-4 px-6 flex items-center justify-between shadow-sm">
-          <div>
-            <h1 className="text-base font-bold text-slate-800">Consola de Gobernanza Territorial</h1>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">Gestión unificada SLEP del Sostenedor</p>
-          </div>
-        </header>
+        <NavbarContextual
+          rolActivo="sostenedor"
+          pestañaActiva={activeTab === 'dashboard' ? 'macro' : activeTab}
+          onCambiarPestaña={(tabId) => {
+            if (tabId === 'macro') setActiveTab('dashboard');
+            else if (tabId === 'finanzas') router.push('/sostenedor/finanzas');
+            else if (tabId === 'rrhh' || tabId === 'uatp' || tabId === 'resoluciones') router.push('/sostenedor/rrhh');
+            else setActiveTab(tabId as any);
+          }}
+          onCambiarRol={(newRol) => {
+            if (newRol === 'escuela') router.push('/escuela');
+            else if (newRol === 'profesional') router.push('/profesional');
+          }}
+          alertasRiesgoCount={alertas.length}
+        />
 
         {activeTab === 'compendio' && (
         <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full">
@@ -1676,8 +1707,15 @@ export default function SostenedorDashboard() {
             <div className="bg-white rounded-xl shadow border border-slate-200/60 overflow-hidden">
               <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
                 <div>
-                  <h2 className="text-base font-bold text-slate-800">Mapa de Establecimientos del Territorio ({establecimientos.length})</h2>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">Control territorial y auditoría de tutela.</p>
+                  <div className="flex items-center space-x-2">
+                    <h2 className="text-base font-bold text-slate-800">Mapa de Establecimientos del Territorio ({filteredEstablecimientos.length} de {establecimientos.length})</h2>
+                    {selectedComuna !== 'Todas' && (
+                      <span className="px-2 py-0.5 bg-blue-100 border border-blue-200 text-blue-900 rounded-full text-[10px] font-bold">
+                        📍 Comuna Predeterminada: {selectedComuna}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">Control territorial optimizado (Cargando comuna con mayor concentración de establecimientos por defecto).</p>
                 </div>
 
                 <div className="flex gap-2">
@@ -1701,11 +1739,12 @@ export default function SostenedorDashboard() {
                     onChange={(e) => setSearchEst(e.target.value)}
                   />
                   <select
-                    className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
+                    className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-bold text-slate-700"
                     value={selectedComuna}
                     onChange={(e) => setSelectedComuna(e.target.value)}
                   >
-                    {comunas.map(c => (
+                    <option value="Todas">🌐 Todas las Comunas (Ver Todo)</option>
+                    {comunas.filter(c => c !== 'Todas').map(c => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
