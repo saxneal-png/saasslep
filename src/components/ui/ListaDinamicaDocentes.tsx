@@ -13,8 +13,9 @@ import {
   Briefcase, 
   BookOpen, 
   Layers,
-  ArrowUpDown,
-  Download
+  Download,
+  UserPlus,
+  Edit3
 } from 'lucide-react';
 import { calcularJornadaMinutos, formatMinutosAHorasTexto } from '@/core/mineduc/calculoJornada';
 
@@ -36,6 +37,8 @@ export interface ListaDinamicaDocentesProps {
   cargando?: boolean;
   onSelectDocente?: (docente: DocenteItem) => void;
   onExportarCSV?: () => void;
+  onNuevoDocente?: () => void;
+  filtroSemaforoInicial?: string;
 }
 
 export type VistaModo = 'tabla' | 'kanban';
@@ -45,15 +48,22 @@ export function ListaDinamicaDocentes({
   docentes,
   cargando = false,
   onSelectDocente,
-  onExportarCSV
+  onExportarCSV,
+  onNuevoDocente,
+  filtroSemaforoInicial = 'todos'
 }: ListaDinamicaDocentesProps) {
   const [busqueda, setBusqueda] = useState('');
   const [filtroTipoContrato, setFiltroTipoContrato] = useState<string>('todos');
   const [filtroTramo, setFiltroTramo] = useState<string>('todos');
-  const [filtroSemaforo, setFiltroSemaforo] = useState<string>('todos');
+  const [filtroSemaforo, setFiltroSemaforo] = useState<string>(filtroSemaforoInicial);
   const [vista, setVista] = useState<VistaModo>('tabla');
   const [agrupacion, setAgrupacion] = useState<AgrupacionModo>('ninguno');
   const [ordenAsc, setOrdenAsc] = useState<boolean>(true);
+
+  // Sincronizar filtro semáforo inicial si cambia externamente
+  React.useEffect(() => {
+    setFiltroSemaforo(filtroSemaforoInicial);
+  }, [filtroSemaforoInicial]);
 
   // Filtrado multidimensional
   const docentesFiltrados = useMemo(() => {
@@ -129,7 +139,7 @@ export function ListaDinamicaDocentes({
           />
         </div>
 
-        {/* Filtros Multidimensionales */}
+        {/* Filtros Multidimensionales & Botones de Acción */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
           
           <div className="flex items-center space-x-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
@@ -181,26 +191,36 @@ export function ListaDinamicaDocentes({
             <button
               onClick={() => setVista('tabla')}
               title="Vista Tabla Densa (Auditoría UATP)"
-              className={`p-1.5 rounded-md transition-all ${vista === 'tabla' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+              className={`p-1.5 rounded-md transition-all cursor-pointer ${vista === 'tabla' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
             >
               <TableIcon className="w-4 h-4" />
             </button>
             <button
               onClick={() => setVista('kanban')}
               title="Vista Tarjetas (Gestión Directiva)"
-              className={`p-1.5 rounded-md transition-all ${vista === 'kanban' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+              className={`p-1.5 rounded-md transition-all cursor-pointer ${vista === 'kanban' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
           </div>
 
+          {onNuevoDocente && (
+            <button
+              onClick={onNuevoDocente}
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-lg text-xs hover:bg-amber-400 transition-all cursor-pointer shadow-xs"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Nuevo Docente</span>
+            </button>
+          )}
+
           {onExportarCSV && (
             <button
               onClick={onExportarCSV}
-              className="flex items-center space-x-1 px-3 py-1.5 bg-blue-900 text-white rounded-lg text-xs font-semibold hover:bg-blue-800 transition-all cursor-pointer shadow-xs"
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-blue-900 text-white rounded-lg text-xs font-semibold hover:bg-blue-800 transition-all cursor-pointer shadow-xs"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Exportar</span>
+              <span>Exportar Excel</span>
             </button>
           )}
 
@@ -251,6 +271,7 @@ function RenderTablaDensa({ items, onSelectDocente }: { items: DocenteItem[]; on
               <th className="py-3 px-4">Jornada</th>
               <th className="py-3 px-4">Capacidad Lectiva</th>
               <th className="py-3 px-4 text-center">Estado 65/35</th>
+              <th className="py-3 px-4 text-right">Acción</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200/80 bg-white/70">
@@ -300,6 +321,18 @@ function RenderTablaDensa({ items, onSelectDocente }: { items: DocenteItem[]; on
                         <span>Cumple 65/35 (100% Ok)</span>
                       </span>
                     )}
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onSelectDocente) onSelectDocente(docente);
+                      }}
+                      className="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-900 rounded-md font-semibold transition-all cursor-pointer"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      <span>Editar</span>
+                    </button>
                   </td>
                 </tr>
               );
