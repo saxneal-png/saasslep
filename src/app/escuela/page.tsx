@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -98,7 +98,16 @@ const esEspecialistaPIEOApoyo = (cargoStr: string, calidadJuridicaStr: string): 
 
 export default function EscuelaDashboard() {
   const router = useRouter();
-  const [selectedRbd, setSelectedRbd] = useState<string>('10202');
+  const [selectedRbd, setSelectedRbd] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('slep_sim_rbd') || '10202';
+    }
+    return '10202';
+  });
+  const currentRbdRef = useRef<string>(selectedRbd);
+  useEffect(() => {
+    currentRbdRef.current = selectedRbd;
+  }, [selectedRbd]);
   const [colegio, setColegio] = useState<Establecimiento | null>(null);
   const [sortCriteria, setSortCriteria] = useState<string>('nombre-az');
 
@@ -430,7 +439,9 @@ export default function EscuelaDashboard() {
     };
   }, [selectedRbd]);
 
-  async function loadAllSchoolData() {
+  async function loadAllSchoolData(targetRbd?: string) {
+    const rbdToLoad = targetRbd || selectedRbd || currentRbdRef.current;
+    if (!rbdToLoad) return;
     await api.pullCloudSync();
     const [
       est,
@@ -447,20 +458,22 @@ export default function EscuelaDashboard() {
       cronosList,
       vacs
     ] = await Promise.all([
-      api.getEstablecimientoByRbd(selectedRbd),
-      api.getContratos(selectedRbd),
+      api.getEstablecimientoByRbd(rbdToLoad),
+      api.getContratos(rbdToLoad),
       api.getFuncionarios(),
-      api.getAsignacionesPorEstablecimiento(selectedRbd),
-      api.getAlertas(selectedRbd),
-      api.getCursosDinamicos(selectedRbd),
-      api.getCargosPorEstablecimiento(selectedRbd),
+      api.getAsignacionesPorEstablecimiento(rbdToLoad),
+      api.getAlertas(rbdToLoad),
+      api.getCursosDinamicos(rbdToLoad),
+      api.getCargosPorEstablecimiento(rbdToLoad),
       api.getPlanesEstudio(),
       api.getTareasReemplazo(),
       api.getReemplazosLicencias(),
       api.getContratos(),
       api.getHorasCronologicasAdicionales(),
-      api.getBrechasVacantes(selectedRbd)
+      api.getBrechasVacantes(rbdToLoad)
     ]);
+
+    if (currentRbdRef.current !== rbdToLoad) return;
 
     setColegio(est || null);
     setContratos(conts);
@@ -479,7 +492,7 @@ export default function EscuelaDashboard() {
     // Load persisted NEET/NEEP student counts (combining database values with localStorage fallback)
     const pieStudentsMap: {[courseName: string]: { neet: number, neep: number }} = {};
     if (typeof window !== 'undefined') {
-      const savedPieStudents = localStorage.getItem(`pie_students_${selectedRbd}`);
+      const savedPieStudents = localStorage.getItem(`pie_students_${rbdToLoad}`);
       if (savedPieStudents) {
         try {
           Object.assign(pieStudentsMap, JSON.parse(savedPieStudents));
@@ -496,11 +509,13 @@ export default function EscuelaDashboard() {
         };
       }
     });
+    if (currentRbdRef.current !== rbdToLoad) return;
     setCoursePieStudents(pieStudentsMap);
 
     // Load financiamientos for this school's contracts into React state for reactivity
     const contratoIds = conts.map(c => c.id);
     const fins = await api.getFinanciamientosPorContratos(contratoIds);
+    if (currentRbdRef.current !== rbdToLoad) return;
     setFinanciamientosEscuela(fins);
 
     if (dynCursos.length > 0) {
@@ -1414,8 +1429,53 @@ export default function EscuelaDashboard() {
     loadAsigs();
   }, [selectedCursoPlan, selectedRbd, planMineduc]);
 
-  const schoolDocentesRaw = funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run));
-  const schoolAsistentesRaw = funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run));
+  const getEstamento = (c: Contrato) => {
+    const f = funcionarios.find(func => normalizarRun(func.run) === normalizarRun(c.funcionario_run));
+    if (f?.estamento) {
+      if (f.estamento.toLowerCase().includes('docente')) return 'Docente';
+      if (f.estamento.toLowerCase().includes('asistente')) return 'Asistente de la Educación';
+      return f.estamento;
+    }
+    if (c.legislacion_laboral === 'Asistentes de la educación') return 'Asistente de la Educación';
+    if (c.legislacion_laboral === 'Estatuto docente') return 'Docente';
+    if (c.funcion_principal && c.funcion_principal.toLowerCase().includes('asistente')) return 'Asistente de la Educación';
+    return 'Docente';
+  };
+
+  const schoolDocentesRaw = funcionarios.filter(f => {
+    const isDoc = f.estamento === 'Docente' || (f.estamento && f.estamento.toLowerCase().includes('docente'));
+    return isDoc && contratos.some(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run));
+  });
+
+  const schoolAsistentesRaw = funcionarios.filter(f => {
+    const isAsis = f.estamento === 'Asistente de la Educación' || (f.estamento && f.estamento.toLowerCase().includes('asistente'));
+    return isAsis && contratos.some(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run));
+  });
+
+  contratos.forEach(c => {
+    const normRun = normalizarRun(c.funcionario_run);
+    if (!normRun) return;
+    const est = getEstamento(c);
+    if (est === 'Docente') {
+      if (!schoolDocentesRaw.some(f => normalizarRun(f.run) === normRun)) {
+        const existing = funcionarios.find(f => normalizarRun(f.run) === normRun);
+        schoolDocentesRaw.push(existing || {
+          run: c.funcionario_run,
+          nombre: (c as any).funcionario_nombre || c.funcionario_run,
+          estamento: 'Docente'
+        });
+      }
+    } else {
+      if (!schoolAsistentesRaw.some(f => normalizarRun(f.run) === normRun)) {
+        const existing = funcionarios.find(f => normalizarRun(f.run) === normRun);
+        schoolAsistentesRaw.push(existing || {
+          run: c.funcionario_run,
+          nombre: (c as any).funcionario_nombre || c.funcionario_run,
+          estamento: 'Asistente de la Educación'
+        });
+      }
+    }
+  });
 
   const sortFuncs = (list: Funcionario[]) => {
     return [...list].sort((a, b) => {
@@ -1758,13 +1818,6 @@ export default function EscuelaDashboard() {
   };
 
   // Segmented Hours Calculations
-  const getEstamento = (c: Contrato) => {
-    const f = funcionarios.find(func => func.run === c.funcionario_run);
-    if (f?.estamento) return f.estamento;
-    if (c.legislacion_laboral === 'Asistentes de la educación') return 'Asistente de la Educación';
-    if (c.legislacion_laboral === 'Estatuto docente') return 'Docente';
-    return 'Docente';
-  };
 
   const asistenteContratos = contratos.filter(c => getEstamento(c) === 'Asistente de la Educación');
   const docenteContratos = contratos.filter(c => getEstamento(c) === 'Docente');
@@ -1938,11 +1991,11 @@ export default function EscuelaDashboard() {
           <div className="flex gap-6 text-center text-xs">
             <div>
               <p className="text-slate-400 font-bold uppercase">Docentes activos</p>
-              <p className="text-xl font-bold text-slep-blue">{funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run)).length}</p>
+              <p className="text-xl font-bold text-slep-blue">{schoolDocentes.length}</p>
             </div>
             <div className="border-l border-slate-200 pl-6">
               <p className="text-slate-400 font-bold uppercase">Asistentes activos</p>
-              <p className="text-xl font-bold text-slep-blue">{funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run)).length}</p>
+              <p className="text-xl font-bold text-slep-blue">{schoolAsistentes.length}</p>
             </div>
             <div className="border-l border-slate-200 pl-6">
               <p className="text-slate-400 font-bold uppercase">Cursos Creados</p>
@@ -3315,16 +3368,16 @@ export default function EscuelaDashboard() {
                       <tr>
                         <td className="p-3 pl-4 font-semibold text-slate-900">Total Personas</td>
                         <td className="p-3 text-center font-bold text-slep-blue">
-                          {funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run && c.calidad_juridica === 'Titular')).length}
+                          {schoolDocentes.filter(f => contratos.some(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run) && c.calidad_juridica === 'Titular')).length}
                         </td>
                         <td className="p-3 text-center font-medium text-slate-600">
-                          {funcionarios.filter(f => f.estamento === 'Docente' && contratos.some(c => c.funcionario_run === f.run && c.calidad_juridica !== 'Titular')).length}
+                          {schoolDocentes.filter(f => contratos.some(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run) && c.calidad_juridica !== 'Titular')).length}
                         </td>
                         <td className="p-3 text-center font-bold text-slate-600">
-                          {funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run && c.calidad_juridica === 'Indefinido')).length}
+                          {schoolAsistentes.filter(f => contratos.some(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run) && c.calidad_juridica === 'Indefinido')).length}
                         </td>
                         <td className="p-3 text-center font-medium text-slate-500">
-                          {funcionarios.filter(f => f.estamento === 'Asistente de la Educación' && contratos.some(c => c.funcionario_run === f.run && c.calidad_juridica !== 'Indefinido')).length}
+                          {schoolAsistentes.filter(f => contratos.some(c => normalizarRun(c.funcionario_run) === normalizarRun(f.run) && c.calidad_juridica !== 'Indefinido')).length}
                         </td>
                         <td className="p-3 text-center font-bold text-slate-900">
                           {contratos.length}

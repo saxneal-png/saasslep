@@ -498,32 +498,43 @@ export const api = {
 
   getFuncionarios: async (): Promise<Funcionario[]> => {
     try {
-      // 1. Get exact total count first
+      const allData: Funcionario[] = [];
       const { count, error: countErr } = await supabase
         .from('funcionarios')
         .select('*', { count: 'exact', head: true });
 
-      if (countErr) return handleFallback(countErr, dbLocal.funcionarios, 'funcionarios');
-      const total = count || 0;
-      if (total === 0) return [];
+      if (!countErr && count && count > 0) {
+        const promises = [];
+        const CHUNK_SIZE = 1000;
+        for (let from = 0; from < count; from += CHUNK_SIZE) {
+          const to = from + CHUNK_SIZE - 1;
+          promises.push(
+            supabase.from('funcionarios').select('*').range(from, to)
+          );
+        }
 
-      // 2. Fetch all ranges concurrently
-      const promises = [];
-      const CHUNK_SIZE = 1000;
-      for (let from = 0; from < total; from += CHUNK_SIZE) {
-        const to = from + CHUNK_SIZE - 1;
-        promises.push(
-          supabase.from('funcionarios').select('*').range(from, to)
-        );
+        const results = await Promise.all(promises);
+        for (const res of results) {
+          if (!res.error && res.data) {
+            allData.push(...res.data);
+          }
+        }
       }
 
-      const results = await Promise.all(promises);
-      const allData: Funcionario[] = [];
-      for (const res of results) {
-        if (res.error) return handleFallback(res.error, dbLocal.funcionarios, 'funcionarios');
-        if (res.data) allData.push(...res.data);
-      }
-      return allData;
+      // Merge Supabase funcionarios with dbLocal.funcionarios using normalizarRun
+      const mergedMap = new Map<string, Funcionario>();
+      allData.forEach(f => {
+        const normKey = normalizarRun(f.run) || f.run;
+        if (normKey) mergedMap.set(normKey, f);
+      });
+      dbLocal.funcionarios.forEach(f => {
+        const normKey = normalizarRun(f.run) || f.run;
+        if (normKey && !mergedMap.has(normKey)) {
+          mergedMap.set(normKey, f);
+        }
+      });
+
+      return Array.from(mergedMap.values());
     } catch (err) {
       return handleFallback(err, dbLocal.funcionarios, 'funcionarios');
     }
