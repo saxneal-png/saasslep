@@ -26,6 +26,8 @@ import {
   CalidadJuridica,
   HorasCronologicasAdicionales,
   TipoCursoModalidad,
+  TipoCodocenciaModalidad,
+  TipoEstrategiaAgrupacion,
   BrechaCargoVacante
 } from '@/lib/types';
 
@@ -258,6 +260,13 @@ export default function EscuelaDashboard() {
   const [selectedMultigradoIndex, setSelectedMultigradoIndex] = useState<number>(0);
   const [selectedNivelesMultiples, setSelectedNivelesMultiples] = useState<string[]>(["1° Básico", "2° Básico"]);
   const [esEscuelaRural, setEsEscuelaRural] = useState<boolean>(false);
+
+  // Unobtrusive pedagogical options states (Co-docencia y Agrupaciones Flexibles)
+  const [modalidadCodocencia, setModalidadCodocencia] = useState<TipoCodocenciaModalidad>('Sin Co-docencia');
+  const [estrategiaAgrupacion, setEstrategiaAgrupacion] = useState<TipoEstrategiaAgrupacion>('Grupo Único');
+  const [subgruposFlexibles, setSubgruposFlexibles] = useState<string[]>([]);
+  const [newSubgrupoText, setNewSubgrupoText] = useState<string>('');
+  const [showPedagogicalOptions, setShowPedagogicalOptions] = useState<boolean>(false);
 
   const [selectedCursoNorm, setSelectedCursoNorm] = useState(NOMENCLATURA_CURSOS[0]);
   const [cursoSufijo, setCursoSufijo] = useState('A');
@@ -806,6 +815,9 @@ export default function EscuelaDashboard() {
       niveles_combinados: nivelesArr,
       es_multigrado: tipoCursoModalidad === 'Multigrado',
       es_rural: esEscuelaRural || tipoCursoModalidad === 'Multigrado',
+      modalidad_codocencia: modalidadCodocencia,
+      estrategia_agrupacion: estrategiaAgrupacion,
+      subgrupos_flexibles: subgruposFlexibles,
       concentracion_prioritarios: esDe1a4Basico ? newCursoConcentracion : 0
     };
 
@@ -2928,6 +2940,16 @@ export default function EscuelaDashboard() {
                                   🏡 Multigrado Rural
                                 </span>
                               )}
+                              {c.modalidad_codocencia && c.modalidad_codocencia !== 'Sin Co-docencia' && (
+                                <span className="text-[8px] bg-cyan-700 text-white font-bold px-1.5 py-0.5 rounded uppercase mt-0.5 shadow-sm" title={`Modalidad: ${c.modalidad_codocencia}`}>
+                                  👥 Co-docencia
+                                </span>
+                              )}
+                              {c.estrategia_agrupacion && c.estrategia_agrupacion !== 'Grupo Único' && (
+                                <span className="text-[8px] bg-purple-700 text-white font-bold px-1.5 py-0.5 rounded uppercase mt-0.5 shadow-sm" title={`Agrupación: ${c.estrategia_agrupacion}`}>
+                                  🧩 Agrupación Flexible
+                                </span>
+                              )}
 
                               {c.concentracion_prioritarios !== undefined && Number(c.concentracion_prioritarios) >= 80 && (
                                 <span className="text-[8px] bg-amber-500 text-white font-bold px-1.5 py-0.5 rounded uppercase mt-0.5" title={`Alta concentración de alumnos prioritarios (${c.concentracion_prioritarios}%). Ley 20.903: Carga lectiva máxima del 60%.`}>
@@ -3144,6 +3166,113 @@ export default function EscuelaDashboard() {
                           value={newCursoConcentracion}
                           onChange={(e) => setNewCursoConcentracion(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
                         />
+                      </div>
+
+                      {/* Opciones Pedagógicas Avanzadas (Co-docencia y Agrupaciones Flexibles - Opcional & No Invasivo) */}
+                      <div className="md:col-span-4 mt-1 border-t border-slate-200/80 pt-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowPedagogicalOptions(!showPedagogicalOptions)}
+                          className="flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer bg-slate-100 hover:bg-slate-200/80 px-3 py-1.5 rounded-lg border border-slate-200"
+                        >
+                          <span>{showPedagogicalOptions ? '🔽' : '▶️'} ⚙️ Opciones Pedagógicas Avanzadas (Co-docencia y Agrupaciones Flexibles)</span>
+                          {(modalidadCodocencia !== 'Sin Co-docencia' || estrategiaAgrupacion !== 'Grupo Único') && (
+                            <span className="bg-slep-blue text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full">Activo</span>
+                          )}
+                        </button>
+
+                        {showPedagogicalOptions && (
+                          <div className="mt-3 p-4 bg-white border border-slate-200 rounded-xl space-y-4 animate-in fade-in duration-200">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {/* Co-docencia Selector */}
+                              <div>
+                                <label className="block font-bold text-cyan-900 mb-1">👥 Modalidad de Co-docencia (Co-teaching)</label>
+                                <select
+                                  className="w-full p-2 bg-white border border-cyan-300 rounded-lg shadow-sm font-semibold text-cyan-950 text-xs"
+                                  value={modalidadCodocencia}
+                                  onChange={(e) => setModalidadCodocencia(e.target.value as TipoCodocenciaModalidad)}
+                                >
+                                  <option value="Sin Co-docencia">Sin Co-docencia (Docente Único por Asignatura)</option>
+                                  <option value="Co-docencia PIE/Inclusiva">Co-docencia PIE / Inclusiva (Asignatura + Ed. Diferencial)</option>
+                                  <option value="Dupla Pedagógica Completa">Dupla Pedagógica Completa (2 Docentes en Aula)</option>
+                                  <option value="Co-docencia por Asignaturas">Co-docencia por Asignaturas Troncales (Lenguaje / Mates)</option>
+                                </select>
+                                <p className="text-[10px] text-slate-400 mt-1">Define el modelo de enseñanza compartida dentro del aula.</p>
+                              </div>
+
+                              {/* Agrupaciones Flexibles Selector */}
+                              <div>
+                                <label className="block font-bold text-purple-900 mb-1">🧩 Estrategia de Agrupación Flexible (Decreto 83 / DUA)</label>
+                                <select
+                                  className="w-full p-2 bg-white border border-purple-300 rounded-lg shadow-sm font-semibold text-purple-950 text-xs"
+                                  value={estrategiaAgrupacion}
+                                  onChange={(e) => setEstrategiaAgrupacion(e.target.value as TipoEstrategiaAgrupacion)}
+                                >
+                                  <option value="Grupo Único">Grupo Único (Aula Tradicional)</option>
+                                  <option value="Sub-ciclos por Nivel">Sub-ciclos por Nivel (ej: Grupo 1°-2° y Grupo 3°-4°)</option>
+                                  <option value="Niveles de Logro">Agrupación por Niveles de Logro (Inicial / Estándar / Desafío)</option>
+                                  <option value="Estaciones DUA">Estaciones de Trabajo DUA / Rincones Pedagógicos</option>
+                                </select>
+                                <p className="text-[10px] text-slate-400 mt-1">Estrategia para diversificar la atención de los estudiantes.</p>
+                              </div>
+                            </div>
+
+                            {/* Gestor Rápido de Subgrupos Flexibles si la estrategia no es Grupo Único */}
+                            {estrategiaAgrupacion !== 'Grupo Único' && (
+                              <div className="p-3 bg-purple-50/60 border border-purple-200 rounded-lg space-y-2">
+                                <p className="text-[11px] font-bold text-purple-900">Subgrupos o Estaciones del Curso:</p>
+                                <div className="flex flex-wrap gap-1.5 items-center">
+                                  {subgruposFlexibles.map((sg, idx) => (
+                                    <span key={idx} className="bg-purple-600 text-white font-bold text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                                      {sg}
+                                      <button
+                                        type="button"
+                                        onClick={() => setSubgruposFlexibles(subgruposFlexibles.filter((_, i) => i !== idx))}
+                                        className="hover:text-purple-200 font-extrabold cursor-pointer ml-0.5"
+                                      >
+                                        ✕
+                                      </button>
+                                    </span>
+                                  ))}
+                                  {subgruposFlexibles.length === 0 && (
+                                    <span className="text-[10px] text-slate-400 italic">No se han agregado subgrupos aún.</span>
+                                  )}
+                                </div>
+                                
+                                <div className="flex items-center gap-2 mt-1">
+                                  <input
+                                    type="text"
+                                    placeholder="Ej: Grupo Reforzamiento, Estación Lectura..."
+                                    className="p-1.5 border rounded text-xs bg-white flex-1"
+                                    value={newSubgrupoText}
+                                    onChange={(e) => setNewSubgrupoText(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (newSubgrupoText.trim()) {
+                                          setSubgruposFlexibles([...subgruposFlexibles, newSubgrupoText.trim()]);
+                                          setNewSubgrupoText('');
+                                        }
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (newSubgrupoText.trim()) {
+                                        setSubgruposFlexibles([...subgruposFlexibles, newSubgrupoText.trim()]);
+                                        setNewSubgrupoText('');
+                                      }
+                                    }}
+                                    className="bg-purple-700 text-white font-bold px-3 py-1.5 rounded text-xs hover:bg-purple-800 cursor-pointer shadow-sm"
+                                  >
+                                    + Agregar Subgrupo
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Submit Button */}

@@ -150,6 +150,8 @@ export interface ProfesionalEscuelaAsignada {
 }
 
 export type TipoCursoModalidad = 'Simple' | 'Combinado' | 'Multigrado';
+export type TipoCodocenciaModalidad = 'Sin Co-docencia' | 'Co-docencia PIE/Inclusiva' | 'Dupla Pedagógica Completa' | 'Co-docencia por Asignaturas';
+export type TipoEstrategiaAgrupacion = 'Grupo Único' | 'Sub-ciclos por Nivel' | 'Niveles de Logro' | 'Estaciones DUA';
 
 export interface CursoDinamico {
   rbd: string;
@@ -160,6 +162,9 @@ export interface CursoDinamico {
   niveles_combinados?: string[];
   es_multigrado?: boolean;
   es_rural?: boolean;
+  modalidad_codocencia?: TipoCodocenciaModalidad;
+  estrategia_agrupacion?: TipoEstrategiaAgrupacion;
+  subgrupos_flexibles?: string[];
   horasPIE?: number;
   profesor_jefe_run?: string;
   concentracion_prioritarios?: number;
