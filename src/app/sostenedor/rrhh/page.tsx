@@ -277,68 +277,7 @@ export default function RrhhDotacionPage() {
       {/* Contenido Principal */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         
-        {/* Banner Macro / Resumen Rápido */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-200/90 shadow-sm bg-gradient-to-r from-blue-900 via-blue-950 to-slate-900 text-white relative overflow-hidden">
-          <div className="relative z-10 space-y-2">
-            <div className="flex items-center space-x-2">
-              <span className="px-3 py-1 bg-amber-400/20 text-amber-300 border border-amber-400/30 rounded-full text-xs font-bold uppercase tracking-wider flex items-center space-x-1">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Modernización SaaS SLEP v2.0</span>
-              </span>
-            </div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Plataforma Integrada de Gestión de Dotaciones</h1>
-            <p className="text-sm text-slate-300 max-w-2xl">
-              Sistema blindado según Ley N° 21.040, Ley N° 20.903 y Estatuto Docente. Aritmética 100% en minutos enteros.
-            </p>
-          </div>
 
-          {/* Tarjetas Interactivas de Métricas Clickeables */}
-          <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-white/10 text-xs">
-            <div 
-              onClick={() => { setPestaña('rrhh'); setFiltroSemaforoDirecto('todos'); }}
-              className="p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-all cursor-pointer border border-white/5 space-y-1"
-            >
-              <div className="flex items-center space-x-2 text-amber-400">
-                <Users className="w-4 h-4" />
-                <span className="text-slate-300 text-[11px]">Total Docentes</span>
-              </div>
-              <span className="text-lg font-bold text-white block">{docentesList.length} Registros</span>
-            </div>
-
-            <div 
-              onClick={() => { setPestaña('rrhh'); setFiltroSemaforoDirecto('ok'); }}
-              className="p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-all cursor-pointer border border-white/5 space-y-1"
-            >
-              <div className="flex items-center space-x-2 text-emerald-400">
-                <Award className="w-4 h-4" />
-                <span className="text-slate-300 text-[11px]">Cumplimiento 65/35</span>
-              </div>
-              <span className="text-lg font-bold text-emerald-400 block">{porcentajeCumplimiento}% Ok</span>
-            </div>
-
-            <div 
-              onClick={() => { setPestaña('uatp'); }}
-              className="p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-all cursor-pointer border border-white/5 space-y-1"
-            >
-              <div className="flex items-center space-x-2 text-rose-400">
-                <ShieldAlert className="w-4 h-4" />
-                <span className="text-slate-300 text-[11px]">Semáforo Rojo</span>
-              </div>
-              <span className="text-lg font-bold text-rose-400 block">{sobreasignadosList.length} en Riesgo</span>
-            </div>
-
-            <div 
-              onClick={() => { setPestaña('finanzas'); }}
-              className="p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-all cursor-pointer border border-white/5 space-y-1"
-            >
-              <div className="flex items-center space-x-2 text-blue-400">
-                <BookOpen className="w-4 h-4" />
-                <span className="text-slate-300 text-[11px]">Escuelas SLEP</span>
-              </div>
-              <span className="text-lg font-bold text-white block">3 RBDs</span>
-            </div>
-          </div>
-        </div>
 
         {/* VISTA OPERATIVA PRINCIPAL PLANTA DOCENTE / LICENCIAS & REEMPLAZOS */}
         {(pestaña === 'rrhh' || pestaña === 'planta' || pestaña === 'macro' || pestaña === 'rbd' || pestaña === 'jornada') && (
