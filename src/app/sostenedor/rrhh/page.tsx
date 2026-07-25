@@ -340,102 +340,13 @@ export default function RrhhDotacionPage() {
           </div>
         </div>
 
-        {/* CONTENIDO INTERACTIVO SEGÚN PESTAÑA SELECCIONADA */}
-        
-        {/* 1. VISTA DASHBOARD MACRO */}
-        {(pestaña === 'macro' || pestaña === 'rbd' || pestaña === 'jornada') && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              
-              {/* Tarjeta 1: Estado de Cumplimiento 65/35 */}
-              <div className="glass-panel p-5 rounded-2xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Cumplimiento Normativo 65/35</span>
-                  </h3>
-                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full">
-                    {porcentajeCumplimiento}% Ok
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600">
-                  {cumplidoresCount} de {docentesList.length} docentes cumplen estrictamente la proporción de horas lectivas y no lectivas según tablas oficiales MINEDUC.
-                </p>
-                <button
-                  onClick={() => { setPestaña('rrhh'); setFiltroSemaforoDirecto('ok'); }}
-                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-all cursor-pointer"
-                >
-                  Ver Docentes en Cumplimiento
-                </button>
-              </div>
-
-              {/* Tarjeta 2: Alertas Pre-SuperEduc */}
-              <div className="glass-panel p-5 rounded-2xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
-                    <ShieldAlert className="w-4 h-4 text-rose-600" />
-                    <span>Auditoría UATP & Riesgo</span>
-                  </h3>
-                  <span className="px-2 py-0.5 bg-rose-100 text-rose-800 text-[11px] font-bold rounded-full">
-                    {sobreasignadosList.length} Críticos
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600">
-                  Docentes que sobrepasan el límite máximo de horas de aula asignadas, exponiendo al SLEP a observaciones en fiscalización.
-                </p>
-                <button
-                  onClick={() => setPestaña('uatp')}
-                  className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer shadow-xs"
-                >
-                  Ir al Panel de Auditoría UATP
-                </button>
-              </div>
-
-              {/* Tarjeta 3: Emisión de Resoluciones */}
-              <div className="glass-panel p-5 rounded-2xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
-                    <FileText className="w-4 h-4 text-blue-600" />
-                    <span>Resoluciones Horarias 2026</span>
-                  </h3>
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[11px] font-bold rounded-full">
-                    Borradores Listos
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600">
-                  Generación automatizada de decretos nominativos de distribución de jornada para UTP y firma de directores.
-                </p>
-                <button
-                  onClick={() => setPestaña('resoluciones')}
-                  className="w-full py-2 bg-blue-900 hover:bg-blue-800 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer shadow-xs"
-                >
-                  Generar Resoluciones PDF
-                </button>
-              </div>
-
-            </div>
-
-            {/* Lista resumida rápida */}
-            <div className="space-y-2">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Acceso Rápido a Planta Docente</h3>
-              <ListaDinamicaDocentes
-                docentes={docentesList}
-                onSelectDocente={handleOpenDocenteModal}
-                onExportarCSV={handleExportarExcel}
-                onNuevoDocente={() => setIsNuevoModalOpen(true)}
-                filtroSemaforoInicial={filtroSemaforoDirecto}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* 2. VISTA PLANTA DOCENTE / RRHH */}
-        {(pestaña === 'rrhh' || pestaña === 'planta') && (
+        {/* VISTA OPERATIVA PRINCIPAL PLANTA DOCENTE / LICENCIAS & REEMPLAZOS */}
+        {(pestaña === 'rrhh' || pestaña === 'planta' || pestaña === 'macro' || pestaña === 'rbd' || pestaña === 'jornada') && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Planta Docente & Conciliación Horaria</h2>
-                <p className="text-xs text-slate-500">Filtrado multidimensional, edición rápida y validación automática de contratos.</p>
+                <h2 className="text-lg font-bold text-slate-900">Gestión de Planta Docente, Licencias & Reemplazos</h2>
+                <p className="text-xs text-slate-500">Módulo directo de administración de fichas, licencias médicas, asignaciones y reemplazos.</p>
               </div>
 
               <div className="flex items-center space-x-2">
