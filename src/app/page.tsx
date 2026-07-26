@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/supabase';
 import { Establecimiento } from '@/lib/types';
-import Image from 'next/image';
+import AppLogo from '@/components/AppLogo';
 
 export default function Home() {
   const router = useRouter();
@@ -31,7 +31,8 @@ export default function Home() {
     loadSchools();
   }, []);
 
-  const handleLogin = () => {
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
     if (usuario.trim() !== '16445435' || contrasena !== '123456') {
       setErrorMsg('⚠️ RUN de usuario o Contraseña incorrectos.');
       return;
@@ -61,7 +62,7 @@ export default function Home() {
         <div className="absolute top-0 right-0 w-64 h-64 bg-slep-gold opacity-10 rounded-full translate-x-20 -translate-y-20 pointer-events-none"></div>
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain bg-white/5 p-1 rounded-lg" />
+            <AppLogo width={110} height={45} className="object-contain" />
             <div>
               <p className="text-xs uppercase tracking-widest text-slate-300 font-semibold leading-none">Servicio Local de Educación Pública</p>
               <h1 className="text-xl font-bold tracking-tight mt-1">Valle Diguillín</h1>

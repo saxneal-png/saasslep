@@ -1795,5 +1795,61 @@ export const api = {
 
   scheduleCloudSync: async (): Promise<void> => {},
   pullCloudSync: async (): Promise<boolean> => { return false; },
-  pushCloudSyncForce: async (): Promise<void> => {}
+  pushCloudSyncForce: async (): Promise<void> => {},
+
+  getCustomLogo: async (): Promise<string | null> => {
+    if (typeof window !== 'undefined') {
+      const localLogo = localStorage.getItem('slep_custom_logo');
+      if (localLogo) return localLogo;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('configuracion_slep')
+        .select('valor')
+        .eq('clave', 'custom_logo')
+        .maybeSingle();
+
+      if (!error && data?.valor) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('slep_custom_logo', data.valor);
+        }
+        return data.valor;
+      }
+    } catch (err) {
+      console.warn("⚠️ Error obteniendo logo desde Supabase:", err);
+    }
+    return null;
+  },
+
+  saveCustomLogo: async (logoBase64: string): Promise<void> => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('slep_custom_logo', logoBase64);
+      window.dispatchEvent(new Event('logoUpdated'));
+    }
+    try {
+      const { error } = await supabase
+        .from('configuracion_slep')
+        .upsert({ clave: 'custom_logo', valor: logoBase64 }, { onConflict: 'clave' });
+      if (error) {
+        console.warn("⚠️ Supabase error guardando logo:", error);
+      }
+    } catch (err) {
+      console.warn("⚠️ Fallback a localStorage para guardar logo:", err);
+    }
+  },
+
+  removeCustomLogo: async (): Promise<void> => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('slep_custom_logo');
+      window.dispatchEvent(new Event('logoUpdated'));
+    }
+    try {
+      await supabase
+        .from('configuracion_slep')
+        .delete()
+        .eq('clave', 'custom_logo');
+    } catch (err) {
+      console.warn("⚠️ Error eliminando logo de Supabase:", err);
+    }
+  }
 };

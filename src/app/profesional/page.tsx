@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import AppLogo from '@/components/AppLogo';
 import { useRouter } from 'next/navigation';
 import { api, dbLocal, supabase } from '@/lib/supabase';
 
@@ -545,7 +546,7 @@ export default function ProfesionalDashboard() {
       {/* Sidebar */}
       <aside className="w-64 bg-slep-blue-dark text-white flex flex-col z-40 shadow-xl shrink-0">
         <div className="p-6 border-b border-white/10 flex items-center gap-3">
-          <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain" />
+          <AppLogo width={110} height={45} className="object-contain" />
         </div>
         
         <div className="p-4 flex-1 space-y-6">

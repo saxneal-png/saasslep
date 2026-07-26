@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import AppLogo from '@/components/AppLogo';
 import { useRouter } from 'next/navigation';
 import { api, dbLocal, supabase } from '@/lib/supabase';
 import { parsearNominaCsv, normalizarRun, normalizarRbd, parsearRemuneracionesCsv, parsearArchivoExcelOJson, descargarPlantillaExcel } from '@/lib/csvParser';
@@ -60,7 +61,81 @@ export default function SostenedorDashboard() {
   const [editContHoras, setEditContHoras] = useState(0);
   const [editContFins, setEditContFins] = useState<{ origen: OrigenFondo; horas: number }[]>([]);
   
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio' | 'resumenes' | 'conciliacion'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'compendio' | 'resumenes' | 'conciliacion' | 'perfil'>('dashboard');
+  
+  // Custom Logo upload state in Perfil
+  const [customLogoFile, setCustomLogoFile] = useState<File | null>(null);
+  const [customLogoPreview, setCustomLogoPreview] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoStatusMsg, setLogoStatusMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+  useEffect(() => {
+    async function initLogo() {
+      const existing = await api.getCustomLogo();
+      setCustomLogoPreview(existing);
+    }
+    initLogo();
+  }, []);
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setLogoStatusMsg({ type: 'error', text: '⚠️ El archivo seleccionado debe ser una imagen (PNG, JPG, SVG, WEBP).' });
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoStatusMsg({ type: 'error', text: '⚠️ La imagen no debe superar los 2MB de tamaño.' });
+      return;
+    }
+
+    setCustomLogoFile(file);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setCustomLogoPreview(event.target?.result as string);
+      setLogoStatusMsg({ type: 'info', text: 'Imagen cargada en vista previa. Presione "Guardar y Aplicar Logotipo" para confirmar.' });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveCustomLogo = async () => {
+    if (!customLogoPreview) {
+      setLogoStatusMsg({ type: 'error', text: '⚠️ No hay ninguna imagen seleccionada para guardar.' });
+      return;
+    }
+
+    setLogoUploading(true);
+    try {
+      await api.saveCustomLogo(customLogoPreview);
+      setLogoStatusMsg({ type: 'success', text: '✅ Logotipo personalizado guardado y aplicado en toda la plataforma correctamente.' });
+    } catch (err) {
+      console.error(err);
+      setLogoStatusMsg({ type: 'error', text: '❌ Ocurrió un error al guardar el logotipo.' });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleRemoveCustomLogo = async () => {
+    if (!confirm('¿Está seguro de que desea eliminar el logotipo personalizado y volver al estado por defecto?')) {
+      return;
+    }
+
+    setLogoUploading(true);
+    try {
+      await api.removeCustomLogo();
+      setCustomLogoPreview(null);
+      setCustomLogoFile(null);
+      setLogoStatusMsg({ type: 'info', text: 'ℹ️ Logotipo personalizado eliminado. Se utilizará el identificador por defecto.' });
+    } catch (err) {
+      console.error(err);
+      setLogoStatusMsg({ type: 'error', text: '❌ Ocurrió un error al eliminar el logotipo.' });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
   const [todosLosCursos, setTodosLosCursos] = useState<CursoDinamico[]>([]);
   const [todasLasAsignaturas, setTodasLasAsignaturas] = useState<AsignaturaDinamica[]>([]);
   const [resumenSubTab, setResumenSubTab] = useState<'territorio' | 'asignaturas' | 'disponibilidad' | 'alertas'>('territorio');
@@ -1412,7 +1487,7 @@ export default function SostenedorDashboard() {
       {/* Sidebar */}
       <aside className="w-64 bg-slep-blue-dark text-white flex flex-col z-40 shadow-xl shrink-0">
         <div className="p-6 border-b border-white/10 flex items-center gap-3">
-          <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain" />
+          <AppLogo width={110} height={45} className="object-contain" />
         </div>
         
         <div className="p-4 flex-1 space-y-6">
@@ -1477,6 +1552,20 @@ export default function SostenedorDashboard() {
               </Link>
             </nav>
           </div>
+
+          <div>
+            <p className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 mb-2">Configuración & Perfil</p>
+            <nav className="space-y-1">
+              <button
+                onClick={() => { setActiveTab('perfil'); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all text-left ${
+                  activeTab === 'perfil' ? 'bg-slep-blue text-white shadow' : 'text-slate-300 hover:bg-white/5'
+                }`}
+              >
+                👤 Perfil Sostenedor & Logo
+              </button>
+            </nav>
+          </div>
         </div>
 
         <div className="p-4 border-t border-white/10 text-center">
@@ -1494,6 +1583,14 @@ export default function SostenedorDashboard() {
             <h1 className="text-base font-bold text-slate-800">Consola de Gobernanza Territorial</h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">Gestión unificada SLEP del Sostenedor</p>
           </div>
+          <button
+            onClick={() => setActiveTab('perfil')}
+            className={`flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border transition-all cursor-pointer ${
+              activeTab === 'perfil' ? 'bg-slep-blue text-white border-slep-blue shadow' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+            }`}
+          >
+            👤 Perfil & Logotipo
+          </button>
         </header>
 
         {activeTab === 'compendio' && (
@@ -3415,6 +3512,129 @@ export default function SostenedorDashboard() {
                   </table>
                 );
               })()}
+            </div>
+          </div>
+        </main>
+      )}
+
+      {activeTab === 'perfil' && (
+        <main className="max-w-7xl mx-auto p-4 md:p-8 flex-1 flex flex-col gap-6 w-full">
+          {/* Header Card */}
+          <div className="bg-white rounded-xl shadow border border-slate-200/60 p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-800">👤 Perfil Institucional & Configuración de Logotipo</h2>
+                <p className="text-xs text-slate-500 mt-1 font-medium">Gestión del perfil del Sostenedor Maestro y personalización visual de la plataforma SLEP.</p>
+              </div>
+              <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-2">
+                🛡️ Cuenta Sostenedor Maestro
+              </div>
+            </div>
+
+            {logoStatusMsg && (
+              <div className={`mt-4 p-3 rounded-lg text-xs font-bold border flex items-center justify-between ${
+                logoStatusMsg.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                logoStatusMsg.type === 'error' ? 'bg-rose-50 text-rose-800 border-rose-200' :
+                'bg-blue-50 text-blue-800 border-blue-200'
+              }`}>
+                <span>{logoStatusMsg.text}</span>
+                <button onClick={() => setLogoStatusMsg(null)} className="text-slate-400 hover:text-slate-600 font-bold ml-2">✕</button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              {/* Left Box: Datos del Sostenedor */}
+              <div className="bg-slate-50 rounded-xl p-5 border border-slate-200/80 space-y-4">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b border-slate-200 pb-2">
+                  <span>🏢</span> Datos del Sostenedor Territorial
+                </h3>
+                
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Institución Sostenedora</span>
+                    <strong className="text-slate-800 font-semibold text-sm">Servicio Local de Educación Pública (SLEP)</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Jurisdicción Territorial</span>
+                    <span className="text-slate-700 font-medium">Valle Diguillín (Chillán Viejo, El Carmen, Pemuco, San Ignacio, Yungay)</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Rol Administrador</span>
+                    <span className="text-slate-700 font-medium">Sostenedor Maestro UATP</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Estado del Sistema</span>
+                    <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-800 font-bold text-[10px] px-2 py-0.5 rounded-md border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Activo & Sincronizado
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Box: Custom Logo Manager */}
+              <div className="bg-white rounded-xl p-5 border border-slate-200 space-y-4 shadow-sm">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <span>🎨</span> Personalización de Logotipo Institucional
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Sube el logotipo oficial a tu elección. Este logo se mostrará dinámicamente en los encabezados, barras laterales y reportes oficiales exportados en toda la plataforma.
+                </p>
+
+                {/* Preview Box */}
+                <div className="border border-dashed border-slate-300 rounded-xl p-4 bg-slate-50 flex flex-col items-center justify-center gap-3">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Vista Previa del Logotipo</span>
+                  
+                  {customLogoPreview ? (
+                    <div className="bg-slate-900/90 p-4 rounded-xl shadow-inner flex items-center justify-center max-w-full">
+                      <img 
+                        src={customLogoPreview} 
+                        alt="Logotipo personalizado" 
+                        className="max-h-16 max-w-[200px] object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="bg-slate-200/60 px-4 py-3 rounded-lg text-center text-xs text-slate-500 font-medium">
+                      🚫 Sin logotipo personalizado (Se muestra distintivo textual 🏛️)
+                    </div>
+                  )}
+                </div>
+
+                {/* Upload & Controls */}
+                <div className="space-y-3 pt-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Seleccionar imagen desde el equipo (.png, .jpg, .svg, .webp):
+                    </label>
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={handleLogoFileChange}
+                      className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      disabled={!customLogoPreview || logoUploading}
+                      onClick={handleSaveCustomLogo}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs py-2.5 px-4 rounded-xl shadow transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      {logoUploading ? '⏳ Guardando...' : '💾 Guardar y Aplicar Logotipo'}
+                    </button>
+                    {customLogoPreview && (
+                      <button
+                        type="button"
+                        disabled={logoUploading}
+                        onClick={handleRemoveCustomLogo}
+                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs py-2.5 px-4 rounded-xl transition-all cursor-pointer"
+                      >
+                        🗑️ Quitar Logo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </main>

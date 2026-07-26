@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import AppLogo from '@/components/AppLogo';
 import { useRouter } from 'next/navigation';
 import { api, dbLocal, supabase } from '@/lib/supabase';
 import { validarCargaDocente, calcularDesgloseContrato } from '@/lib/rulesEngine';
@@ -1962,7 +1963,7 @@ export default function EscuelaDashboard() {
       <header className="bg-slep-blue text-white shadow-md py-4 px-6 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="Logo SLEP" width={110} height={45} className="object-contain" />
+            <AppLogo width={110} height={45} className="object-contain" />
             <div className="border-l border-white/20 pl-3">
               <p className="text-[9px] uppercase tracking-wider text-slate-300 font-semibold leading-none">
                 {isSupervisorMode ? 'Acceso Asesor Delegado' : isSostenedorMode ? 'Sostenedor (Gestión de Escuela)' : 'Director / UTP de Escuela'}
