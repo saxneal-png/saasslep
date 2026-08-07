@@ -1,11 +1,6 @@
-// =============================================================================
-// API Route Handler: /api/ede/asistencia
-// GET  → Exporta asistencia diaria en formato EDE
-// POST → Registra lote de eventos de asistencia (pase de lista)
-// Runtime: nodejs · Next.js 16 App Router
-// =============================================================================
-import { exportarAsistenciaEDE, registrarAsistencia } from '@/lib/ede-supabase';
+import { exportarAsistenciaEDE, registrarAsistencia, getSupabaseAdmin } from '@/lib/ede-supabase';
 import { createEdeEncryptedEnvelope } from '@/lib/ede-crypto';
+import { verifyMineducTeacherOtp } from '@/lib/ede-otp';
 import { EdeRegistrarAsistenciaPayload } from '@/lib/ede-types';
 
 export const runtime = 'nodejs';
@@ -132,7 +127,43 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    // Validar OTP transaccional si se proporciona (2FA / Firma Digital)
+    let otpValidado = false;
+    if (body.otp && body.rut_firmante) {
+      const otpResult = await verifyMineducTeacherOtp(body.rut_firmante, body.otp);
+      if (!otpResult.isValid) {
+        return Response.json(
+          { error: `Firma digital rechazada por el MINEDUC: ${otpResult.message || 'OTP incorrecto o expirado.'}` },
+          { status: 400 }
+        );
+      }
+      otpValidado = true;
+    }
+
     const count = await registrarAsistencia(body);
+
+    // Si se firmó digitalmente con OTP, registrar la transacción en el log de auditoría
+    if (otpValidado && body.rut_firmante) {
+      try {
+        const supabaseAdmin = getSupabaseAdmin();
+        await supabaseAdmin.from('ede_audit_log').insert({
+          table_name: 'ede_attendance_event',
+          action: 'SIGN',
+          record_id: body.section_id,
+          old_data: null,
+          new_data: {
+            fecha: body.fecha,
+            otp_validado: true,
+            rut_firmante: body.rut_firmante,
+            fecha_firma: new Date().toISOString()
+          },
+          changed_by: body.rut_firmante,
+          justificacion: `Asistencia diaria del ${body.fecha} firmada digitalmente mediante doble factor OTP`
+        });
+      } catch (auditErr) {
+        console.error('[EDE API] Error al guardar bitácora de firma OTP:', auditErr);
+      }
+    }
 
     return Response.json(
       {
@@ -141,6 +172,7 @@ export async function POST(request: Request): Promise<Response> {
         rbd: body.rbd,
         fecha: body.fecha,
         section_id: body.section_id,
+        firmado: otpValidado,
       },
       { status: 201 }
     );

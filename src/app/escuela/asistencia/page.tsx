@@ -55,7 +55,13 @@ export default function AsistenciaPage() {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState<string | null>(null);
-  const [docente_run] = useState('00.000.000-0'); // En producción: del JWT
+  const [docente_run] = useState('14.206.906-3'); // RUN de docente jefe para simulación
+  
+  // Firma Digital OTP (MINEDUC)
+  const [modalFirmaOpen, setModalFirmaOpen] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [rutFirmante, setRutFirmante] = useState('14.206.906-3');
+  const [errorFirma, setErrorFirma] = useState<string | null>(null);
 
   // Carga inicial de secciones
   useEffect(() => {
@@ -153,20 +159,51 @@ export default function AsistenciaPage() {
     });
   };
 
-  const handleGuardarAsistencia = async () => {
+  const handleGuardarAsistencia = () => {
     if (!sectionId) { setError('Selecciona un curso'); return; }
-    setGuardando(true); setError(null);
+    setErrorFirma(null);
+    setOtpCode('');
+    setModalFirmaOpen(true);
+  };
+
+  const ejecutarGuardadoConFirma = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpCode || otpCode.trim().length !== 6) {
+      setErrorFirma('El código OTP debe ser de 6 dígitos');
+      return;
+    }
+    setGuardando(true);
+    setErrorFirma(null);
     try {
-      const count = await registrarAsistencia({
-        section_id: sectionId,
-        rbd,
-        fecha,
-        registrado_por_run: docente_run,
-        eventos: Object.values(estadosAlumno),
+      const res = await fetch('/api/ede/asistencia', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          section_id: sectionId,
+          rbd,
+          fecha,
+          registrado_por_run: docente_run,
+          otp: otpCode,
+          rut_firmante: rutFirmante,
+          eventos: Object.values(estadosAlumno),
+        }),
       });
-      setExito(`✓ Asistencia del ${fecha} guardada — ${count} registros`);
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al validar firma y guardar asistencia');
+      }
+
+      setExito(`✓ Asistencia del ${fecha} guardada y firmada digitalmente — ${data.registrados} registros`);
+      setModalFirmaOpen(false);
+      setOtpCode('');
+      
+      // Forzar recarga del historial si está en esa vista
+      if (vista === 'historial') cargarHistorial();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar asistencia');
+      setErrorFirma(err instanceof Error ? err.message : 'Error al verificar firma y guardar');
     } finally {
       setGuardando(false);
     }
@@ -914,6 +951,137 @@ export default function AsistenciaPage() {
               )}
             </div>
           </>
+        )}
+        {/* ── MODAL FIRMA DIGITAL OTP (MINEDUC) ── */}
+        {modalFirmaOpen && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}>
+            <div style={{
+              background: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: 16,
+              padding: 28,
+              width: '90%',
+              maxWidth: 440,
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)',
+              color: '#f8fafc'
+            }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px 0' }}>
+                <span>🔐</span> Firma Digital Transaccional EDE
+              </h3>
+              <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0 0 20px 0', lineHeight: 1.4 }}>
+                De acuerdo con la Circular N°1 del MINEDUC, debes autorizar el registro diario de asistencia mediante firma digital de doble factor (2FA).
+              </p>
+
+              <form onSubmit={ejecutarGuardadoConFirma} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>RUN del Docente Firmante</label>
+                  <input 
+                    type="text" 
+                    value={rutFirmante} 
+                    onChange={(e) => setRutFirmante(e.target.value)} 
+                    placeholder="14.206.906-3"
+                    required
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      border: '1px solid #475569',
+                      background: '#0f172a',
+                      color: '#f8fafc',
+                      fontSize: '0.88rem'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Código OTP (2FA de 6 dígitos)</label>
+                  <input 
+                    type="text" 
+                    maxLength={6}
+                    value={otpCode} 
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))} 
+                    placeholder="123456"
+                    required
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 8,
+                      border: '1px solid #475569',
+                      background: '#0f172a',
+                      color: '#f8fafc',
+                      fontSize: '1.25rem',
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                      letterSpacing: '0.25em'
+                    }}
+                  />
+                </div>
+
+                {errorFirma && (
+                  <div style={{
+                    padding: 12,
+                    borderRadius: 8,
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#f87171',
+                    fontSize: '0.8rem',
+                    lineHeight: 1.4
+                  }}>
+                    ⚠️ {errorFirma}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                  <button 
+                    type="button" 
+                    onClick={() => setModalFirmaOpen(false)}
+                    disabled={guardando}
+                    style={{
+                      flex: 1,
+                      padding: '10px 16px',
+                      borderRadius: 8,
+                      border: '1px solid #334155',
+                      background: 'transparent',
+                      color: '#94a3b8',
+                      fontWeight: 'bold',
+                      fontSize: '0.82rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={guardando}
+                    style={{
+                      flex: 2,
+                      padding: '10px 16px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: '#0284c7',
+                      color: '#f8fafc',
+                      fontWeight: 'bold',
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 6px -1px rgba(2, 132, 199, 0.4)'
+                    }}
+                  >
+                    {guardando ? 'Verificando OTP...' : '✍️ Firmar y Registrar'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
       </div>
     </>

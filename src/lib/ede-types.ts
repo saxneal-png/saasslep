@@ -332,6 +332,8 @@ export interface EdeRegistrarAsistenciaPayload {
   rbd: number;  // INTEGER — RBD del establecimiento
   fecha: string;
   registrado_por_run: string;
+  otp?: string;           // Código OTP de 6 dígitos para validación transaccional
+  rut_firmante?: string;  // RUN del docente firmante
   eventos: Array<{
     enrollment_id: string;
     alumno_id: string;
