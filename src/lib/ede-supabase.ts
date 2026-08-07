@@ -678,3 +678,92 @@ export async function exportarConvivenciaEDE(
     records: data ?? [],
   };
 }
+
+/**
+ * Exportar reuniones de apoderados y asistencia en formato EDE (usa admin client)
+ */
+export async function exportarReunionesEDE(
+  rbd: number,
+  anioEscolar: number,
+  limit?: number,
+  offset?: number
+): Promise<EdeExportEnvelope<any>> {
+  const supabase = getSupabaseAdmin();
+
+  let queryMeet = supabase
+    .from('vw_ede_parent_meetings')
+    .select('*')
+    .eq('rbd', rbd)
+    .eq('anio_escolar', anioEscolar)
+    .order('fecha', { ascending: false });
+
+  if (limit !== undefined && offset !== undefined) {
+    queryMeet = queryMeet.range(offset, offset + limit - 1);
+  }
+
+  const { data: meetings, error: meetError } = await queryMeet;
+  if (meetError) throw new Error(`exportarReunionesEDE meetings: ${meetError.message}`);
+
+  const meetingIds = meetings?.map((m) => m.meeting_id) ?? [];
+
+  let attendance: any[] = [];
+  if (meetingIds.length > 0) {
+    const { data: att, error: attError } = await supabase
+      .from('vw_ede_parent_meeting_attendance')
+      .select('*')
+      .in('meeting_id', meetingIds);
+    if (attError) throw new Error(`exportarReunionesEDE attendance: ${attError.message}`);
+    attendance = att || [];
+  }
+
+  const records = (meetings || []).map((m) => {
+    return {
+      ...m,
+      asistencia: attendance.filter((a) => a.meeting_id === m.meeting_id),
+    };
+  });
+
+  return {
+    version: 'EDE-MINEDUC-CIRCULAR1',
+    generatedAt: new Date().toISOString(),
+    rbd,
+    anio_escolar: anioEscolar,
+    totalRecords: records.length,
+    records,
+  };
+}
+
+/**
+ * Exportar registros de adecuaciones Aula PIE en formato EDE (usa admin client)
+ */
+export async function exportarPieEDE(
+  rbd: number,
+  anioEscolar: number,
+  limit?: number,
+  offset?: number
+): Promise<EdeExportEnvelope<any>> {
+  const supabase = getSupabaseAdmin();
+
+  let query = supabase
+    .from('vw_ede_pie_records')
+    .select('*')
+    .eq('rbd', rbd)
+    .eq('anio_escolar', anioEscolar)
+    .order('fecha_registro', { ascending: false });
+
+  if (limit !== undefined && offset !== undefined) {
+    query = query.range(offset, offset + limit - 1);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`exportarPieEDE: ${error.message}`);
+
+  return {
+    version: 'EDE-MINEDUC-CIRCULAR1',
+    generatedAt: new Date().toISOString(),
+    rbd,
+    anio_escolar: anioEscolar,
+    totalRecords: data?.length ?? 0,
+    records: data ?? [],
+  };
+}

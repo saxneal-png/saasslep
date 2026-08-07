@@ -359,4 +359,91 @@ JOIN public.ede_course_section cs      ON cs.section_id = di.section_id
 LEFT JOIN public.ede_person_identifier run ON run.person_id = p.person_id AND run.system_id = 51;
 
 
+-- =============================================================================
+-- VISTA 9: Reuniones de Apoderados (Hoja 9)
+-- =============================================================================
+CREATE OR REPLACE VIEW public.vw_ede_parent_meetings AS
+SELECT
+  m.meeting_id,
+  m.rbd,
+  cs.nombre_curso,
+  cs.nivel,
+  cs.letra,
+  cs.anio_escolar,
+  m.fecha,
+  m.temario,
+  m.creado_por_run
+FROM public.ede_parent_meeting m
+JOIN public.ede_course_section cs ON cs.section_id = m.section_id;
+
+
+-- =============================================================================
+-- VISTA 10: Asistencia a Reuniones de Apoderados (Hoja 10)
+-- =============================================================================
+CREATE OR REPLACE VIEW public.vw_ede_parent_meeting_attendance AS
+SELECT
+  att.attendance_id,
+  att.meeting_id,
+  m.fecha                                  AS fecha_reunion,
+  cs.nombre_curso,
+  cs.anio_escolar,
+  att.asistio,
+  att.firma_digital_key,
+  att.firma_scan_base64,
+  
+  -- Apoderado
+  apo.person_id                            AS apoderado_id,
+  (apo.primer_nombre || ' ' || apo.apellido_paterno)::TEXT
+                                           AS apoderado_nombre_completo,
+  apo_run.identificador                    AS apoderado_run,
+
+  -- Estudiante representado
+  est.person_id                            AS alumno_id,
+  (est.primer_nombre || ' ' || est.apellido_paterno)::TEXT
+                                           AS alumno_nombre_completo,
+  est_run.identificador                    AS alumno_run
+
+FROM public.ede_parent_meeting_attendance att
+JOIN public.ede_parent_meeting m          ON m.meeting_id = att.meeting_id
+JOIN public.ede_course_section cs         ON cs.section_id = m.section_id
+JOIN public.ede_person apo                ON apo.person_id = att.apoderado_id
+JOIN public.ede_person est                ON est.person_id = att.alumno_id
+LEFT JOIN public.ede_person_identifier apo_run ON apo_run.person_id = apo.person_id AND apo_run.system_id = 51
+LEFT JOIN public.ede_person_identifier est_run ON est_run.person_id = est.person_id AND est_run.system_id = 51;
+
+
+-- =============================================================================
+-- VISTA 11: Registros de Adecuación Individual Aula PIE (Hoja 12)
+-- =============================================================================
+CREATE OR REPLACE VIEW public.vw_ede_pie_records AS
+SELECT
+  pie.pie_id,
+  pie.rbd,
+  cs.nombre_curso,
+  cs.nivel,
+  cs.letra,
+  cs.anio_escolar,
+  pie.fecha_registro,
+  pie.paci_detalles,
+  pie.tipo_apoyo,
+  pie.progreso_anual,
+  pie.equipo_aula,
+  pie.reuniones_coordinacion,
+  pie.estrategias_familia,
+  pie.registrado_por_run,
+  pie.firma_digital_key,
+  
+  -- Estudiante
+  est.person_id                            AS alumno_id,
+  (est.primer_nombre || ' ' || est.apellido_paterno)::TEXT
+                                           AS alumno_nombre_completo,
+  est_run.identificador                    AS alumno_run
+
+FROM public.ede_pie_record pie
+JOIN public.ede_course_section cs         ON cs.section_id = pie.section_id
+JOIN public.ede_person est                ON est.person_id = pie.alumno_id
+LEFT JOIN public.ede_person_identifier est_run ON est_run.person_id = est.person_id AND est_run.system_id = 51;
+
+
+
 

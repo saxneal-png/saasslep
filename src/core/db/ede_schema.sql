@@ -322,6 +322,53 @@ CREATE TABLE IF NOT EXISTS public.ede_discipline_incident (
 CREATE INDEX IF NOT EXISTS idx_ede_disp_incident_alumno ON public.ede_discipline_incident(alumno_id);
 CREATE INDEX IF NOT EXISTS idx_ede_disp_incident_fecha ON public.ede_discipline_incident(fecha);
 
+-- 19. Reunión de Apoderados (Parent Meeting)
+CREATE TABLE IF NOT EXISTS public.ede_parent_meeting (
+  meeting_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  section_id          UUID NOT NULL REFERENCES public.ede_course_section(section_id) ON DELETE CASCADE,
+  rbd                 INTEGER NOT NULL,
+  fecha               DATE NOT NULL,
+  temario             TEXT NOT NULL,
+  creado_por_run      TEXT NOT NULL,
+  created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 20. Asistencia y Firmas de Apoderados
+CREATE TABLE IF NOT EXISTS public.ede_parent_meeting_attendance (
+  attendance_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  meeting_id          UUID NOT NULL REFERENCES public.ede_parent_meeting(meeting_id) ON DELETE CASCADE,
+  apoderado_id        UUID NOT NULL REFERENCES public.ede_person(person_id) ON DELETE CASCADE,
+  alumno_id           UUID NOT NULL REFERENCES public.ede_person(person_id) ON DELETE CASCADE,
+  asistio             BOOLEAN NOT NULL DEFAULT FALSE,
+  firma_digital_key   TEXT,
+  firma_scan_base64   TEXT,
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(meeting_id, apoderado_id, alumno_id)
+);
+
+-- 21. Registros PIE / Aula PIE
+CREATE TABLE IF NOT EXISTS public.ede_pie_record (
+  pie_id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  alumno_id           UUID NOT NULL REFERENCES public.ede_person(person_id) ON DELETE CASCADE,
+  enrollment_id       UUID NOT NULL REFERENCES public.ede_enrollment(enrollment_id) ON DELETE CASCADE,
+  section_id          UUID NOT NULL REFERENCES public.ede_course_section(section_id) ON DELETE CASCADE,
+  rbd                 INTEGER NOT NULL,
+  fecha_registro      DATE NOT NULL,
+  paci_detalles       TEXT,
+  tipo_apoyo          TEXT,
+  progreso_anual      TEXT,
+  equipo_aula         JSONB,
+  reuniones_coordinacion JSONB,
+  estrategias_familia TEXT,
+  registrado_por_run  TEXT NOT NULL,
+  firma_digital_key   TEXT,
+  created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ede_parent_meet_sec ON public.ede_parent_meeting(section_id);
+CREATE INDEX IF NOT EXISTS idx_ede_parent_meet_att_meet ON public.ede_parent_meeting_attendance(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_ede_pie_record_alumno ON public.ede_pie_record(alumno_id);
+
 -- =============================================================================
 -- TRIGGER: updated_at automático
 -- =============================================================================
