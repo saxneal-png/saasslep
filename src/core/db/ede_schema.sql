@@ -19,13 +19,20 @@ CREATE TABLE IF NOT EXISTS public.ede_ref_persona_id_system (
   descripcion   TEXT NOT NULL
 );
 
+-- Liberar código 'NUM_MATRICULA' del ID 55 si existe en la BD actual para evitar conflictos de llave única
+UPDATE public.ede_ref_persona_id_system 
+SET codigo = 'NUM_MATRICULA_OLD', descripcion = 'Número Correlativo de Matrícula (Legacy)' 
+WHERE id = 55 AND codigo = 'NUM_MATRICULA';
+
 INSERT INTO public.ede_ref_persona_id_system (id, codigo, descripcion) VALUES
   (51, 'RUN',          'Rol Único Nacional'),
   (52, 'IPE',          'Identificador Provisorio de Extranjero'),
   (43, 'NUM_MATRICULA','Número de Matrícula del Establecimiento'),
   (54, 'NUM_LISTA',    'Número de Lista del Estudiante'),
   (55, 'NUM_MATRICULA_OLD', 'Número Correlativo de Matrícula (Legacy)')
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  codigo = EXCLUDED.codigo,
+  descripcion = EXCLUDED.descripcion;
 
 -- 2. Tipos de Organización (contexto escolar chileno)
 --    10=RBD/Escuela, 21=Curso/Letra, 38=Modalidad, 39=Jornada, 40=Nivel, 46=Grado
