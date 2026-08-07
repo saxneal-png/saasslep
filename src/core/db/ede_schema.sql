@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS public.ede_ref_persona_id_system (
 INSERT INTO public.ede_ref_persona_id_system (id, codigo, descripcion) VALUES
   (51, 'RUN',          'Rol Único Nacional'),
   (52, 'IPE',          'Identificador Provisorio de Extranjero'),
-  (55, 'NUM_MATRICULA','Número Correlativo de Matrícula')
+  (43, 'NUM_MATRICULA','Número de Matrícula del Establecimiento'),
+  (54, 'NUM_LISTA',    'Número de Lista del Estudiante'),
+  (55, 'NUM_MATRICULA_OLD', 'Número Correlativo de Matrícula (Legacy)')
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. Tipos de Organización (contexto escolar chileno)
