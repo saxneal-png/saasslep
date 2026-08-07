@@ -2113,6 +2113,20 @@ export default function EscuelaDashboard() {
           >
             📋 Brechas & Vacantes {brechasVacantes.filter(b => b.estado === 'Pendiente Sostenedor').length > 0 && `(${brechasVacantes.filter(b => b.estado === 'Pendiente Sostenedor').length})`}
           </button>
+          
+          {/* Módulos de Interoperabilidad EDE (MINEDUC Circular N°1) */}
+          <Link
+            href="/escuela/matricula"
+            className="flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all text-slate-600 hover:bg-slate-50 flex items-center justify-center gap-1.5 border border-dashed border-slate-300 bg-slate-50/50 hover:text-slep-blue"
+          >
+            📋 Matrícula EDE 🔗
+          </Link>
+          <Link
+            href="/escuela/asistencia"
+            className="flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all text-slate-600 hover:bg-slate-50 flex items-center justify-center gap-1.5 border border-dashed border-slate-300 bg-slate-50/50 hover:text-slep-blue"
+          >
+            📅 Asistencia EDE 🔗
+          </Link>
         </div>
 
         {/* Tab contents */}

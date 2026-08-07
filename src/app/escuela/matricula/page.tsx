@@ -65,12 +65,12 @@ interface FormNuevaMatricula {
 // Componente Principal
 // ---------------------------------------------------------------------------
 export default function MatriculaPage() {
-  // Contexto del establecimiento (simulado; en producción viene de cookie/JWT)
+  // Contexto del establecimiento (simulado; en producción viene de localStorage/cookie)
   // establecimientos.rbd es INTEGER en Supabase
   const rbdRaw = typeof window !== 'undefined'
-    ? (document.cookie.match(/slep_sim_rbd=([^;]+)/)?.[1] ?? '100')
-    : '100';
-  const rbd = parseInt(rbdRaw, 10) || 100;
+    ? (localStorage.getItem('slep_sim_rbd') ?? document.cookie.match(/slep_sim_rbd=([^;]+)/)?.[1] ?? '10202')
+    : '10202';
+  const rbd = parseInt(rbdRaw, 10) || 10202;
 
   const [vista, setVista] = useState<Vista>('resumen');
   const [anio, setAnio] = useState(ANIO_ACTUAL);
