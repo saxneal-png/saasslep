@@ -21,10 +21,8 @@ import {
   REF_PERSON_STATUS,
 } from './ede-types';
 
-// ---------------------------------------------------------------------------
-// Cliente Supabase (usa las mismas env vars que el resto de la app)
-// ---------------------------------------------------------------------------
-function getSupabase() {
+/** Cliente Supabase estándar */
+export function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) {
