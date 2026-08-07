@@ -303,6 +303,25 @@ CREATE INDEX IF NOT EXISTS idx_ede_class_act_fecha ON public.ede_class_activity(
 
 DROP TRIGGER IF EXISTS trg_ede_class_activity_updated_at ON public.ede_class_activity;
 
+-- 18. Incidencias de Convivencia Escolar (Incident)
+CREATE TABLE IF NOT EXISTS public.ede_discipline_incident (
+  incident_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  alumno_id           UUID NOT NULL REFERENCES public.ede_person(person_id) ON DELETE CASCADE,
+  enrollment_id       UUID NOT NULL REFERENCES public.ede_enrollment(enrollment_id) ON DELETE CASCADE,
+  section_id          UUID NOT NULL REFERENCES public.ede_course_section(section_id) ON DELETE CASCADE,
+  rbd                 INTEGER NOT NULL,
+  fecha               DATE NOT NULL,
+  tipo_anotacion      TEXT NOT NULL,           -- 'POSITIVA', 'NEGATIVA', 'MEDIDA_DISCIPLINARIA', 'RECONOCIMIENTO'
+  subsector           TEXT,                    -- Asignatura (si ocurrió en una clase particular)
+  descripcion         TEXT NOT NULL,           -- Detalle de la anotación
+  registrado_por_run  TEXT NOT NULL,           -- RUN del docente que registra
+  firma_digital_key   TEXT,                    -- OTP firmado para confirmar anotación
+  created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ede_disp_incident_alumno ON public.ede_discipline_incident(alumno_id);
+CREATE INDEX IF NOT EXISTS idx_ede_disp_incident_fecha ON public.ede_discipline_incident(fecha);
+
 -- =============================================================================
 -- TRIGGER: updated_at automático
 -- =============================================================================

@@ -589,3 +589,92 @@ export async function exportarResumenAsistenciaMesEDE(
     records: data ?? [],
   };
 }
+
+/**
+ * Exportar evaluaciones y calificaciones en formato EDE (usa admin client)
+ */
+export async function exportarEvaluacionesEDE(
+  rbd: number,
+  anioEscolar: number,
+  limit?: number,
+  offset?: number
+): Promise<EdeExportEnvelope<any>> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: sections } = await supabase
+    .from('ede_course_section')
+    .select('section_id')
+    .eq('rbd', rbd)
+    .eq('anio_escolar', anioEscolar);
+
+  const sectionIds = sections?.map((s) => s.section_id) ?? [];
+
+  if (sectionIds.length === 0) {
+    return {
+      version: 'EDE-MINEDUC-CIRCULAR1',
+      generatedAt: new Date().toISOString(),
+      rbd,
+      anio_escolar: anioEscolar,
+      totalRecords: 0,
+      records: [],
+    };
+  }
+
+  let query = supabase
+    .from('ede_assessment_result')
+    .select('*')
+    .in('section_id', sectionIds)
+    .order('periodo')
+    .order('subsector');
+
+  if (limit !== undefined && offset !== undefined) {
+    query = query.range(offset, offset + limit - 1);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`exportarEvaluacionesEDE: ${error.message}`);
+
+  return {
+    version: 'EDE-MINEDUC-CIRCULAR1',
+    generatedAt: new Date().toISOString(),
+    rbd,
+    anio_escolar: anioEscolar,
+    totalRecords: data?.length ?? 0,
+    records: data ?? [],
+  };
+}
+
+/**
+ * Exportar libro de vida de convivencia escolar en formato EDE (usa admin client)
+ */
+export async function exportarConvivenciaEDE(
+  rbd: number,
+  anioEscolar: number,
+  limit?: number,
+  offset?: number
+): Promise<EdeExportEnvelope<any>> {
+  const supabase = getSupabaseAdmin();
+
+  let query = supabase
+    .from('vw_ede_discipline_incidents')
+    .select('*')
+    .eq('rbd', rbd)
+    .eq('anio_escolar', anioEscolar)
+    .order('fecha', { ascending: false });
+
+  if (limit !== undefined && offset !== undefined) {
+    query = query.range(offset, offset + limit - 1);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`exportarConvivenciaEDE: ${error.message}`);
+
+  return {
+    version: 'EDE-MINEDUC-CIRCULAR1',
+    generatedAt: new Date().toISOString(),
+    rbd,
+    anio_escolar: anioEscolar,
+    totalRecords: data?.length ?? 0,
+    records: data ?? [],
+  };
+}

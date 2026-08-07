@@ -4,7 +4,7 @@
 // para auditorías MINEDUC / SLEP
 // Runtime: nodejs · Next.js 16 App Router
 // =============================================================================
-import { exportarMatriculaEDE, exportarAsistenciaEDE, exportarSalidasEDE, exportarActividadesEDE, exportarResumenAsistenciaMesEDE, getAlertaTempranaAlumnos } from '@/lib/ede-supabase';
+import { exportarMatriculaEDE, exportarAsistenciaEDE, exportarSalidasEDE, exportarActividadesEDE, exportarResumenAsistenciaMesEDE, exportarEvaluacionesEDE, exportarConvivenciaEDE, getAlertaTempranaAlumnos } from '@/lib/ede-supabase';
 import { createEdeEncryptedEnvelope } from '@/lib/ede-crypto';
 
 export const runtime = 'nodejs';
@@ -76,7 +76,7 @@ export async function GET(request: Request): Promise<Response> {
     const generatedAt = new Date().toISOString();
 
     // Ejecutar en paralelo según el módulo solicitado
-    const [matriculaEnv, asistenciaEnv, salidasEnv, actividadesEnv, resumenMesEnv, alertas] = await Promise.all([
+    const [matriculaEnv, asistenciaEnv, salidasEnv, actividadesEnv, resumenMesEnv, evaluacionesEnv, convivenciaEnv, alertas] = await Promise.all([
       modulo === 'matricula' || modulo === 'todos'
         ? exportarMatriculaEDE(rbdInt, anioEscolar, isNaN(limit as number) ? undefined : limit, isNaN(offset as number) ? undefined : offset)
         : Promise.resolve(null),
@@ -91,6 +91,12 @@ export async function GET(request: Request): Promise<Response> {
         : Promise.resolve(null),
       modulo === 'resumen_mes' || modulo === 'todos'
         ? exportarResumenAsistenciaMesEDE(rbdInt, anioEscolar, isNaN(limit as number) ? undefined : limit, isNaN(offset as number) ? undefined : offset)
+        : Promise.resolve(null),
+      modulo === 'evaluaciones' || modulo === 'todos'
+        ? exportarEvaluacionesEDE(rbdInt, anioEscolar, isNaN(limit as number) ? undefined : limit, isNaN(offset as number) ? undefined : offset)
+        : Promise.resolve(null),
+      modulo === 'convivencia' || modulo === 'todos'
+        ? exportarConvivenciaEDE(rbdInt, anioEscolar, isNaN(limit as number) ? undefined : limit, isNaN(offset as number) ? undefined : offset)
         : Promise.resolve(null),
       modulo === 'alertas' || modulo === 'todos'
         ? getAlertaTempranaAlumnos(rbdInt, anioEscolar)
@@ -131,6 +137,18 @@ export async function GET(request: Request): Promise<Response> {
         resumen_mes: {
           totalRecords: resumenMesEnv.totalRecords,
           records: resumenMesEnv.records,
+        },
+      }),
+      ...(evaluacionesEnv !== null && {
+        evaluaciones: {
+          totalRecords: evaluacionesEnv.totalRecords,
+          records: evaluacionesEnv.records,
+        },
+      }),
+      ...(convivenciaEnv !== null && {
+        convivencia: {
+          totalRecords: convivenciaEnv.totalRecords,
+          records: convivenciaEnv.records,
         },
       }),
       ...(alertas !== null && {

@@ -332,3 +332,31 @@ GROUP BY
   EXTRACT(MONTH FROM ae.fecha), EXTRACT(YEAR FROM ae.fecha);
 
 
+-- =============================================================================
+-- VISTA 8: Convivencia Escolar / Anotaciones (Hoja 11)
+-- =============================================================================
+CREATE OR REPLACE VIEW public.vw_ede_discipline_incidents AS
+SELECT
+  di.incident_id,
+  di.rbd,
+  cs.nombre_curso,
+  cs.nivel,
+  cs.letra,
+  cs.anio_escolar,
+  di.fecha,
+  di.tipo_anotacion,
+  di.subsector,
+  di.descripcion,
+  p.person_id                             AS alumno_id,
+  (p.primer_nombre || ' ' || p.apellido_paterno)::TEXT
+                                          AS alumno_nombre_completo,
+  run.identificador                       AS alumno_run,
+  di.registrado_por_run,
+  di.firma_digital_key
+FROM public.ede_discipline_incident di
+JOIN public.ede_person p               ON p.person_id = di.alumno_id
+JOIN public.ede_course_section cs      ON cs.section_id = di.section_id
+LEFT JOIN public.ede_person_identifier run ON run.person_id = p.person_id AND run.system_id = 51;
+
+
+
