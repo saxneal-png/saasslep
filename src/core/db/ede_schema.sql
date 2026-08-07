@@ -280,6 +280,29 @@ CREATE TABLE IF NOT EXISTS public.ede_early_departure (
 CREATE INDEX IF NOT EXISTS idx_ede_early_dep_alumno ON public.ede_early_departure(alumno_id);
 CREATE INDEX IF NOT EXISTS idx_ede_early_dep_fecha ON public.ede_early_departure(fecha);
 
+-- 17. Leccionario y Actividades de Clase (OrganizationCalendarSession)
+CREATE TABLE IF NOT EXISTS public.ede_class_activity (
+  activity_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  section_id          UUID NOT NULL REFERENCES public.ede_course_section(section_id) ON DELETE CASCADE,
+  rbd                 INTEGER NOT NULL,
+  fecha               DATE NOT NULL,
+  horas               INT NOT NULL DEFAULT 2,  -- Cantidad de horas pedagógicas
+  subsector           TEXT NOT NULL,           -- Asignatura o taller
+  contenidos          TEXT NOT NULL,           -- Contenidos/Temas
+  objetivo            TEXT NOT NULL,           -- Aprendizaje esperado / Objetivo pedagógico
+  actividad           TEXT,                    -- Experiencias de aprendizaje / Actividades desarrolladas
+  evaluacion          TEXT,                    -- Instrumentos de evaluación (si aplica)
+  docente_run         TEXT NOT NULL,           -- RUN del docente que dicta
+  firma_digital_key   TEXT,                    -- OTP firmado para el cierre de la clase
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(section_id, fecha, subsector)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ede_class_act_section ON public.ede_class_activity(section_id);
+CREATE INDEX IF NOT EXISTS idx_ede_class_act_fecha ON public.ede_class_activity(fecha);
+
+DROP TRIGGER IF EXISTS trg_ede_class_activity_updated_at ON public.ede_class_activity;
+
 -- =============================================================================
 -- TRIGGER: updated_at automático
 -- =============================================================================

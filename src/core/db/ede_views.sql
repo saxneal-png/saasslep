@@ -295,3 +295,40 @@ JOIN public.ede_person p               ON p.person_id = ed.alumno_id
 JOIN public.ede_course_section cs      ON cs.section_id = ed.section_id
 LEFT JOIN public.ede_person_identifier run ON run.person_id = p.person_id AND run.system_id = 51;
 
+
+-- =============================================================================
+-- VISTA 7: Resumen de Asistencia Mensual (Hoja 6)
+-- =============================================================================
+CREATE OR REPLACE VIEW public.vw_ede_resumen_asistencia_mes AS
+SELECT
+  cs.rbd,
+  cs.section_id,
+  cs.nombre_curso,
+  cs.nivel,
+  cs.letra,
+  cs.jornada,
+  cs.modalidad,
+  cs.anio_escolar,
+  EXTRACT(MONTH FROM ae.fecha)::INT          AS mes,
+  EXTRACT(YEAR FROM ae.fecha)::INT           AS anio,
+  COUNT(DISTINCT ae.fecha)::INT              AS dias_trabajados,
+  COUNT(ae.event_id) FILTER (WHERE ae.event_type_id = 1)::INT 
+                                             AS total_asistencia,
+  COUNT(ae.event_id) FILTER (WHERE ae.event_type_id = 2)::INT 
+                                             AS total_inasistencias,
+  (SELECT COUNT(e.enrollment_id)::INT 
+   FROM public.ede_enrollment e 
+   WHERE e.section_id = cs.section_id 
+     AND e.estado_id IN (27, 29))            AS total_matriculados,
+  CASE 
+    WHEN COUNT(DISTINCT ae.fecha) > 0 AND (SELECT COUNT(e.enrollment_id) FROM public.ede_enrollment e WHERE e.section_id = cs.section_id AND e.estado_id IN (27, 29)) > 0
+    THEN ROUND((COUNT(ae.event_id) FILTER (WHERE ae.event_type_id = 1)::NUMERIC / (COUNT(DISTINCT ae.fecha) * (SELECT COUNT(e.enrollment_id) FROM public.ede_enrollment e WHERE e.section_id = cs.section_id AND e.estado_id IN (27, 29)))::NUMERIC) * 100, 2)::REAL
+    ELSE 0.0::REAL
+  END                                        AS asistencia_media
+FROM public.ede_attendance_event ae
+JOIN public.ede_course_section cs ON cs.section_id = ae.section_id
+GROUP BY 
+  cs.rbd, cs.section_id, cs.nombre_curso, cs.nivel, cs.letra, cs.jornada, cs.modalidad, cs.anio_escolar,
+  EXTRACT(MONTH FROM ae.fecha), EXTRACT(YEAR FROM ae.fecha);
+
+
