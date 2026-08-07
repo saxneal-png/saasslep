@@ -5,6 +5,7 @@
 // Runtime: nodejs · Next.js 16 App Router
 // =============================================================================
 import { exportarMatriculaEDE, exportarAsistenciaEDE, getAlertaTempranaAlumnos } from '@/lib/ede-supabase';
+import { createEdeEncryptedEnvelope } from '@/lib/ede-crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,9 @@ export const dynamic = 'force-dynamic';
  *   modulo  (opcional)  — 'matricula' | 'asistencia' | 'alertas' | 'todos' (default)
  *   desde   (opcional)  — Fecha inicio asistencia YYYY-MM-DD
  *   hasta   (opcional)  — Fecha fin asistencia YYYY-MM-DD
+ *   limit   (opcional)  — Límite de registros para paginación
+ *   offset  (opcional)  — Desplazamiento para paginación
+ *   cifrar  (opcional)  — 'true' para encriptar la respuesta con RSA-OAEP
  */
 export async function GET(request: Request): Promise<Response> {
   try {
@@ -27,6 +31,9 @@ export async function GET(request: Request): Promise<Response> {
     const modulo = searchParams.get('modulo') ?? 'todos';
     const desde = searchParams.get('desde') ?? undefined;
     const hasta = searchParams.get('hasta') ?? undefined;
+    const limitParam = searchParams.get('limit');
+    const offsetParam = searchParams.get('offset');
+    const cifrarParam = searchParams.get('cifrar') === 'true';
 
     // Validación
     if (!rbd || rbd.trim() === '') {
@@ -63,15 +70,18 @@ export async function GET(request: Request): Promise<Response> {
       );
     }
 
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
+
     const generatedAt = new Date().toISOString();
 
     // Ejecutar en paralelo según el módulo solicitado
     const [matriculaEnv, asistenciaEnv, alertas] = await Promise.all([
       modulo === 'matricula' || modulo === 'todos'
-        ? exportarMatriculaEDE(rbdInt, anioEscolar)
+        ? exportarMatriculaEDE(rbdInt, anioEscolar, isNaN(limit as number) ? undefined : limit, isNaN(offset as number) ? undefined : offset)
         : Promise.resolve(null),
       modulo === 'asistencia' || modulo === 'todos'
-        ? exportarAsistenciaEDE(rbdInt, anioEscolar, desde, hasta)
+        ? exportarAsistenciaEDE(rbdInt, anioEscolar, desde, hasta, isNaN(limit as number) ? undefined : limit, isNaN(offset as number) ? undefined : offset)
         : Promise.resolve(null),
       modulo === 'alertas' || modulo === 'todos'
         ? getAlertaTempranaAlumnos(rbdInt, anioEscolar)
@@ -106,11 +116,15 @@ export async function GET(request: Request): Promise<Response> {
       }),
     };
 
-    return Response.json(response, {
+    const responsePayload = cifrarParam 
+      ? createEdeEncryptedEnvelope(response) 
+      : response;
+
+    return Response.json(responsePayload, {
       status: 200,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'X-EDE-Version': 'CIRCULAR1-2024',
+        'X-EDE-Version': cifrarParam ? 'CIRCULAR1-2024-ENCRYPTED' : 'CIRCULAR1-2024',
         'X-EDE-RBD': String(rbdInt),
         'X-EDE-Anio': String(anioEscolar),
         'X-EDE-Modulo': modulo,

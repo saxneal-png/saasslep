@@ -393,16 +393,15 @@ export async function getResumenCursosByRbd(
 // EXPORTACIÓN EDE (para API Route Handlers)
 // ---------------------------------------------------------------------------
 
-/**
- * Exportar matrícula en formato EDE Circular N°1 (usa admin client)
- */
 export async function exportarMatriculaEDE(
   rbd: number,
-  anioEscolar: number
+  anioEscolar: number,
+  limit?: number,
+  offset?: number
 ): Promise<EdeExportEnvelope<EdeRegistroMatriculaRow>> {
   const supabase = getSupabaseAdmin();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('vw_ede_matricula')
     .select('*')
     .eq('rbd', rbd)
@@ -411,6 +410,11 @@ export async function exportarMatriculaEDE(
     .order('nombre_curso')
     .order('apellido_paterno');
 
+  if (limit !== undefined && offset !== undefined) {
+    query = query.range(offset, offset + limit - 1);
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(`exportarMatriculaEDE: ${error.message}`);
 
   return {
@@ -430,7 +434,9 @@ export async function exportarAsistenciaEDE(
   rbd: number,
   anioEscolar: number,
   fechaDesde?: string,
-  fechaHasta?: string
+  fechaHasta?: string,
+  limit?: number,
+  offset?: number
 ): Promise<EdeExportEnvelope<EdeAsistenciaDiariaRow>> {
   const supabase = getSupabaseAdmin();
   let query = supabase
@@ -443,6 +449,10 @@ export async function exportarAsistenciaEDE(
 
   if (fechaDesde) query = query.gte('fecha', fechaDesde);
   if (fechaHasta) query = query.lte('fecha', fechaHasta);
+
+  if (limit !== undefined && offset !== undefined) {
+    query = query.range(offset, offset + limit - 1);
+  }
 
   const { data, error } = await query;
   if (error) throw new Error(`exportarAsistenciaEDE: ${error.message}`);

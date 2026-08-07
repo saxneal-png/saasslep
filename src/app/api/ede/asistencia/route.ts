@@ -5,6 +5,7 @@
 // Runtime: nodejs · Next.js 16 App Router
 // =============================================================================
 import { exportarAsistenciaEDE, registrarAsistencia } from '@/lib/ede-supabase';
+import { createEdeEncryptedEnvelope } from '@/lib/ede-crypto';
 import { EdeRegistrarAsistenciaPayload } from '@/lib/ede-types';
 
 export const runtime = 'nodejs';
@@ -20,6 +21,9 @@ export async function GET(request: Request): Promise<Response> {
     const anioParam = searchParams.get('anio');
     const desde = searchParams.get('desde') ?? undefined;
     const hasta = searchParams.get('hasta') ?? undefined;
+    const limitParam = searchParams.get('limit');
+    const offsetParam = searchParams.get('offset');
+    const cifrarParam = searchParams.get('cifrar') === 'true';
 
     if (!rbd || rbd.trim() === '') {
       return Response.json(
@@ -62,18 +66,27 @@ export async function GET(request: Request): Promise<Response> {
       );
     }
 
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
+
     const envelope = await exportarAsistenciaEDE(
       rbdInt,
       anioEscolar,
       desde,
-      hasta
+      hasta,
+      isNaN(limit as number) ? undefined : limit,
+      isNaN(offset as number) ? undefined : offset
     );
 
-    return Response.json(envelope, {
+    const responsePayload = cifrarParam 
+      ? createEdeEncryptedEnvelope(envelope) 
+      : envelope;
+
+    return Response.json(responsePayload, {
       status: 200,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'X-EDE-Version': 'CIRCULAR1-2024',
+        'X-EDE-Version': cifrarParam ? 'CIRCULAR1-2024-ENCRYPTED' : 'CIRCULAR1-2024',
         'X-EDE-RBD': String(rbdInt),
         'Cache-Control': 'no-store',
       },

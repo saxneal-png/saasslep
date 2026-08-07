@@ -5,6 +5,7 @@
 // Next.js 16 App Router — usa Response nativo (no NextResponse)
 // =============================================================================
 import { exportarMatriculaEDE } from '@/lib/ede-supabase';
+import { createEdeEncryptedEnvelope } from '@/lib/ede-crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,9 @@ export async function GET(request: Request): Promise<Response> {
     const { searchParams } = new URL(request.url);
     const rbd = searchParams.get('rbd');
     const anioParam = searchParams.get('anio');
+    const limitParam = searchParams.get('limit');
+    const offsetParam = searchParams.get('offset');
+    const cifrarParam = searchParams.get('cifrar') === 'true';
 
     // Validación de parámetros
     if (!rbd || rbd.trim() === '') {
@@ -42,13 +46,25 @@ export async function GET(request: Request): Promise<Response> {
       );
     }
 
-    const envelope = await exportarMatriculaEDE(rbdInt, anioEscolar);
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
 
-    return Response.json(envelope, {
+    const envelope = await exportarMatriculaEDE(
+      rbdInt, 
+      anioEscolar, 
+      isNaN(limit as number) ? undefined : limit, 
+      isNaN(offset as number) ? undefined : offset
+    );
+
+    const responsePayload = cifrarParam 
+      ? createEdeEncryptedEnvelope(envelope) 
+      : envelope;
+
+    return Response.json(responsePayload, {
       status: 200,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'X-EDE-Version': 'CIRCULAR1-2024',
+        'X-EDE-Version': cifrarParam ? 'CIRCULAR1-2024-ENCRYPTED' : 'CIRCULAR1-2024',
         'X-EDE-RBD': String(rbdInt),
         'X-EDE-Anio': String(anioEscolar),
         'Cache-Control': 'no-store',
