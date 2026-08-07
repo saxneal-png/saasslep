@@ -231,3 +231,67 @@ GROUP BY
   cs.rbd, est.nombre, cs.section_id, cs.nombre_curso,
   cs.nivel, cs.letra, cs.anio_escolar, cs.docente_jefe_run,
   f.nombre;
+
+
+-- =============================================================================
+-- VISTA 5: Matrícula Completa y Antecedentes (Hojas 1 y 2)
+-- =============================================================================
+CREATE OR REPLACE VIEW public.vw_ede_matricula_completa AS
+SELECT
+  m.*,
+  pa.direccion                            AS alumno_direccion,
+  pa.comuna_id                            AS alumno_comuna_id,
+  pt.telefono                             AS alumno_telefono,
+  pe.email                                AS alumno_email,
+  apo.person_id                           AS apoderado_id,
+  apo_run.identificador                   AS apoderado_run,
+  apo.primer_nombre                       AS apoderado_primer_nombre,
+  apo.segundo_nombre                      AS apoderado_segundo_nombre,
+  apo.apellido_paterno                    AS apoderado_apellido_paterno,
+  apo.apellido_materno                    AS apoderado_apellido_materno,
+  rel.descripcion                         AS apoderado_parentesco,
+  apo_pa.direccion                        AS apoderado_direccion,
+  apo_pa.comuna_id                        AS apoderado_comuna_id,
+  apo_pt.telefono                         AS apoderado_telefono,
+  apo_pe.email                            AS apoderado_email
+FROM public.vw_ede_matricula m
+LEFT JOIN public.ede_person_address pa        ON pa.person_id = m.alumno_id
+LEFT JOIN public.ede_person_telephone pt      ON pt.person_id = m.alumno_id
+LEFT JOIN public.ede_person_email pe          ON pe.person_id = m.alumno_id
+LEFT JOIN public.ede_person_relationship r     ON r.alumno_id = m.alumno_id AND r.es_apoderado_ppal = TRUE
+LEFT JOIN public.ede_person apo               ON apo.person_id = r.apoderado_id
+LEFT JOIN public.ede_ref_person_relationship rel ON rel.id = r.relationship_id
+LEFT JOIN public.ede_person_identifier apo_run ON apo_run.person_id = apo.person_id AND apo_run.system_id = 51
+LEFT JOIN public.ede_person_address apo_pa    ON apo_pa.person_id = apo.person_id
+LEFT JOIN public.ede_person_telephone apo_pt  ON apo_pt.person_id = apo.person_id
+LEFT JOIN public.ede_person_email apo_pe      ON apo_pe.person_id = apo.person_id;
+
+
+-- =============================================================================
+-- VISTA 6: Retiros Anticipados (Hoja 3)
+-- =============================================================================
+CREATE OR REPLACE VIEW public.vw_ede_early_departures AS
+SELECT
+  ed.id,
+  ed.rbd,
+  cs.nombre_curso,
+  cs.nivel,
+  cs.letra,
+  cs.anio_escolar,
+  ed.fecha,
+  ed.hora_salida,
+  ed.hora_regreso,
+  p.person_id                             AS alumno_id,
+  (p.primer_nombre || ' ' || p.apellido_paterno)::TEXT
+                                          AS alumno_nombre_completo,
+  run.identificador                       AS alumno_run,
+  ed.retirado_por_nombre,
+  ed.retirado_por_run,
+  ed.firma_digital_key,
+  ed.firma_scan_base64,
+  ed.observacion
+FROM public.ede_early_departure ed
+JOIN public.ede_person p               ON p.person_id = ed.alumno_id
+JOIN public.ede_course_section cs      ON cs.section_id = ed.section_id
+LEFT JOIN public.ede_person_identifier run ON run.person_id = p.person_id AND run.system_id = 51;
+

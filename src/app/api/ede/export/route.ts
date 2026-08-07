@@ -4,7 +4,7 @@
 // para auditorías MINEDUC / SLEP
 // Runtime: nodejs · Next.js 16 App Router
 // =============================================================================
-import { exportarMatriculaEDE, exportarAsistenciaEDE, getAlertaTempranaAlumnos } from '@/lib/ede-supabase';
+import { exportarMatriculaEDE, exportarAsistenciaEDE, exportarSalidasEDE, getAlertaTempranaAlumnos } from '@/lib/ede-supabase';
 import { createEdeEncryptedEnvelope } from '@/lib/ede-crypto';
 
 export const runtime = 'nodejs';
@@ -76,12 +76,15 @@ export async function GET(request: Request): Promise<Response> {
     const generatedAt = new Date().toISOString();
 
     // Ejecutar en paralelo según el módulo solicitado
-    const [matriculaEnv, asistenciaEnv, alertas] = await Promise.all([
+    const [matriculaEnv, asistenciaEnv, salidasEnv, alertas] = await Promise.all([
       modulo === 'matricula' || modulo === 'todos'
         ? exportarMatriculaEDE(rbdInt, anioEscolar, isNaN(limit as number) ? undefined : limit, isNaN(offset as number) ? undefined : offset)
         : Promise.resolve(null),
       modulo === 'asistencia' || modulo === 'todos'
         ? exportarAsistenciaEDE(rbdInt, anioEscolar, desde, hasta, isNaN(limit as number) ? undefined : limit, isNaN(offset as number) ? undefined : offset)
+        : Promise.resolve(null),
+      modulo === 'salidas' || modulo === 'todos'
+        ? exportarSalidasEDE(rbdInt, anioEscolar, isNaN(limit as number) ? undefined : limit, isNaN(offset as number) ? undefined : offset)
         : Promise.resolve(null),
       modulo === 'alertas' || modulo === 'todos'
         ? getAlertaTempranaAlumnos(rbdInt, anioEscolar)
@@ -104,6 +107,12 @@ export async function GET(request: Request): Promise<Response> {
         asistencia: {
           totalRecords: asistenciaEnv.totalRecords,
           records: asistenciaEnv.records,
+        },
+      }),
+      ...(salidasEnv !== null && {
+        salidas: {
+          totalRecords: salidasEnv.totalRecords,
+          records: salidasEnv.records,
         },
       }),
       ...(alertas !== null && {

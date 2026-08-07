@@ -400,7 +400,7 @@ export async function exportarMatriculaEDE(
   const supabase = getSupabaseAdmin();
 
   let query = supabase
-    .from('vw_ede_matricula')
+    .from('vw_ede_matricula_completa')
     .select('*')
     .eq('rbd', rbd)
     .eq('anio_escolar', anioEscolar)
@@ -454,6 +454,42 @@ export async function exportarAsistenciaEDE(
 
   const { data, error } = await query;
   if (error) throw new Error(`exportarAsistenciaEDE: ${error.message}`);
+
+  return {
+    version: 'EDE-MINEDUC-CIRCULAR1',
+    generatedAt: new Date().toISOString(),
+    rbd,
+    anio_escolar: anioEscolar,
+    totalRecords: data?.length ?? 0,
+    records: data ?? [],
+  };
+}
+
+/**
+ * Exportar retiros anticipados en formato EDE (usa admin client)
+ */
+export async function exportarSalidasEDE(
+  rbd: number,
+  anioEscolar: number,
+  limit?: number,
+  offset?: number
+): Promise<EdeExportEnvelope<any>> {
+  const supabase = getSupabaseAdmin();
+
+  let query = supabase
+    .from('vw_ede_early_departures')
+    .select('*')
+    .eq('rbd', rbd)
+    .eq('anio_escolar', anioEscolar)
+    .order('fecha', { ascending: false })
+    .order('hora_salida', { ascending: false });
+
+  if (limit !== undefined && offset !== undefined) {
+    query = query.range(offset, offset + limit - 1);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`exportarSalidasEDE: ${error.message}`);
 
   return {
     version: 'EDE-MINEDUC-CIRCULAR1',

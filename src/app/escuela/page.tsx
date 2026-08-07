@@ -2128,6 +2128,12 @@ export default function EscuelaDashboard() {
             📅 Asistencia EDE 🔗
           </Link>
           <Link
+            href="/escuela/salidas"
+            className="flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all text-slate-600 hover:bg-slate-50 flex items-center justify-center gap-1.5 border border-dashed border-slate-300 bg-slate-50/50 hover:text-slep-blue"
+          >
+            🚪 Salidas EDE 🔗
+          </Link>
+          <Link
             href="/escuela/auditoria"
             className="flex-1 py-3 text-center rounded-lg font-bold text-xs transition-all text-slate-600 hover:bg-slate-50 flex items-center justify-center gap-1.5 border border-dashed border-slate-300 bg-slate-50/50 hover:text-slep-blue"
           >

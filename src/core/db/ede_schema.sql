@@ -224,6 +224,55 @@ CREATE TABLE IF NOT EXISTS public.ede_assessment_result (
 CREATE INDEX IF NOT EXISTS idx_ede_assessment_alumno ON public.ede_assessment_result(alumno_id);
 CREATE INDEX IF NOT EXISTS idx_ede_assessment_section ON public.ede_assessment_result(section_id);
 
+-- 13. Dirección de Persona (PersonAddress)
+CREATE TABLE IF NOT EXISTS public.ede_person_address (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  person_id           UUID NOT NULL REFERENCES public.ede_person(person_id) ON DELETE CASCADE,
+  direccion           TEXT NOT NULL,
+  comuna_id           INT,  -- Codigo de comuna MAE / RefCountyId
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(person_id)
+);
+
+-- 14. Teléfono de Persona (PersonTelephone)
+CREATE TABLE IF NOT EXISTS public.ede_person_telephone (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  person_id           UUID NOT NULL REFERENCES public.ede_person(person_id) ON DELETE CASCADE,
+  telefono            TEXT NOT NULL,
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(person_id)
+);
+
+-- 15. Email de Persona (PersonEmailAddress)
+CREATE TABLE IF NOT EXISTS public.ede_person_email (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  person_id           UUID NOT NULL REFERENCES public.ede_person(person_id) ON DELETE CASCADE,
+  email               TEXT NOT NULL,
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(person_id)
+);
+
+-- 16. Retiros Anticipados (Early Departure / Salidas)
+CREATE TABLE IF NOT EXISTS public.ede_early_departure (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  alumno_id           UUID NOT NULL REFERENCES public.ede_person(person_id) ON DELETE CASCADE,
+  enrollment_id       UUID NOT NULL REFERENCES public.ede_enrollment(enrollment_id) ON DELETE CASCADE,
+  section_id          UUID NOT NULL REFERENCES public.ede_course_section(section_id) ON DELETE CASCADE,
+  rbd                 INTEGER NOT NULL,
+  fecha               DATE NOT NULL,
+  hora_salida         TIME NOT NULL,
+  hora_regreso        TIME,
+  retirado_por_nombre TEXT NOT NULL,
+  retirado_por_run    TEXT,
+  firma_digital_key   TEXT,
+  firma_scan_base64   TEXT,
+  observacion         TEXT,
+  created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ede_early_dep_alumno ON public.ede_early_departure(alumno_id);
+CREATE INDEX IF NOT EXISTS idx_ede_early_dep_fecha ON public.ede_early_departure(fecha);
+
 -- =============================================================================
 -- TRIGGER: updated_at automático
 -- =============================================================================
