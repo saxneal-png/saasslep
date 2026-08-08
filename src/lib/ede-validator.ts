@@ -136,7 +136,7 @@ export async function runEdeComplianceCheck(
         if (!parentSet.has(student.person_id)) {
           issues.push({
             ruleId: 'FV-APO-001',
-            severity: 'WARNING', // Advertencia (MINEDUC la acepta pero advierte)
+            severity: 'WARNING',
             table: 'ede_person_relationship',
             message: `El alumno matriculado ${student.primer_nombre} ${student.apellido_paterno} no posee un apoderado principal registrado.`,
             affectedRecordId: student.person_id,
@@ -144,6 +144,155 @@ export async function runEdeComplianceCheck(
         }
       }
     }
+
+    // =========================================================================
+    // NUEVAS REGLAS OFICIALES CEDS-MINEDUC (DICCIONARIO DE DATOS EDE)
+    // =========================================================================
+
+    // 1. fn0FA: Coherencia de Roles y Enrolamiento
+    // Verificar que todas las matrículas correspondan a una sección de curso válida y existente.
+    const { data: invalidEnrollSections } = await supabase
+      .from('ede_enrollment')
+      .select('enrollment_id, section_id, alumno_id')
+      .eq('rbd', rbd)
+      .eq('anio_escolar', anio);
+
+    if (invalidEnrollSections) {
+      const sectionIds = invalidEnrollSections.map(e => e.section_id).filter(Boolean);
+      let existingSectionIds = new Set<string>();
+      
+      if (sectionIds.length > 0) {
+        const { data: validSections } = await supabase
+          .from('ede_course_section')
+          .select('section_id')
+          .in('section_id', sectionIds);
+        existingSectionIds = new Set(validSections?.map(s => s.section_id) ?? []);
+      }
+
+      invalidEnrollSections.forEach(en => {
+        if (!en.section_id || !existingSectionIds.has(en.section_id)) {
+          issues.push({
+            ruleId: 'fn0FA',
+            severity: 'ERROR',
+            table: 'ede_enrollment',
+            message: `Fallo fn0FA: La matrícula no cuenta con asignación de sección/curso activa en la jerarquía CEDS.`,
+            affectedRecordId: en.enrollment_id
+          });
+        }
+      });
+    }
+
+    // 2. fn0FB: Estructura de Jerarquía de Cursos y Niveles
+    // Verificar que todas las secciones del establecimiento tengan código de grado/enseñanza y nivel.
+    const { data: sectionsHierarchy } = await supabase
+      .from('ede_course_section')
+      .select('section_id, nombre_curso, nivel, letra')
+      .eq('rbd', rbd)
+      .eq('anio_escolar', anio);
+
+    sectionsHierarchy?.forEach(sec => {
+      if (!sec.nivel || sec.nivel.trim() === '') {
+        issues.push({
+          ruleId: 'fn0FB',
+          severity: 'ERROR',
+          table: 'ede_course_section',
+          message: `Fallo fn0FB: El curso '${sec.nombre_curso}' no posee nivel educacional definido en la jerarquía del establecimiento.`,
+          affectedRecordId: sec.section_id
+        });
+      }
+    });
+
+    // 3. fn1FA: Registro e Identificación de Firmas de Salida
+    // Validar que todos los retiros anticipados tengan un RUN de apoderado autorizante y una clave digital del inspector.
+    const { data: departuresSignature } = await supabase
+      .from('ede_early_departure')
+      .select('departure_id, alumno_id, apoderado_run, inspector_digital_key')
+      .eq('rbd', rbd);
+
+    departuresSignature?.forEach(dep => {
+      if (!dep.apoderado_run || !dep.inspector_digital_key) {
+        issues.push({
+          ruleId: 'fn1FA',
+          severity: 'ERROR',
+          table: 'ede_early_departure',
+          message: `Fallo fn1FA: Salida anticipada del estudiante sin registro de firma digital o RUN del adulto responsable.`,
+          affectedRecordId: dep.departure_id
+        });
+      }
+    });
+
+    // 4. fn1FC: Asistencia y Firmas de Apoderados en Reunión
+    // Validar que toda asistencia confirmada de apoderados en reuniones de apoderados cuente con llave digital de verificación.
+    const { data: meetAttendanceSign } = await supabase
+      .from('ede_parent_meeting_attendance')
+      .select('attendance_id, meeting_id, apoderado_id, asistio, firma_digital_key');
+
+    meetAttendanceSign?.forEach(att => {
+      if (att.asistio && (!att.firma_digital_key || att.firma_digital_key.trim() === '')) {
+        issues.push({
+          ruleId: 'fn1FC',
+          severity: 'WARNING',
+          table: 'ede_parent_meeting_attendance',
+          message: `Fallo fn1FC: El apoderado asistió a la reunión pero falta su firma digital / clave de verificación de identidad.`,
+          affectedRecordId: att.attendance_id
+        });
+      }
+    });
+
+    // 5. fn2EA: Integridad del Perfil Estudiante y Datos de Nacimiento
+    // Validar nombres e integridad básica de estudiantes matriculados.
+    if (enrollments && enrollments.length > 0) {
+      for (const en of enrollments) {
+        const student = (en as any).ede_person;
+        if (!student.primer_nombre || student.primer_nombre.trim() === '' || !student.apellido_paterno || student.apellido_paterno.trim() === '') {
+          issues.push({
+            ruleId: 'fn2EA',
+            severity: 'ERROR',
+            table: 'ede_person',
+            message: `Fallo fn2EA: El estudiante no tiene sus nombres o apellidos completos en el registro civil escolar.`,
+            affectedRecordId: student.person_id
+          });
+        }
+      }
+    }
+
+    // 6. fn680: Coherencia de Leccionarios y Bloques Curriculares
+    // Validar que todos los bloques de clases dictados tengan un bloque de horas mayor a cero.
+    const { data: activitiesClass } = await supabase
+      .from('ede_class_activity')
+      .select('activity_id, nombre_asignatura, bloq_horas')
+      .eq('rbd', rbd);
+
+    activitiesClass?.forEach(act => {
+      if (!act.bloq_horas || act.bloq_horas <= 0) {
+        issues.push({
+          ruleId: 'fn680',
+          severity: 'ERROR',
+          table: 'ede_class_activity',
+          message: `Fallo fn680: Leccionario de '${act.nombre_asignatura}' registrado con bloque de horas inválido o en cero.`,
+          affectedRecordId: act.activity_id
+        });
+      }
+    });
+
+    // 7. fn8F2: Libro de Vida y Coherencia de Incidentes
+    // Validar que todos los incidentes de convivencia tengan una descripción y tipo válidos.
+    const { data: disciplineInc } = await supabase
+      .from('ede_discipline_incident')
+      .select('incident_id, tipo_anotacion, descripcion')
+      .eq('rbd', rbd);
+
+    disciplineInc?.forEach(inc => {
+      if (!inc.descripcion || inc.descripcion.trim() === '' || !inc.tipo_anotacion) {
+        issues.push({
+          ruleId: 'fn8F2',
+          severity: 'ERROR',
+          table: 'ede_discipline_incident',
+          message: `Fallo fn8F2: Observación de convivencia en Libro de Vida sin detalle o tipo de anotación configurada.`,
+          affectedRecordId: inc.incident_id
+        });
+      }
+    });
 
   } catch (error) {
     console.error('Error al ejecutar pre-auditoría EDE compliance:', error);

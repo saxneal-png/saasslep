@@ -22,6 +22,7 @@ export default function AuditoriaEdePage() {
   const [issues, setIssues] = useState<EdeValidationIssue[]>([]);
   const [hasRun, setHasRun] = useState(false);
   const [filterSeverity, setFilterSeverity] = useState<'ALL' | 'ERROR' | 'WARNING'>('ALL');
+  const [filterGroup, setFilterGroup] = useState<string>('ALL');
 
   const ejecutarDiagnostico = async () => {
     setLoading(true);
@@ -44,14 +45,23 @@ export default function AuditoriaEdePage() {
   const numErrors = issues.filter((i) => i.severity === 'ERROR').length;
   const numWarnings = issues.filter((i) => i.severity === 'WARNING').length;
 
+  const getRuleGroup = (ruleId: string): string => {
+    if (['FV-MAT-001', 'FV-MAT-002', 'FV-APO-001', 'fn2EA'].includes(ruleId)) return 'Matrícula';
+    if (['fn0FA', 'fn0FB'].includes(ruleId)) return 'Estructura';
+    if (['FV-ASI-004', 'fn680'].includes(ruleId)) return 'Asistencia';
+    if (['fn1FA', 'fn1FC', 'fn8F2'].includes(ruleId)) return 'Convivencia';
+    return 'General';
+  };
+
   const filteredIssues = issues.filter((i) => {
-    if (filterSeverity === 'ALL') return true;
-    return i.severity === filterSeverity;
+    const matchesSev = filterSeverity === 'ALL' || i.severity === filterSeverity;
+    const matchesGroup = filterGroup === 'ALL' || getRuleGroup(i.ruleId) === filterGroup;
+    return matchesSev && matchesGroup;
   });
 
-  // Calcular score representativo (Base: 4 reglas principales evaluadas)
-  const totalReglas = 4;
-  const score = Math.max(0, Math.round(((totalReglas - numErrors) / totalReglas) * 100));
+  const totalReglas = 11;
+  const distinctFailedRules = new Set(issues.filter((i) => i.severity === 'ERROR').map((i) => i.ruleId)).size;
+  const score = Math.max(0, Math.round(((totalReglas - distinctFailedRules) / totalReglas) * 100));
 
   return (
     <>
@@ -371,33 +381,51 @@ export default function AuditoriaEdePage() {
         {/* Diagnostics Results List */}
         {hasRun && (
           <div style={{ marginTop: 40 }}>
-            <h2 className="aud-section-title">
-              <span>📋 Resultados del Análisis</span>
+            <div style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: 16, marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+                <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>📋 Resultados del Análisis</h2>
+                {issues.length > 0 && (
+                  <div className="aud-filters">
+                    <button 
+                      className={`filter-chip ${filterSeverity === 'ALL' ? 'active' : ''}`}
+                      onClick={() => setFilterSeverity('ALL')}
+                    >
+                      Todos ({issues.length})
+                    </button>
+                    <button 
+                      className={`filter-chip ${filterSeverity === 'ERROR' ? 'active' : ''}`}
+                      onClick={() => setFilterSeverity('ERROR')}
+                      style={{ borderLeft: '3px solid #ef4444' }}
+                    >
+                      Errores ({numErrors})
+                    </button>
+                    <button 
+                      className={`filter-chip ${filterSeverity === 'WARNING' ? 'active' : ''}`}
+                      onClick={() => setFilterSeverity('WARNING')}
+                      style={{ borderLeft: '3px solid #f59e0b' }}
+                    >
+                      Advertencias ({numWarnings})
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Filtro por Grupo CEDS */}
               {issues.length > 0 && (
-                <div className="aud-filters">
-                  <button 
-                    className={`filter-chip ${filterSeverity === 'ALL' ? 'active' : ''}`}
-                    onClick={() => setFilterSeverity('ALL')}
-                  >
-                    Todos ({issues.length})
-                  </button>
-                  <button 
-                    className={`filter-chip ${filterSeverity === 'ERROR' ? 'active' : ''}`}
-                    onClick={() => setFilterSeverity('ERROR')}
-                    style={{ borderLeft: '3px solid #ef4444' }}
-                  >
-                    Errores ({numErrors})
-                  </button>
-                  <button 
-                    className={`filter-chip ${filterSeverity === 'WARNING' ? 'active' : ''}`}
-                    onClick={() => setFilterSeverity('WARNING')}
-                    style={{ borderLeft: '3px solid #f59e0b' }}
-                  >
-                    Advertencias ({numWarnings})
-                  </button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Grupo CEDS:</span>
+                  {['ALL', 'Matrícula', 'Estructura', 'Asistencia', 'Convivencia'].map((grp) => (
+                    <button
+                      key={grp}
+                      className={`filter-chip ${filterGroup === grp ? 'active' : ''}`}
+                      onClick={() => setFilterGroup(grp)}
+                    >
+                      {grp === 'ALL' ? 'Todos los Grupos' : grp}
+                    </button>
+                  ))}
                 </div>
               )}
-            </h2>
+            </div>
 
             {issues.length === 0 ? (
               <div className="empty-state passed-state">
